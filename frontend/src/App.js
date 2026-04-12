@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
+import { DemoProvider } from '@/contexts/DemoContext';
 import { Toaster } from '@/components/ui/sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import LoginPage from '@/pages/LoginPage';
@@ -60,8 +61,10 @@ export default function App() {
     <BrowserRouter>
       <LanguageProvider>
         <AuthProvider>
-          <AppRoutes />
-          <Toaster position="top-right" richColors />
+          <DemoProvider>
+            <AppRoutes />
+            <Toaster position="top-right" richColors />
+          </DemoProvider>
         </AuthProvider>
       </LanguageProvider>
     </BrowserRouter>
