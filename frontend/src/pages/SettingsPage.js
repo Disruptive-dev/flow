@@ -292,17 +292,9 @@ export default function SettingsPage() {
                     <Badge className={intg.status === 'connected' || intg.status === 'configured' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{intg.status === 'connected' ? 'Conectado' : intg.status === 'configured' ? 'Configurado' : intg.status === 'not_configured' ? 'Sin configurar' : intg.status?.replace(/_/g, ' ')}</Badge>
                     {intg.last_sync && <span className="text-xs text-zinc-400">Ultima sync: {new Date(intg.last_sync).toLocaleString()}</span>}
                     {intg.name === 'n8n' && (
-                      <Button size="sm" variant="outline" className="ml-auto" onClick={async () => {
-                        try {
-                          const response = await api.get('/export/n8n-workflow', { responseType: 'blob' });
-                          const blob = new Blob([response.data], { type: 'application/octet-stream' });
-                          const url = window.URL.createObjectURL(blob);
-                          const a = document.createElement('a');
-                          a.style.display = 'none'; a.href = url; a.download = 'spectra-flow-n8n-workflow.json';
-                          document.body.appendChild(a); a.click();
-                          setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 200);
-                          toast.success('Workflow n8n descargado');
-                        } catch { toast.error('Error al descargar'); }
+                      <Button size="sm" variant="outline" className="ml-auto" onClick={() => {
+                        const token = localStorage.getItem('sf_access_token');
+                        window.open(`${process.env.REACT_APP_BACKEND_URL}/api/export/n8n-workflow?token=${token}`, '_blank');
                       }} data-testid="download-n8n-workflow">
                         <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar Workflow n8n
                       </Button>

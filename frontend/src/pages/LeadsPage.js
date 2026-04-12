@@ -136,17 +136,9 @@ export default function LeadsPage() {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-leads-btn">
             {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />} Importar Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={async () => {
-            try {
-              const response = await api.get('/export/leads', { responseType: 'blob' });
-              const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.style.display = 'none'; a.href = url; a.download = 'leads_spectra.xlsx';
-              document.body.appendChild(a); a.click();
-              setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 200);
-              toast.success('Excel descargado');
-            } catch { toast.error('Error al exportar'); }
+          <Button variant="outline" size="sm" onClick={() => {
+            const token = localStorage.getItem('sf_access_token');
+            window.open(`${process.env.REACT_APP_BACKEND_URL}/api/export/leads?token=${token}`, '_blank');
           }} data-testid="export-leads-btn">
             <Download className="w-4 h-4 mr-1.5" /> Exportar
           </Button>
