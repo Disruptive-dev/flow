@@ -320,25 +320,78 @@ async def start_prospect_job(request: Request, job_id: str):
         {"name": "ready_for_review", "status": "completed", "timestamp": now}
     ]
     await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "completed", "raw_count": raw_count, "cleaned_count": cleaned_count, "qualified_count": qualified_count, "rejected_count": rejected_count, "approved_count": 0, "stages": stages, "updated_at": now}})
-    sample_businesses = ["Inmobiliaria Premium", "Casa & Hogar", "Servicios Integrales", "Consultoría Express", "Digital Solutions", "Grupo Empresarial", "Inversiones del Norte", "Tech Innovations", "Marketing Pro", "Gestión Total", "Soluciones Corporativas", "Desarrollo Urbano", "Negocios Online", "Capital Partners", "Servicios Profesionales"]
+
+    # Realistic Argentine business data by category
+    biz_by_cat = {
+        "real estate": ["Inmobiliaria del Sol", "Propiedades Austral", "RE/MAX Norte", "Casa Propia Inversiones", "Grupo Habitat", "Loteos del Valle", "Bertoni Propiedades", "Techo Propio SRL", "Cimientos Realty", "Quintas Premium", "Urban Housing SA", "Torres & Lagos", "Estancias Pampeanas", "Portal Inmobiliario", "Lopez Bienes Raices"],
+        "technology": ["TechNova Solutions", "ByteForge SA", "CloudArg SRL", "Nexo Digital", "Silicon Pampa", "DataCrunch SAS", "AppFactory AR", "Quantum Labs", "DigitalBridge", "CodeSur Technologies", "CyberNorte SRL", "Innova Software", "Red Agil SA", "Pixel Perfect Studio", "NetSolutions Argentina"],
+        "gastronomia": ["La Parrilla de Don Luis", "Sabores del Norte", "El Fogon Criollo", "Cafe Havanna", "Resto Bar 1810", "La Cocina de Maria", "Punto Gourmet", "El Molino Restaurant", "Delicias Tucumanas", "Bodegon del Centro", "Pastas Nona Rosa", "Sushi San Martin", "Cerveceria Andina", "Dulce Tentacion", "Restaurante El Puerto"],
+        "legal": ["Estudio Juridico Rios & Asoc.", "Bufete Legal del Norte", "Abogados Asociados SA", "Consultora Legal Mendoza", "Estudio Notarial Garcia", "Perez & Gomez Abogados", "Defensoria Integral", "Asesoria Juridica Plus", "Estudio Contable Fiscal", "Legal Corp Argentina"],
+        "health": ["Clinica Del Sol", "Centro Medico Austral", "Sanatorio San Lucas", "Dental Premium Center", "Laboratorio BioAndes", "Optica Vision Total", "Farmacia del Pueblo", "Kinesiologia Integral", "Nutricion & Salud", "Centro Pediatrico NOA"],
+        "education": ["Instituto Cervantes", "Academia del Saber", "Colegio San Martin", "Centro de Idiomas Global", "Universidad Abierta", "Escuela de Negocios AR", "Instituto Tecnico Plus", "Jardin Mis Primeros Pasos", "Curso Online Argentina", "Capacitacion Profesional SA"],
+        "insurance": ["Seguros del Litoral", "Aseguradora Nacional", "Proteccion Total SA", "Seguros Rivadavia", "Cobertura Integral SRL", "La Prevision Seguros", "Seguros del Norte", "Grupo Asegurador Sur", "Patrimonio Seguros", "Federal Seguros"],
+        "consulting": ["Consultora Empresarial Plus", "Strategy Partners AR", "Asesores Financieros SA", "McKenzie Consultores", "Grupo Estrategia", "Business Intelligence AR", "Deloitte Argentina", "Asesoria Tributaria", "Consultoria de RRHH", "Performance Group"],
+        "construction": ["Constructora del Valle", "Edificar SA", "Obras Civiles Patagonia", "Hormigon Armado SRL", "Arquitectura Moderna", "Construplan AR", "Ingenieria Aplicada", "Revestimientos & Mas", "Herreria Industrial NOA", "Materiales del Sur"],
+        "logistics": ["Transporte Ejecutivo NOA", "Logistica Express AR", "Envios Rapidos SA", "Cargas del Norte", "Fleet Solutions", "Mudanzas El Gaucho", "Correo Privado Sur", "Distribucion Nacional", "Almacenes Centrales", "Puerto Logistics"],
+    }
+    cat_key = job["category"].lower()
+    businesses = biz_by_cat.get(cat_key, biz_by_cat.get("technology", []))
+
+    province_cities = {
+        "Buenos Aires": ["CABA", "La Plata", "Mar del Plata", "Bahia Blanca", "Quilmes", "Lomas de Zamora"],
+        "CABA": ["Palermo", "Recoleta", "San Telmo", "Belgrano", "Caballito", "Microcentro"],
+        "Tucuman": ["San Miguel de Tucuman", "Yerba Buena", "Tafi Viejo", "Banda del Rio Sali", "Concepcion"],
+        "Cordoba": ["Cordoba Capital", "Villa Carlos Paz", "Rio Cuarto", "Villa Maria", "Alta Gracia"],
+        "Mendoza": ["Ciudad de Mendoza", "Godoy Cruz", "San Rafael", "Lujan de Cuyo", "Maipu"],
+        "Santa Fe": ["Rosario", "Santa Fe Capital", "Rafaela", "Venado Tuerto", "Reconquista"],
+        "Salta": ["Salta Capital", "San Lorenzo", "Oran", "Tartagal", "Cafayate"],
+    }
+    cities = province_cities.get(job["province"], [job["city"]])
+
     quality_levels = ["excellent", "good", "average", "poor"]
-    recommendations = ["Highly recommended - strong online presence", "Good candidate - verified contact info", "Average - needs more validation", "Low priority - limited data available"]
+    rec_texts = {
+        "excellent": ["Altamente recomendado - presencia digital solida y datos verificados", "Excelente prospecto - web profesional y multiples canales de contacto", "Top prospecto - alta actividad en redes y web actualizada"],
+        "good": ["Buen candidato - informacion de contacto verificada", "Prospecto solido - presencia online estable", "Candidato viable - datos consistentes y actividad reciente"],
+        "average": ["Promedio - requiere validacion adicional", "Necesita mas investigacion - datos parciales", "Prospecto con potencial - falta info de contacto directa"],
+        "poor": ["Baja prioridad - datos limitados disponibles", "No recomendado actualmente - poca presencia digital", "Requiere seguimiento manual - info desactualizada"]
+    }
+    first_lines = [
+        f"Notamos que su empresa tiene una fuerte presencia en {job['city']} y queremos proponerle una alianza estrategica.",
+        f"Vimos su actividad en el sector de {job['category']} en {job['province']} y creemos que podemos potenciar su negocio.",
+        f"Su empresa destaca en el mercado de {job['city']}. Nos gustaria explorar oportunidades de colaboracion.",
+        f"Encontramos su empresa mientras analizabamos el sector de {job['category']} en la region. Tiene un perfil muy interesante.",
+        f"Sabemos que {job['category']} en {job['province']} esta creciendo y su empresa esta bien posicionada para aprovechar esta oportunidad.",
+    ]
+
+    statuses_pool = ["scored"] * 5 + ["cleaned"] * 2 + ["approved"] + ["rejected"]
     leads_to_insert = []
+    used_names = set()
     for i in range(min(qualified_count, 25)):
-        score = random.randint(40, 98)
-        ql = 0 if score >= 80 else (1 if score >= 60 else (2 if score >= 40 else 3))
+        bname = random.choice(businesses)
+        suffix = random.choice(["SA", "SRL", "SAS", ""])
+        full_name = f"{bname} {suffix}".strip()
+        while full_name in used_names and len(used_names) < len(businesses) * 3:
+            bname = random.choice(businesses)
+            suffix = random.choice(["SA", "SRL", "SAS", ""])
+            full_name = f"{bname} {suffix}".strip()
+        used_names.add(full_name)
+        score = random.randint(35, 98)
+        ql = 0 if score >= 85 else (1 if score >= 65 else (2 if score >= 45 else 3))
+        city = random.choice(cities)
+        slug = bname.lower().replace(" ", "").replace("&", "y").replace(".", "")[:12]
         lead = {
             "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "job_id": job_id,
-            "business_name": f"{random.choice(sample_businesses)} {random.choice(['SA', 'SRL', 'SAS', ''])}".strip(),
+            "business_name": full_name,
             "raw_category": job["category"].lower(), "normalized_category": job["category"].title(),
-            "province": job["province"], "city": job["city"],
-            "website": f"www.empresa{random.randint(1,999)}.com.ar",
-            "email": f"contacto@empresa{random.randint(1,999)}.com.ar",
-            "phone": f"+54 {random.randint(11,99)} {random.randint(1000,9999)}-{random.randint(1000,9999)}",
+            "province": job["province"], "city": city,
+            "website": f"www.{slug}.com.ar",
+            "email": f"contacto@{slug}.com.ar",
+            "phone": f"+54 {random.choice(['11','351','381','261','341','387'])} {random.randint(100,999)}-{random.randint(1000,9999)}",
             "ai_score": score, "quality_level": quality_levels[ql],
-            "recommendation": recommendations[ql],
-            "recommended_first_line": f"Notamos que su empresa tiene presencia destacada en {job['city']}.",
-            "status": "scored", "created_at": now, "updated_at": now
+            "recommendation": random.choice(rec_texts[quality_levels[ql]]),
+            "recommended_first_line": random.choice(first_lines),
+            "status": random.choice(statuses_pool),
+            "created_at": now, "updated_at": now
         }
         leads_to_insert.append(lead)
     if leads_to_insert:
@@ -469,6 +522,36 @@ async def delete_template(request: Request, template_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Template not found")
     return {"message": "Template deleted"}
+
+class SendTestRequest(BaseModel):
+    to_email: Optional[str] = "test@demo.com"
+
+@api_router.post("/templates/{template_id}/send-test")
+async def send_test_email(request: Request, template_id: str, body: SendTestRequest):
+    user = await get_current_user(request)
+    template = await db.templates.find_one({"id": template_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    preview_html = template["html_body"].replace("{business_name}", "Empresa Demo SA").replace("{city}", "Buenos Aires").replace("{normalized_category}", "Tecnologia").replace("{recommended_first_line}", "Notamos que su empresa tiene una fuerte presencia en el mercado digital.").replace("{sender_name}", user.get("name", "Spectra Flow"))
+    return {"message": f"Email de prueba enviado a {body.to_email}", "preview_subject": template["subject"].replace("{business_name}", "Empresa Demo SA"), "preview_html": preview_html, "simulated": True}
+
+@api_router.post("/campaigns/{campaign_id}/simulate")
+async def simulate_campaign(request: Request, campaign_id: str):
+    user = await get_current_user(request)
+    campaign = await db.campaigns.find_one({"id": campaign_id, "tenant_id": user["tenant_id"]})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    now = datetime.now(timezone.utc).isoformat()
+    lead_count = campaign.get("lead_count", 0) or random.randint(15, 50)
+    sent = lead_count
+    opens = int(sent * random.uniform(0.45, 0.70))
+    clicks = int(opens * random.uniform(0.25, 0.45))
+    replies = int(clicks * random.uniform(0.30, 0.55))
+    interested = int(replies * random.uniform(0.40, 0.70))
+    crm = int(interested * random.uniform(0.50, 0.80))
+    await db.campaigns.update_one({"id": campaign_id}, {"$set": {"status": "completed", "lead_count": lead_count, "sent_count": sent, "open_count": opens, "click_count": clicks, "reply_count": replies, "interested_count": interested, "crm_count": crm, "updated_at": now}})
+    updated = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    return updated
 
 # ==================== DOMAINS ====================
 

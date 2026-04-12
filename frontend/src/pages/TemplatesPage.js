@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Pencil, Trash2, Loader2, Eye, Code } from 'lucide-react';
+import { Plus, FileText, Pencil, Trash2, Loader2, Eye, Code, Send } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function TemplatesPage() {
@@ -21,6 +21,15 @@ export default function TemplatesPage() {
   const [form, setForm] = useState({ name: '', subject: '', html_body: '', plain_text: '', variables: [], signature: '' });
   const [saving, setSaving] = useState(false);
   const [previewId, setPreviewId] = useState(null);
+  const [testResult, setTestResult] = useState(null);
+
+  const sendTestEmail = async (tmplId) => {
+    try {
+      const { data } = await api.post(`/templates/${tmplId}/send-test`, { to_email: 'test@demo.com' });
+      setTestResult({ id: tmplId, ...data });
+      toast.success(data.message);
+    } catch { toast.error('Failed to send test'); }
+  };
 
   useEffect(() => {
     api.get('/templates').then(r => setTemplates(r.data)).catch(console.error).finally(() => setLoading(false));
@@ -96,14 +105,22 @@ export default function TemplatesPage() {
                     {tmpl.variables.map(v => <Badge key={v} variant="secondary" className="text-[10px]">{`{${v}}`}</Badge>)}
                   </div>
                 )}
-                <div className="flex gap-2 mt-3">
+                <div className="flex gap-2 mt-3 flex-wrap">
                   <Button size="sm" variant="ghost" onClick={() => setPreviewId(previewId === tmpl.id ? null : tmpl.id)} data-testid={`template-preview-${i}`}><Eye className="w-3.5 h-3.5 mr-1" /> Preview</Button>
+                  <Button size="sm" variant="ghost" onClick={() => sendTestEmail(tmpl.id)} data-testid={`template-send-test-${i}`}><Send className="w-3.5 h-3.5 mr-1" /> Enviar Test</Button>
                   <Button size="sm" variant="ghost" onClick={() => openEdit(tmpl)} data-testid={`template-edit-${i}`}><Pencil className="w-3.5 h-3.5 mr-1" /> {t('edit')}</Button>
                   <Button size="sm" variant="ghost" className="text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => handleDelete(tmpl.id)} data-testid={`template-delete-${i}`}><Trash2 className="w-3.5 h-3.5" /></Button>
                 </div>
                 {previewId === tmpl.id && (
                   <div className="mt-3 p-3 bg-zinc-50 rounded-lg border border-zinc-200">
                     <div className="text-xs text-zinc-700" dangerouslySetInnerHTML={{ __html: tmpl.html_body }} />
+                  </div>
+                )}
+                {testResult?.id === tmpl.id && (
+                  <div className="mt-3 p-4 bg-emerald-50 rounded-lg border border-emerald-200 space-y-2">
+                    <p className="text-xs font-medium text-emerald-700">Email de prueba enviado</p>
+                    <p className="text-xs text-zinc-600"><strong>Asunto:</strong> {testResult.preview_subject}</p>
+                    <div className="text-xs text-zinc-600 mt-1 p-2 bg-white rounded border border-zinc-200" dangerouslySetInnerHTML={{ __html: testResult.preview_html }} />
                   </div>
                 )}
               </CardContent>

@@ -96,13 +96,9 @@ export default function SettingsPage() {
           <Card className="border-zinc-200 rounded-xl">
             <CardContent className="p-6 space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                <div>
+                <div className="md:col-span-2">
                   <Label className="text-sm mb-1.5 block">{t('company_name')}</Label>
                   <Input data-testid="branding-company-name" value={branding.company_name || ''} onChange={e => setBranding(b => ({ ...b, company_name: e.target.value }))} />
-                </div>
-                <div>
-                  <Label className="text-sm mb-1.5 block">{t('logo')} URL</Label>
-                  <Input value={branding.logo_url || ''} onChange={e => setBranding(b => ({ ...b, logo_url: e.target.value }))} placeholder="https://..." />
                 </div>
                 <div>
                   <Label className="text-sm mb-1.5 block">{t('primary_color')}</Label>

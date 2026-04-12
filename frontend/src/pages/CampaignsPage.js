@@ -42,8 +42,16 @@ export default function CampaignsPage() {
     try {
       const { data } = await api.put(`/campaigns/${id}`, { status });
       setCampaigns(prev => prev.map(c => c.id === id ? data : c));
-      toast.success(`Campaign ${status}`);
+      toast.success(`Campana ${status}`);
     } catch { toast.error('Failed to update'); }
+  };
+
+  const simulateSending = async (id) => {
+    try {
+      const { data } = await api.post(`/campaigns/${id}/simulate`);
+      setCampaigns(prev => prev.map(c => c.id === id ? data : c));
+      toast.success(`Simulacion completa: ${data.sent_count} enviados, ${data.open_count} aperturas, ${data.reply_count} respuestas, ${data.interested_count} interesados`);
+    } catch { toast.error('Simulation failed'); }
   };
 
   return (
@@ -102,15 +110,24 @@ export default function CampaignsPage() {
                       </div>
                     ))}
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     {c.status === 'draft' && (
-                      <Button size="sm" variant="outline" onClick={() => updateStatus(c.id, 'active')} data-testid={`campaign-activate-${i}`}><Play className="w-3.5 h-3.5 mr-1" /> Activate</Button>
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(c.id, 'active')} data-testid={`campaign-activate-${i}`}><Play className="w-3.5 h-3.5 mr-1" /> Activar</Button>
+                        <Button size="sm" variant="outline" onClick={() => simulateSending(c.id)} data-testid={`campaign-simulate-${i}`}><Mail className="w-3.5 h-3.5 mr-1" /> Simular Envio</Button>
+                      </>
                     )}
                     {c.status === 'active' && (
-                      <Button size="sm" variant="outline" onClick={() => updateStatus(c.id, 'paused')} data-testid={`campaign-pause-${i}`}><Pause className="w-3.5 h-3.5 mr-1" /> Pause</Button>
+                      <>
+                        <Button size="sm" variant="outline" onClick={() => updateStatus(c.id, 'paused')} data-testid={`campaign-pause-${i}`}><Pause className="w-3.5 h-3.5 mr-1" /> Pausar</Button>
+                        <Button size="sm" variant="outline" onClick={() => simulateSending(c.id)} data-testid={`campaign-simulate-${i}`}><Mail className="w-3.5 h-3.5 mr-1" /> Simular Envio</Button>
+                      </>
                     )}
                     {c.status === 'paused' && (
-                      <Button size="sm" variant="outline" onClick={() => updateStatus(c.id, 'active')}><Play className="w-3.5 h-3.5 mr-1" /> Resume</Button>
+                      <Button size="sm" variant="outline" onClick={() => updateStatus(c.id, 'active')}><Play className="w-3.5 h-3.5 mr-1" /> Reanudar</Button>
+                    )}
+                    {c.status === 'completed' && c.sent_count > 0 && (
+                      <Button size="sm" variant="ghost" className="text-zinc-500" disabled>Completada</Button>
                     )}
                   </div>
                 </CardContent>
