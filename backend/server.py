@@ -444,6 +444,17 @@ async def start_prospect_job(request: Request, job_id: str):
         leads_to_insert.append(lead)
     if leads_to_insert:
         await db.leads.insert_many(leads_to_insert)
+    # Auto-create/update email list with scored leads
+    scored_ids = [l["id"] for l in leads_to_insert if l["status"] in ("scored", "approved")]
+    if scored_ids:
+        auto_list_name = f"Prospeccion / {job['category']} - Leads calificados"
+        existing_list = await db.email_lists.find_one({"tenant_id": user["tenant_id"], "name": auto_list_name})
+        if existing_list:
+            old_ids = existing_list.get("lead_ids", [])
+            new_ids = old_ids + [sid for sid in scored_ids if sid not in old_ids]
+            await db.email_lists.update_one({"id": existing_list["id"]}, {"$set": {"lead_ids": new_ids, "subscriber_count": len(new_ids), "updated_at": now}})
+        else:
+            await db.email_lists.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": auto_list_name, "description": f"Auto-generada: {len(scored_ids)} leads calificados de {job['category']} en {job['city']}", "subscriber_count": len(scored_ids), "lead_ids": scored_ids, "created_at": now, "updated_at": now})
     updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
     return updated_job
 
@@ -1118,6 +1129,48 @@ async def get_analytics(request: Request):
     stats["email_open_rate"] = round((stats["opens"] / max(stats["emails_sent"], 1)) * 100, 1)
     stats["reply_rate"] = round((stats["replies"] / max(stats["emails_sent"], 1)) * 100, 1)
     return stats
+
+@api_router.get("/analytics/time-series")
+async def get_analytics_time_series(request: Request, period: str = "week"):
+    """Returns time-series data for leads and emails by day/week"""
+    user = await get_current_user(request)
+    tid = user["tenant_id"]
+    from datetime import timedelta
+    now_dt = datetime.now(timezone.utc)
+    if period == "month":
+        days = 30
+    elif period == "quarter":
+        days = 90
+    elif period == "year":
+        days = 365
+    else:
+        days = 7
+    start = (now_dt - timedelta(days=days)).isoformat()
+    # Get leads by date
+    leads_pipeline = [{"$match": {"tenant_id": tid, "created_at": {"$gte": start}}}, {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}, "scored": {"$sum": {"$cond": [{"$in": ["$status", ["scored", "approved"]]}, 1, 0]}}, "rejected": {"$sum": {"$cond": [{"$eq": ["$status", "rejected"]}, 1, 0]}}}}]
+    leads_ts = await db.leads.aggregate(leads_pipeline).to_list(days + 1)
+    # Get jobs by date
+    jobs_pipeline = [{"$match": {"tenant_id": tid, "created_at": {"$gte": start}}}, {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}}]
+    jobs_ts = await db.prospect_jobs.aggregate(jobs_pipeline).to_list(days + 1)
+    # Get contacts by date
+    contacts_pipeline = [{"$match": {"tenant_id": tid, "created_at": {"$gte": start}}}, {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "count": {"$sum": 1}}}]
+    contacts_ts = await db.crm_contacts.aggregate(contacts_pipeline).to_list(days + 1)
+    # Build daily data
+    data = []
+    for i in range(days, -1, -1):
+        d = (now_dt - timedelta(days=i)).strftime("%Y-%m-%d")
+        short = (now_dt - timedelta(days=i)).strftime("%d/%m")
+        ldata = next((x for x in leads_ts if x["_id"] == d), None)
+        jdata = next((x for x in jobs_ts if x["_id"] == d), None)
+        cdata = next((x for x in contacts_ts if x["_id"] == d), None)
+        data.append({"date": d, "label": short, "leads": ldata["count"] if ldata else 0, "scored": ldata["scored"] if ldata else 0, "rejected": ldata["rejected"] if ldata else 0, "jobs": jdata["count"] if jdata else 0, "contacts": cdata["count"] if cdata else 0})
+    # Top categories
+    cat_pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": "$normalized_category", "count": {"$sum": 1}, "avg_score": {"$avg": "$ai_score"}}}, {"$sort": {"count": -1}}, {"$limit": 10}]
+    categories = await db.leads.aggregate(cat_pipeline).to_list(10)
+    # Quality distribution
+    quality_pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": "$quality_level", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}]
+    quality_dist = await db.leads.aggregate(quality_pipeline).to_list(10)
+    return {"time_series": data, "period": period, "days": days, "top_categories": [{"name": c["_id"] or "Sin categoria", "count": c["count"], "avg_score": round(c["avg_score"] or 0)} for c in categories], "quality_distribution": [{"name": q["_id"] or "Sin clasificar", "count": q["count"]} for q in quality_dist]}
 
 # ==================== SETTINGS ====================
 
@@ -1879,6 +1932,18 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
         "status": "completed", "raw_count": raw_count, "cleaned_count": inserted,
         "qualified_count": qualified, "rejected_count": rejected, "stages": stages, "updated_at": now
     }})
+    # Auto-create/update email list with scored leads from n8n
+    scored_lead_ids = [l["id"] for l in leads_data if int(l.get("ai_score", 0)) >= 50] if leads_data else []
+    if scored_lead_ids:
+        cat = job.get("category", "Prospeccion")
+        auto_name = f"Prospeccion / {cat} - Leads calificados"
+        existing_list = await db.email_lists.find_one({"tenant_id": job["tenant_id"], "name": auto_name})
+        if existing_list:
+            old_ids = existing_list.get("lead_ids", [])
+            new_ids = old_ids + [sid for sid in scored_lead_ids if sid not in old_ids]
+            await db.email_lists.update_one({"id": existing_list["id"]}, {"$set": {"lead_ids": new_ids, "subscriber_count": len(new_ids), "updated_at": now}})
+        else:
+            await db.email_lists.insert_one({"id": str(uuid.uuid4()), "tenant_id": job["tenant_id"], "name": auto_name, "description": f"Auto: {len(scored_lead_ids)} leads calificados", "subscriber_count": len(scored_lead_ids), "lead_ids": scored_lead_ids, "created_at": now, "updated_at": now})
     return {"message": f"{inserted} leads imported, {qualified} qualified", "job_id": job_id}
 
 @api_router.post("/webhooks/n8n/job-progress/{job_id}")

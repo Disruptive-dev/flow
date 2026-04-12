@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Building2, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package, Pencil, Eye, EyeOff } from 'lucide-react';
+import { Building2, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package, Pencil, Eye, EyeOff, Sliders } from 'lucide-react';
 import { toast } from 'sonner';
 import DomainsPage from '@/pages/DomainsPage';
 
@@ -38,6 +38,8 @@ export default function SettingsPage() {
   const [modules, setModules] = useState({ prospeccion: true, crm: true, email_marketing: true });
   const [editingIntegration, setEditingIntegration] = useState(null);
   const [editValues, setEditValues] = useState({ base_url: '', api_key: '' });
+  const [scoring, setScoring] = useState(null);
+  const [savingScoring, setSavingScoring] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -45,13 +47,15 @@ export default function SettingsPage() {
       api.get('/settings/integrations'),
       api.get('/users').catch(() => ({ data: [] })),
       api.get('/tenant/modules').catch(() => ({ data: { prospeccion: true, crm: true, email_marketing: true } })),
-    ]).then(([s, i, u, m]) => {
+      api.get('/settings/scoring').catch(() => ({ data: null })),
+    ]).then(([s, i, u, m, sc]) => {
       setSettings(s.data);
       const b = s.data?.branding || {};
       setBranding({ company_name: b.company_name || '', industry: b.industry || '', phone: b.phone || '', address: b.address || '', website: b.website || '', tax_id: b.tax_id || '', country: b.country || '', description: b.description || '' });
       setIntegrations(i.data);
       setUsers(u.data);
       setModules(m.data);
+      if (sc.data) setScoring(sc.data);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
@@ -126,6 +130,7 @@ export default function SettingsPage() {
           <TabsTrigger value="integrations" data-testid="settings-tab-integrations"><Link className="w-4 h-4 mr-1.5" />{t('integrations')}</TabsTrigger>
           <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
           <TabsTrigger value="modules" data-testid="settings-tab-modules"><Package className="w-4 h-4 mr-1.5" />Modulos</TabsTrigger>
+          <TabsTrigger value="scoring" data-testid="settings-tab-scoring"><Sliders className="w-4 h-4 mr-1.5" />Scoring</TabsTrigger>
           <TabsTrigger value="optimia" data-testid="settings-tab-optimia"><Bot className="w-4 h-4 mr-1.5" />OptimIA Bot</TabsTrigger>
         </TabsList>
 
@@ -318,6 +323,53 @@ export default function SettingsPage() {
                   <Switch checked={modules[key] ?? true} onCheckedChange={v => toggleModule(key, v)} data-testid={`module-toggle-${key}`} />
                 </div>
               ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Scoring Config */}
+        <TabsContent value="scoring">
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-6 space-y-6">
+              <div>
+                <h3 className="font-heading font-medium text-zinc-900 mb-1">Configuracion de Scoring</h3>
+                <p className="text-sm text-zinc-500 mb-6">Personaliza los pesos de cada criterio para calificar leads. Los puntajes se suman para dar el score final (0-100).</p>
+              </div>
+              {scoring && (
+                <>
+                  <div>
+                    <h4 className="text-sm font-medium text-zinc-700 mb-3">Presencia Digital</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[{k:'website',l:'Sitio Web'},{k:'email',l:'Email de contacto'},{k:'phone',l:'Telefono'},{k:'address',l:'Direccion completa'}].map(({k,l}) => (
+                        <div key={k}><Label className="text-xs mb-1 block">{l} (+pts)</Label><Input type="number" min={0} max={30} value={scoring[k] ?? 0} onChange={e => setScoring(s => ({...s, [k]: parseInt(e.target.value)||0}))} className="h-9" data-testid={`scoring-${k}`} /></div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-medium text-zinc-700 mb-3">Rating y Reviews</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                      {[{k:'rating_excellent',l:'Rating 4.5+ (+pts)'},{k:'rating_good',l:'Rating 4.0-4.4 (+pts)'},{k:'rating_fair',l:'Rating 3.5-3.9 (+pts)'},{k:'reviews_100',l:'100+ reviews (+pts)'},{k:'reviews_50',l:'50-99 reviews (+pts)'},{k:'reviews_10',l:'10-49 reviews (+pts)'}].map(({k,l}) => (
+                        <div key={k}><Label className="text-xs mb-1 block">{l}</Label><Input type="number" min={0} max={25} value={scoring[k] ?? 0} onChange={e => setScoring(s => ({...s, [k]: parseInt(e.target.value)||0}))} className="h-9" data-testid={`scoring-${k}`} /></div>
+                      ))}
+                    </div>
+                  </div>
+                  <Separator />
+                  <div>
+                    <h4 className="text-sm font-medium text-zinc-700 mb-3">Umbrales de Calidad</h4>
+                    <div className="grid grid-cols-3 gap-4">
+                      {[{k:'min_excellent',l:'Minimo Excelente'},{k:'min_good',l:'Minimo Bueno'},{k:'min_average',l:'Minimo Promedio'}].map(({k,l}) => (
+                        <div key={k}><Label className="text-xs mb-1 block">{l}</Label><Input type="number" min={0} max={100} value={scoring[k] ?? 0} onChange={e => setScoring(s => ({...s, [k]: parseInt(e.target.value)||0}))} className="h-9" data-testid={`scoring-${k}`} /></div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-2">Excelente: {scoring?.min_excellent}+, Bueno: {scoring?.min_good}-{(scoring?.min_excellent||80)-1}, Promedio: {scoring?.min_average}-{(scoring?.min_good||60)-1}, Bajo: 0-{(scoring?.min_average||40)-1}</p>
+                  </div>
+                  <Button onClick={async () => { setSavingScoring(true); try { await api.put('/settings/scoring', scoring); toast.success('Scoring guardado'); } catch { toast.error('Error'); } setSavingScoring(false); }} disabled={savingScoring} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-scoring-btn">
+                    {savingScoring ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />} Guardar Scoring
+                  </Button>
+                </>
+              )}
+              {!scoring && <p className="text-sm text-zinc-400">Cargando configuracion...</p>}
             </CardContent>
           </Card>
         </TabsContent>

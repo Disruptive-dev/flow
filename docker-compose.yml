@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: spectraflow
+
+  backend:
+    build: ./backend
+    restart: always
+    depends_on:
+      - mongodb
+    environment:
+      MONGO_URL: mongodb://mongodb:27017
+      DB_NAME: spectraflow
+      JWT_SECRET: ${JWT_SECRET:-your-secret-change-me}
+      EMERGENT_LLM_KEY: ${EMERGENT_LLM_KEY}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      OUTSCRAPER_API_KEY: ${OUTSCRAPER_API_KEY}
+      DIFY_BASE_URL: ${DIFY_BASE_URL}
+      DIFY_APP_KEY: ${DIFY_APP_KEY}
+    ports:
+      - "8001:8001"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        REACT_APP_BACKEND_URL: ${REACT_APP_BACKEND_URL:-https://tu-dominio.com}
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "3000:3000"
+
+volumes:
+  mongo_data:
