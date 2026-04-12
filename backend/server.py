@@ -323,8 +323,8 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
         if n8n_config and n8n_config.get("base_url"):
             import httpx
             webhook_url = n8n_config["base_url"].rstrip("/")
-            callback_url = os.environ.get("FRONTEND_URL", "http://localhost:8001") + f"/api/webhooks/n8n/job-result/{job_id}"
-            progress_url = os.environ.get("FRONTEND_URL", "http://localhost:8001") + f"/api/webhooks/n8n/job-progress/{job_id}"
+            callback_url = os.environ.get("REACT_APP_BACKEND_URL", os.environ.get("FRONTEND_URL", "https://spectra-hub.preview.emergentagent.com")) + f"/api/webhooks/n8n/job-result/{job_id}"
+            progress_url = os.environ.get("REACT_APP_BACKEND_URL", os.environ.get("FRONTEND_URL", "https://spectra-hub.preview.emergentagent.com")) + f"/api/webhooks/n8n/job-progress/{job_id}"
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(webhook_url, json={
                     "job_id": job_id, "tenant_id": user["tenant_id"],

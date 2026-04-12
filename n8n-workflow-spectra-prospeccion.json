@@ -106,7 +106,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "http://dify.optimia.disruptive-sw.com/v1/completion-messages",
+        "url": "https://dify.optimia.disruptive-sw.com/v1/workflows/run",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -122,7 +122,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"inputs\": {\n    \"business_data\": \"Nombre: {{ $json.name }}\\nDireccion: {{ $json.full_address }}\\nTelefono: {{ $json.phone }}\\nWebsite: {{ $json.site }}\\nEmail: {{ $json.email_1 }}\\nRating: {{ $json.rating }}\\nReviews: {{ $json.reviews }}\\nCategoria: {{ $json.category }}\\nCiudad: {{ $json.city }}\\nProvincia: {{ $json.state }}\"\n  },\n  \"response_mode\": \"blocking\",\n  \"user\": \"spectra-flow\"\n}",
+        "jsonBody": "={\n  \"inputs\": {\n    \"business_data\": \"Nombre: {{ $json.name }}\\nDireccion: {{ $json.full_address }}\\nTelefono: {{ $json.phone }}\\nWebsite: {{ $json.site }}\\nEmail: {{ $json.email_1 }}\\nRating: {{ $json.rating }}\\nReviews: {{ $json.reviews }}\\nCategoria: {{ $json.category }}\\nCiudad: {{ $json.city }}\\nProvincia: {{ $json.state }}\"\n  },\n  \"response_mode\": \"blocking\",\n  \"user\": \"spectra-n8n\"\n}",
         "options": {
           "timeout": 30000
         }
@@ -135,7 +135,7 @@
     },
     {
       "parameters": {
-        "jsCode": "// Combinar datos originales + scoring de Dify\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const raw = item.json;\n  let difyResult = {};\n  \n  try {\n    const answer = raw.answer || raw.text || '';\n    // Intentar parsear JSON de la respuesta de Dify\n    const jsonMatch = answer.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      difyResult = JSON.parse(jsonMatch[0]);\n    }\n  } catch(e) {\n    difyResult = {\n      ai_score: 50,\n      quality_level: 'average',\n      recommendation: 'Clasificacion automatica no disponible',\n      normalized_category: raw.category || '',\n      recommended_first_line: ''\n    };\n  }\n  \n  results.push({\n    json: {\n      business_name: raw.name || '',\n      raw_category: raw.category || '',\n      normalized_category: difyResult.normalized_category || raw.category || '',\n      province: raw.state || '',\n      city: raw.city || '',\n      website: raw.site || '',\n      email: raw.email_1 || '',\n      phone: raw.phone || '',\n      address: raw.full_address || '',\n      rating: raw.rating || 0,\n      reviews_count: raw.reviews || 0,\n      ai_score: parseInt(difyResult.ai_score) || 50,\n      quality_level: difyResult.quality_level || 'average',\n      recommendation: difyResult.recommendation || '',\n      recommended_first_line: difyResult.recommended_first_line || '',\n      callback_url: raw.callback_url || '',\n      progress_url: raw.progress_url || '',\n      api_key: raw.api_key || ''\n    }\n  });\n}\n\nreturn results;"
+        "jsCode": "// Combinar datos originales + scoring de Dify\nconst items = $input.all();\nconst results = [];\n\nfor (const item of items) {\n  const raw = item.json;\n  let difyResult = {};\n  \n  try {\n    // workflows/run devuelve data.outputs.result\n    let answer = '';\n    if (raw.data && raw.data.outputs && raw.data.outputs.result) {\n      answer = raw.data.outputs.result;\n    } else if (raw.answer) {\n      answer = raw.answer;\n    } else if (raw.text) {\n      answer = raw.text;\n    }\n    const jsonMatch = answer.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      difyResult = JSON.parse(jsonMatch[0]);\n    }\n  } catch(e) {\n    difyResult = {\n      ai_score: 50,\n      quality_level: 'average',\n      recommendation: 'Clasificacion automatica no disponible',\n      normalized_category: raw.category || '',\n      recommended_first_line: ''\n    };\n  }\n  \n  // Recuperar datos originales del batch context\n  const batchItems = $('Lotes de 3').all();\n  const batchItem = batchItems.length > 0 ? batchItems[batchItems.length - 1].json : raw;\n  \n  results.push({\n    json: {\n      business_name: batchItem.name || raw.name || '',\n      raw_category: batchItem.category || raw.category || '',\n      normalized_category: difyResult.normalized_category || batchItem.category || '',\n      province: batchItem.state || raw.state || '',\n      city: batchItem.city || raw.city || '',\n      website: batchItem.site || raw.site || '',\n      email: batchItem.email_1 || raw.email_1 || '',\n      phone: batchItem.phone || raw.phone || '',\n      address: batchItem.full_address || raw.full_address || '',\n      rating: batchItem.rating || raw.rating || 0,\n      reviews_count: batchItem.reviews || raw.reviews || 0,\n      ai_score: parseInt(difyResult.ai_score) || 50,\n      quality_level: difyResult.quality_level || 'average',\n      recommendation: difyResult.recommendation || '',\n      recommended_first_line: difyResult.recommended_first_line || '',\n      callback_url: batchItem.callback_url || raw.callback_url || '',\n      progress_url: batchItem.progress_url || raw.progress_url || '',\n      api_key: batchItem.api_key || raw.api_key || ''\n    }\n  });\n}\n\nreturn results;"
       },
       "id": "7",
       "name": "Transformar Datos",
