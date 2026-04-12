@@ -12,7 +12,10 @@
       "name": "Webhook",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [240, 300],
+      "position": [
+        240,
+        300
+      ],
       "webhookId": "spectra-prospect"
     },
     {
@@ -36,7 +39,10 @@
       "name": "Notificar Inicio",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 160]
+      "position": [
+        680,
+        160
+      ]
     },
     {
       "parameters": {
@@ -80,7 +86,10 @@
       "name": "Outscraper Buscar",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [480, 380]
+      "position": [
+        680,
+        380
+      ]
     },
     {
       "parameters": {
@@ -90,7 +99,10 @@
       "name": "Extraer Negocios",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [720, 380]
+      "position": [
+        920,
+        380
+      ]
     },
     {
       "parameters": {
@@ -101,7 +113,10 @@
       "name": "Lotes de 3",
       "type": "n8n-nodes-base.splitInBatches",
       "typeVersion": 3,
-      "position": [960, 380]
+      "position": [
+        1160,
+        380
+      ]
     },
     {
       "parameters": {
@@ -131,7 +146,10 @@
       "name": "Dify Clasificar",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1200, 380]
+      "position": [
+        1400,
+        380
+      ]
     },
     {
       "parameters": {
@@ -141,7 +159,10 @@
       "name": "Transformar Datos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1440, 380]
+      "position": [
+        1640,
+        380
+      ]
     },
     {
       "parameters": {
@@ -151,7 +172,10 @@
       "name": "Agrupar Leads",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1680, 380]
+      "position": [
+        1880,
+        380
+      ]
     },
     {
       "parameters": {
@@ -179,7 +203,10 @@
       "name": "Callback Spectra",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1920, 380]
+      "position": [
+        2120,
+        380
+      ]
     },
     {
       "parameters": {
@@ -190,7 +217,23 @@
       "name": "Responder Webhook",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [480, 540]
+      "position": [
+        480,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten webhook body to root level\nconst body = $input.first().json.body || $input.first().json;\nreturn [{ json: { ...body } }];"
+      },
+      "id": "11",
+      "name": "Preparar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        380
+      ]
     }
   ],
   "connections": {
@@ -198,17 +241,7 @@
       "main": [
         [
           {
-            "node": "Notificar Inicio",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Outscraper Buscar",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Responder Webhook",
+            "node": "Preparar Datos",
             "type": "main",
             "index": 0
           }
@@ -282,6 +315,22 @@
         [
           {
             "node": "Callback Spectra",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Datos": {
+      "main": [
+        [
+          {
+            "node": "Notificar Inicio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Outscraper Buscar",
             "type": "main",
             "index": 0
           }
