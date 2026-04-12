@@ -5,7 +5,7 @@
       "parameters": {
         "httpMethod": "POST",
         "path": "spectra-prospect",
-        "responseMode": "responseNode",
+        "responseMode": "onReceived",
         "options": {}
       },
       "id": "1",
@@ -206,20 +206,6 @@
       "position": [
         2120,
         380
-      ]
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={\"status\": \"processing\", \"message\": \"Job recibido y procesando\"}"
-      },
-      "id": "10",
-      "name": "Responder Webhook",
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.1,
-      "position": [
-        480,
-        540
       ]
     },
     {
