@@ -74,7 +74,7 @@
           "parameters": [
             {
               "name": "X-API-KEY",
-              "value": "ZWI3ZmE4YmI4ZWMyNDJjYTlhNjIyMGNiZGFkNDZkNDR8OGU4NDEwNmJjZQ"
+              "value": "TU-OUTSCRAPER-API-KEY"
             }
           ]
         },
@@ -127,7 +127,7 @@
           "parameters": [
             {
               "name": "Authorization",
-              "value": "Bearer app-JXLErCQh2VNTu6yCHJU6uOGs"
+              "value": "Bearer TU-DIFY-APP-KEY"
             },
             {
               "name": "Content-Type",

@@ -40,7 +40,7 @@ Accede a `http://TU-IP:3000` y crea tu cuenta admin.
   DB_NAME=spectraflow
   JWT_SECRET=tu-clave-secreta-larga-y-segura
   EMERGENT_LLM_KEY=tu-emergent-key
-  RESEND_API_KEY=re_asrhRWqN_8JAVHGwAbg1y76aCjoMAN12C
+  RESEND_API_KEY=tu-resend-api-key
   OUTSCRAPER_API_KEY=tu-outscraper-key
   DIFY_BASE_URL=https://tu-dify.com/v1
   DIFY_APP_KEY=app-tu-dify-key
@@ -94,7 +94,7 @@ cd /opt/spectra-flow
 cat > .env << EOF
 JWT_SECRET=tu-clave-secreta
 EMERGENT_LLM_KEY=tu-key
-RESEND_API_KEY=re_asrhRWqN_8JAVHGwAbg1y76aCjoMAN12C
+RESEND_API_KEY=tu-resend-api-key
 OUTSCRAPER_API_KEY=tu-key
 DIFY_BASE_URL=https://tu-dify.com/v1
 DIFY_APP_KEY=app-tu-key
