@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2, TrendingUp, Users, Mail, MousePointerClick, MessageSquare, Send, ThumbsUp, Briefcase, CheckCircle2, XCircle, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, FunnelChart, Funnel, LabelList } from 'recharts';
+import FlowBotButton from '@/components/FlowBotButton';
 
 const COLORS = ['#1D4ED8', '#DC2626', '#F59E0B', '#6366F1', '#06B6D4', '#EC4899'];
 
@@ -76,7 +77,10 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-8 animate-fade-in" data-testid="analytics-page">
-      <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('analytics')}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('analytics')}</h1>
+        <FlowBotButton section="analytics" />
+      </div>
 
       <Tabs defaultValue="leads">
         <TabsList className="bg-zinc-100">

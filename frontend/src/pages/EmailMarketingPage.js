@@ -12,6 +12,7 @@ import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clo
 import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useNavigate } from 'react-router-dom';
+import FlowBotButton from '@/components/FlowBotButton';
 
 const stepTypeIcons = { email: Mail, wait: Clock, condition: Zap };
 const stepTypeLabels = { email: "Enviar Email", wait: "Esperar", condition: "Condicion" };
@@ -92,7 +93,10 @@ export default function EmailMarketingPage() {
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="email-marketing-page">
-      <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">Email Marketing</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">Email Marketing</h1>
+        <FlowBotButton section="email_marketing" />
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

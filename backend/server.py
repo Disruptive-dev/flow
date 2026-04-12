@@ -13,10 +13,15 @@ import uuid
 import bcrypt
 import jwt
 import random
+import asyncio
+import resend
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
 from bson import ObjectId
+
+# Configure Resend
+resend.api_key = os.environ.get("RESEND_API_KEY", "")
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -573,7 +578,30 @@ async def send_test_email(request: Request, template_id: str, body: SendTestRequ
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
     preview_html = template["html_body"].replace("{business_name}", "Empresa Demo SA").replace("{city}", "Buenos Aires").replace("{normalized_category}", "Tecnologia").replace("{recommended_first_line}", "Notamos que su empresa tiene una fuerte presencia en el mercado digital.").replace("{sender_name}", user.get("name", "Spectra Flow"))
-    return {"message": f"Email de prueba enviado a {body.to_email}", "preview_subject": template["subject"].replace("{business_name}", "Empresa Demo SA"), "preview_html": preview_html, "simulated": True}
+    preview_subject = template["subject"].replace("{business_name}", "Empresa Demo SA")
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    verified_domain = await db.domains.find_one({"tenant_id": user["tenant_id"], "status": {"$in": ["verified", "warmup_recommended", "ready_to_send"]}}, {"_id": 0})
+    from_email = "onboarding@resend.dev"
+    if verified_domain:
+        from_email = verified_domain.get("sender_email", f"noreply@{verified_domain.get('subdomain', verified_domain.get('domain', 'resend.dev'))}")
+    sender_name = verified_domain.get("sender_name", "Spectra Flow") if verified_domain else "Spectra Flow"
+    if resend.api_key:
+        try:
+            params = {
+                "from": f"{sender_name} <{from_email}>",
+                "to": [body.to_email],
+                "subject": preview_subject,
+                "html": preview_html
+            }
+            result = await asyncio.to_thread(resend.Emails.send, params)
+            result_data = result if isinstance(result, dict) else vars(result) if hasattr(result, '__dict__') else {}
+            email_id = result_data.get("id", "")
+            logger.info(f"Test email sent via Resend to {body.to_email}, id: {email_id}")
+            return {"message": f"Email de prueba ENVIADO a {body.to_email}", "preview_subject": preview_subject, "preview_html": preview_html, "simulated": False, "email_id": email_id, "from_email": from_email}
+        except Exception as e:
+            logger.error(f"Resend send failed: {e}")
+            return {"message": f"Error enviando email: {str(e)}", "preview_subject": preview_subject, "preview_html": preview_html, "simulated": True, "error": str(e)}
+    return {"message": f"Email de prueba simulado a {body.to_email} (Resend no configurado)", "preview_subject": preview_subject, "preview_html": preview_html, "simulated": True}
 
 @api_router.post("/campaigns/{campaign_id}/simulate")
 async def simulate_campaign(request: Request, campaign_id: str):
@@ -604,10 +632,38 @@ async def list_domains(request: Request):
 @api_router.post("/domains")
 async def create_domain(request: Request, body: DomainCreate):
     user = await get_current_user(request)
-    domain_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    subdomain = body.subdomain or f"mail.{body.domain}"
-    domain_doc = {"id": domain_id, "tenant_id": user["tenant_id"], "domain": body.domain, "subdomain": subdomain, "status": "dns_pending", "dns_records": [{"type": "TXT", "name": subdomain, "value": "v=spf1 include:_spf.resend.com ~all", "verified": False}, {"type": "CNAME", "name": f"resend._domainkey.{subdomain}", "value": "resend.domainkey.resend.com", "verified": False}, {"type": "MX", "name": subdomain, "value": "feedback-smtp.resend.com", "verified": False}], "sender_name": body.sender_name or "", "sender_email": body.sender_email or f"noreply@{subdomain}", "reply_to": body.reply_to or "", "signature": body.signature or "", "warmup_status": "not_started", "created_at": now, "updated_at": now}
+    domain_name = body.subdomain if body.subdomain else body.domain
+    dns_records = []
+    resend_domain_id = ""
+    status = "dns_pending"
+    try:
+        resend_result = await asyncio.to_thread(resend.Domains.create, {"name": domain_name})
+        resend_data = resend_result if isinstance(resend_result, dict) else vars(resend_result) if hasattr(resend_result, '__dict__') else {"id": str(resend_result)}
+        resend_domain_id = resend_data.get("id", "")
+        raw_records = resend_data.get("records", resend_data.get("dns_records", []))
+        for rec in raw_records:
+            r = rec if isinstance(rec, dict) else vars(rec) if hasattr(rec, '__dict__') else {}
+            dns_records.append({
+                "type": r.get("record", r.get("type", "TXT")),
+                "name": r.get("name", ""),
+                "value": r.get("value", ""),
+                "priority": r.get("priority"),
+                "ttl": r.get("ttl", "Auto"),
+                "status": r.get("status", "pending"),
+                "verified": r.get("status", "") == "verified"
+            })
+        status = resend_data.get("status", "dns_pending")
+        logger.info(f"Resend domain created: {resend_domain_id} for {domain_name}")
+    except Exception as e:
+        logger.error(f"Resend domain creation failed: {e}")
+        dns_records = [
+            {"type": "TXT", "name": domain_name, "value": "v=spf1 include:_spf.resend.com ~all", "verified": False, "status": "pending"},
+            {"type": "CNAME", "name": f"resend._domainkey.{domain_name}", "value": "resend.domainkey.resend.com", "verified": False, "status": "pending"},
+            {"type": "MX", "name": domain_name, "value": "feedback-smtp.resend.com", "verified": False, "status": "pending"}
+        ]
+    domain_id = str(uuid.uuid4())
+    domain_doc = {"id": domain_id, "tenant_id": user["tenant_id"], "domain": body.domain, "subdomain": domain_name, "resend_domain_id": resend_domain_id, "status": status, "dns_records": dns_records, "sender_name": body.sender_name or "", "sender_email": body.sender_email or f"noreply@{domain_name}", "reply_to": body.reply_to or "", "signature": body.signature or "", "warmup_status": "not_started", "created_at": now, "updated_at": now}
     await db.domains.insert_one(domain_doc)
     return serialize_doc(domain_doc)
 
@@ -630,16 +686,146 @@ async def verify_domain(request: Request, domain_id: str):
     if not domain:
         raise HTTPException(status_code=404, detail="Domain not found")
     now = datetime.now(timezone.utc).isoformat()
-    dns_records = domain.get("dns_records", [])
-    all_verified = True
-    for record in dns_records:
-        record["verified"] = random.choice([True, True, True, False])
-        if not record["verified"]:
-            all_verified = False
-    new_status = "warmup_recommended" if all_verified else "verifying"
-    await db.domains.update_one({"id": domain_id}, {"$set": {"dns_records": dns_records, "status": new_status, "updated_at": now}})
+    resend_domain_id = domain.get("resend_domain_id", "")
+    if resend_domain_id:
+        try:
+            await asyncio.to_thread(resend.Domains.verify, resend_domain_id)
+            import time
+            time.sleep(2)
+            resend_info = await asyncio.to_thread(resend.Domains.get, resend_domain_id)
+            info_data = resend_info if isinstance(resend_info, dict) else vars(resend_info) if hasattr(resend_info, '__dict__') else {}
+            new_status = info_data.get("status", "pending")
+            raw_records = info_data.get("records", info_data.get("dns_records", []))
+            dns_records = []
+            for rec in raw_records:
+                r = rec if isinstance(rec, dict) else vars(rec) if hasattr(rec, '__dict__') else {}
+                is_verified = r.get("status", "") == "verified"
+                dns_records.append({
+                    "type": r.get("record", r.get("type", "TXT")),
+                    "name": r.get("name", ""),
+                    "value": r.get("value", ""),
+                    "priority": r.get("priority"),
+                    "ttl": r.get("ttl", "Auto"),
+                    "status": r.get("status", "pending"),
+                    "verified": is_verified
+                })
+            if new_status == "verified":
+                mapped_status = "warmup_recommended"
+            elif new_status in ("pending", "not_started"):
+                mapped_status = "verifying"
+            elif new_status in ("failed", "partially_failed"):
+                mapped_status = "configuration_error"
+            else:
+                mapped_status = "verifying"
+            await db.domains.update_one({"id": domain_id}, {"$set": {"dns_records": dns_records, "status": mapped_status, "updated_at": now}})
+            logger.info(f"Resend domain verification triggered for {resend_domain_id}, status: {new_status}")
+        except Exception as e:
+            logger.error(f"Resend domain verification failed: {e}")
+            await db.domains.update_one({"id": domain_id}, {"$set": {"status": "verifying", "updated_at": now}})
+    else:
+        dns_records = domain.get("dns_records", [])
+        all_verified = True
+        for record in dns_records:
+            record["verified"] = random.choice([True, True, True, False])
+            if not record["verified"]:
+                all_verified = False
+        new_status = "warmup_recommended" if all_verified else "verifying"
+        await db.domains.update_one({"id": domain_id}, {"$set": {"dns_records": dns_records, "status": new_status, "updated_at": now}})
     updated = await db.domains.find_one({"id": domain_id}, {"_id": 0})
     return updated
+
+@api_router.get("/domains/resend-status")
+async def get_resend_domains_status(request: Request):
+    """Fetch all domains from Resend API to see real-time status"""
+    user = await get_current_user(request)
+    if not resend.api_key:
+        return {"domains": [], "error": "Resend API key not configured"}
+    try:
+        result = await asyncio.to_thread(resend.Domains.list)
+        result_data = result if isinstance(result, dict) else vars(result) if hasattr(result, '__dict__') else {}
+        domains_list = result_data.get("data", [])
+        parsed = []
+        for d in domains_list:
+            dd = d if isinstance(d, dict) else vars(d) if hasattr(d, '__dict__') else {}
+            parsed.append({"id": dd.get("id", ""), "name": dd.get("name", ""), "status": dd.get("status", "unknown"), "region": dd.get("region", ""), "created_at": dd.get("created_at", "")})
+        return {"domains": parsed}
+    except Exception as e:
+        logger.error(f"Resend domains list failed: {e}")
+        return {"domains": [], "error": str(e)}
+
+@api_router.post("/email/send")
+async def send_email_direct(request: Request, body: Dict[str, Any] = {}):
+    """Send a single email via Resend"""
+    user = await get_current_user(request)
+    to_email = body.get("to_email", "")
+    subject = body.get("subject", "")
+    html_body = body.get("html_body", "")
+    from_name = body.get("from_name", "Spectra Flow")
+    from_email_addr = body.get("from_email", "")
+    if not to_email or not subject:
+        raise HTTPException(status_code=400, detail="to_email and subject are required")
+    if not from_email_addr:
+        verified_domain = await db.domains.find_one({"tenant_id": user["tenant_id"], "status": {"$in": ["verified", "warmup_recommended", "ready_to_send"]}}, {"_id": 0})
+        if verified_domain:
+            from_email_addr = verified_domain.get("sender_email", f"noreply@{verified_domain.get('subdomain', 'resend.dev')}")
+            from_name = verified_domain.get("sender_name", from_name)
+        else:
+            from_email_addr = "onboarding@resend.dev"
+    if not resend.api_key:
+        return {"message": "Resend API key not configured, email simulated", "simulated": True}
+    try:
+        params = {"from": f"{from_name} <{from_email_addr}>", "to": [to_email], "subject": subject, "html": html_body or f"<p>{subject}</p>"}
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        result_data = result if isinstance(result, dict) else vars(result) if hasattr(result, '__dict__') else {}
+        email_id = result_data.get("id", "")
+        logger.info(f"Email sent via Resend to {to_email}, id: {email_id}")
+        return {"message": f"Email enviado a {to_email}", "simulated": False, "email_id": email_id}
+    except Exception as e:
+        logger.error(f"Resend send error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error sending email: {str(e)}")
+
+@api_router.post("/domains/sync-resend")
+async def sync_domains_from_resend(request: Request):
+    """Sync local domain records with real Resend API data"""
+    user = await get_current_user(request)
+    if not resend.api_key:
+        raise HTTPException(status_code=400, detail="Resend API key not configured")
+    try:
+        result = await asyncio.to_thread(resend.Domains.list)
+        result_data = result if isinstance(result, dict) else vars(result) if hasattr(result, '__dict__') else {}
+        domains_list = result_data.get("data", [])
+        synced = 0
+        now = datetime.now(timezone.utc).isoformat()
+        for d in domains_list:
+            dd = d if isinstance(d, dict) else vars(d) if hasattr(d, '__dict__') else {}
+            resend_id = dd.get("id", "")
+            domain_name = dd.get("name", "")
+            resend_status = dd.get("status", "unknown")
+            mapped_status = "warmup_recommended" if resend_status == "verified" else ("verifying" if resend_status in ("pending", "not_started") else ("configuration_error" if resend_status in ("failed", "partially_failed") else "verifying"))
+            dns_records = []
+            try:
+                detail = await asyncio.to_thread(resend.Domains.get, resend_id)
+                detail_data = detail if isinstance(detail, dict) else vars(detail) if hasattr(detail, '__dict__') else {}
+                raw_records = detail_data.get("records", detail_data.get("dns_records", []))
+                for rec in raw_records:
+                    r = rec if isinstance(rec, dict) else vars(rec) if hasattr(rec, '__dict__') else {}
+                    dns_records.append({"type": r.get("record", r.get("type", "TXT")), "name": r.get("name", ""), "value": r.get("value", ""), "priority": r.get("priority"), "ttl": r.get("ttl", "Auto"), "status": r.get("status", "pending"), "verified": r.get("status", "") == "verified"})
+            except Exception:
+                pass
+            existing = await db.domains.find_one({"$or": [{"resend_domain_id": resend_id}, {"domain": domain_name}, {"subdomain": domain_name}], "tenant_id": user["tenant_id"]})
+            if existing:
+                update_fields = {"resend_domain_id": resend_id, "status": mapped_status, "updated_at": now}
+                if dns_records:
+                    update_fields["dns_records"] = dns_records
+                await db.domains.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+            else:
+                await db.domains.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "domain": domain_name, "subdomain": domain_name, "resend_domain_id": resend_id, "status": mapped_status, "dns_records": dns_records, "sender_name": "Spectra Flow", "sender_email": f"noreply@{domain_name}", "reply_to": "", "signature": "", "warmup_status": "not_started", "created_at": now, "updated_at": now})
+            synced += 1
+        domains = await db.domains.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+        return {"synced": synced, "domains": domains}
+    except Exception as e:
+        logger.error(f"Resend sync failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # ==================== CRM SYNC ====================
 
@@ -1150,6 +1336,7 @@ async def ai_generate_template(request: Request, body: Dict[str, Any] = {}):
 async def ai_flow_bot(request: Request, body: Dict[str, Any] = {}):
     user = await get_current_user(request)
     section = body.get("section", "general")
+    question = body.get("question", "")
     tid = user["tenant_id"]
     context_data = {}
     context_data["total_leads"] = await db.leads.count_documents({"tenant_id": tid})
@@ -1158,23 +1345,33 @@ async def ai_flow_bot(request: Request, body: Dict[str, Any] = {}):
     context_data["crm_contacts"] = await db.crm_contacts.count_documents({"tenant_id": tid})
     context_data["campaigns"] = await db.campaigns.count_documents({"tenant_id": tid})
     context_data["deals"] = await db.crm_deals.count_documents({"tenant_id": tid})
+    context_data["deals_ganados"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": "ganado"})
+    em_pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": None, "sent": {"$sum": "$sent_count"}, "opens": {"$sum": "$open_count"}, "clicks": {"$sum": "$click_count"}, "replies": {"$sum": "$reply_count"}}}]
+    em_stats = await db.campaigns.aggregate(em_pipeline).to_list(1)
+    if em_stats:
+        context_data["emails_enviados"] = em_stats[0].get("sent", 0)
+        context_data["emails_abiertos"] = em_stats[0].get("opens", 0)
+        context_data["emails_respondidos"] = em_stats[0].get("replies", 0)
+    import json
+    prompt = question if question else f"El usuario esta en la seccion '{section}'. Analiza sus datos y dame recomendaciones."
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"flowbot-{uuid.uuid4()}", system_message="Eres Flow Bot, el asistente inteligente de Spectra Flow. Analizas los datos del usuario y das recomendaciones accionables en español. Se breve y directo. Usa bullets. Maximo 5 recomendaciones.")
-        prompt = f"El usuario esta en la seccion '{section}'. Datos actuales: {json.dumps(context_data)}. Analiza y dame recomendaciones especificas de que deberia hacer ahora."
-        import json
+        chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"flowbot-{user['_id']}-{section}", system_message=f"Eres Flow IA, el asistente de analisis inteligente de Spectra Flow. Datos actuales del usuario: {json.dumps(context_data)}. Responde en espanol. Se conciso, usa bullets, maximo 5-6 lineas. Da recomendaciones accionables basadas en los datos reales. Si te preguntan algo especifico, responde con datos concretos.")
         response = await chat.send_message(UserMessage(text=prompt))
         return {"response": response, "context": context_data}
     except Exception as e:
         recommendations = []
         if context_data.get("scored_leads", 0) > 0:
-            recommendations.append(f"Tenes {context_data['scored_leads']} leads calificados sin revisar. Te recomiendo ir a Leads y aprobar los mejores.")
+            recommendations.append(f"Tenes {context_data['scored_leads']} leads calificados sin revisar. Aprobá los mejores en Leads.")
         if context_data.get("approved_leads", 0) > 0 and context_data.get("campaigns", 0) == 0:
-            recommendations.append(f"Tenes {context_data['approved_leads']} leads aprobados. Crea una campana para contactarlos.")
+            recommendations.append(f"Tenes {context_data['approved_leads']} leads aprobados. Crea una campana en Email Marketing.")
         if context_data.get("crm_contacts", 0) > 0 and context_data.get("deals", 0) == 0:
-            recommendations.append(f"Tenes {context_data['crm_contacts']} contactos en el CRM sin oportunidades. Crea oportunidades para trackear el pipeline.")
+            recommendations.append(f"Tenes {context_data['crm_contacts']} contactos en CRM sin oportunidades. Crea oportunidades.")
+        if context_data.get("emails_enviados", 0) > 0:
+            open_rate = round((context_data.get("emails_abiertos", 0) / max(context_data.get("emails_enviados", 1), 1)) * 100)
+            recommendations.append(f"Tasa de apertura: {open_rate}%. {'Buen ratio!' if open_rate > 30 else 'Considera mejorar los asuntos de tus emails.'}")
         if not recommendations:
-            recommendations.append("Comenza buscando prospectos en el Buscador de Prospectos para alimentar tu pipeline.")
+            recommendations.append("Comenzá buscando prospectos en el Buscador de Prospectos para alimentar tu pipeline.")
         return {"response": "\n".join([f"- {r}" for r in recommendations]), "context": context_data}
 
 @api_router.post("/ai/help")
@@ -1460,12 +1657,12 @@ async def seed_data():
     for t in templates_data:
         await db.templates.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, **t, "plain_text": "", "signature": "", "created_at": now, "updated_at": now})
 
-    await db.domains.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, "domain": "spectraflow.com", "subdomain": "mail.spectraflow.com", "status": "verified", "dns_records": [{"type": "TXT", "name": "mail.spectraflow.com", "value": "v=spf1 include:_spf.resend.com ~all", "verified": True}, {"type": "CNAME", "name": "resend._domainkey.mail.spectraflow.com", "value": "resend.domainkey.resend.com", "verified": True}, {"type": "MX", "name": "mail.spectraflow.com", "value": "feedback-smtp.resend.com", "verified": True}], "sender_name": "Spectra Flow", "sender_email": "noreply@mail.spectraflow.com", "reply_to": "contacto@spectraflow.com", "signature": "El equipo de Spectra Flow", "warmup_status": "completed", "created_at": now, "updated_at": now})
+    await db.domains.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, "domain": "spectra-metrics.com", "subdomain": "spectra-metrics.com", "resend_domain_id": "", "status": "dns_pending", "dns_records": [{"type": "TXT", "name": "spectra-metrics.com", "value": "v=spf1 include:_spf.resend.com ~all", "verified": False, "status": "pending"}, {"type": "CNAME", "name": "resend._domainkey.spectra-metrics.com", "value": "resend.domainkey.resend.com", "verified": False, "status": "pending"}, {"type": "MX", "name": "spectra-metrics.com", "value": "feedback-smtp.resend.com", "verified": False, "status": "pending"}], "sender_name": "Spectra Flow", "sender_email": "noreply@spectra-metrics.com", "reply_to": "contacto@spectra-metrics.com", "signature": "El equipo de Spectra Flow", "warmup_status": "not_started", "created_at": now, "updated_at": now})
 
     integrations = [
         {"name": "n8n", "display_name": "n8n Orchestration", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Workflow orchestration and job execution"},
         {"name": "dify", "display_name": "Dify AI", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "AI cleaning and lead scoring"},
-        {"name": "resend", "display_name": "Resend Email", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Email sending and domain verification"},
+        {"name": "resend", "display_name": "Resend Email", "enabled": True, "base_url": "https://api.resend.com", "api_key": "***configured***", "status": "configured", "last_sync": None, "description": "Email sending and domain verification"},
         {"name": "espo_crm", "display_name": "Spectra CRM", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Qualified lead handoff and CRM sync"},
         {"name": "optimia_bot", "display_name": "OptimIA Bot", "enabled": False, "base_url": "https://inbox.optimia.disruptive-sw.com", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Omnichannel bot and live chat support"}
     ]

@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Search, MapPin, Loader2, Plus, Globe } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
+import FlowBotButton from '@/components/FlowBotButton';
 
 const defaultCountries = [
   { code: "AR", name: "Argentina" },
@@ -77,7 +78,10 @@ export default function ProspectFinderPage() {
 
   return (
     <div className="space-y-8 animate-fade-in" data-testid="prospect-finder-page">
-      <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('prospect_finder')}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('prospect_finder')}</h1>
+        <FlowBotButton section="prospeccion" />
+      </div>
 
       <Card className="border-zinc-200 rounded-xl">
         <CardContent className="p-8">

@@ -8,6 +8,7 @@ import {
   ThumbsUp, Send, TrendingUp, BarChart3, Zap
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import FlowBotButton from '@/components/FlowBotButton';
 
 const kpiConfig = [
   { key: 'jobs_this_month', icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -57,7 +58,10 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-8 animate-fade-in" data-testid="dashboard-page">
-      <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('dashboard')}</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('dashboard')}</h1>
+        <FlowBotButton section="dashboard" />
+      </div>
 
       {/* KPI Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="dashboard-kpi-grid">
