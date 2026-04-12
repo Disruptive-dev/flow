@@ -2,29 +2,24 @@
 
 ## Architecture
 React 19 + FastAPI + MongoDB + Resend + Emergent LLM + Dify + n8n (PWA)
+Deploy: Docker Compose / EasyPanel on DigitalOcean
 
-## E2E Integrations Working
-- **Resend**: Real email sending (spectra-metrics.com verified). Campaign send + test emails
-- **Dify**: Lead scoring endpoint calls workflow/run (user needs to configure output mapping)
-- **n8n**: Webhook trigger on prospect job creation + callbacks for results/progress
-- **Chatwoot**: Webhook upserts contacts with "bot" tag
-- **FlowBot AI**: Context-aware chat via Emergent LLM
-
-## All Features
-- Multi-tenant auth, Demo Mode, Spanish UI, PWA
-- CRM Kanban with auto-deal creation
-- Email Marketing: Full CRUD, auto-list from leads, real send via Resend
+## All Implemented Features
+- Multi-tenant JWT auth, Demo Mode, Spanish UI, PWA
+- Prospect Finder → Flow IA → Leads → Email Marketing → CRM (full pipeline)
+- CRM Kanban with auto-deal creation on stage change
+- Email Marketing: Full CRUD, auto-list from scored leads, real send via Resend
 - A/B template testing, editable automations
 - Customizable dashboard (dates, compare mode, rates on top)
-- Contextual guide banners, lead status lifecycle
-- Scoring customization, API key masking
-
-## Key Webhooks
-- POST /api/webhooks/n8n/job-result/{job_id}
-- POST /api/webhooks/n8n/job-progress/{job_id}
-- POST /api/webhooks/chatwoot/lead (upsert + bot tag)
-- POST /api/ai/dify-score-lead
+- Analytics: Leads/CRM stats + Time-series (leads/jobs/contacts by day) + Top categories + Quality distribution
+- Scoring customizable (Settings → Scoring tab)
+- Auto-list: Scored leads auto-saved to "Prospeccion / {category} - Leads calificados"
+- Contextual guide banners, lead status lifecycle dialog
+- Real Resend email integration, Dify scoring endpoint, Chatwoot webhook with bot tag
+- n8n webhook trigger + callbacks
+- API key masking, Company data fields
+- Docker + EasyPanel deployment ready
 
 ## Backlog
-- EasyPanel deployment
-- Advanced time-series analytics
+- Connect real n8n + Outscraper + Dify for live prospecting
+- Chatwoot → n8n → Spectra live demo
