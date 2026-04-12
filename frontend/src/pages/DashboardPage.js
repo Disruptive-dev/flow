@@ -103,13 +103,13 @@ export default function DashboardPage() {
             <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">{t('recent_activity')}</h3>
             <div className="space-y-3">
               {(stats?.recent_activity || []).slice(0, 6).map((activity, i) => (
-                <div key={i} className="flex items-start gap-3 text-sm animate-slide-in" style={{ animationDelay: `${i * 50}ms` }}>
+                  <div className="flex items-start gap-3 text-sm animate-slide-in" style={{ animationDelay: `${i * 50}ms` }}>
                   <div className="w-1.5 h-1.5 rounded-full bg-blue-500 mt-2 flex-shrink-0" />
                   <div>
-                    <p className="text-zinc-700">{activity.details}</p>
-                    <p className="text-xs text-zinc-400 mt-0.5">
+                    <span className="text-zinc-700 block">{activity.details}</span>
+                    <span className="text-xs text-zinc-400 mt-0.5 flex items-center gap-1.5">
                       {activity.user_name} &middot; <Badge variant="secondary" className="text-[10px] px-1.5 py-0">{activity.action.replace(/_/g, ' ')}</Badge>
-                    </p>
+                    </span>
                   </div>
                 </div>
               ))}
