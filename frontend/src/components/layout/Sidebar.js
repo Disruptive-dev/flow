@@ -16,16 +16,16 @@ const navSections = [
     { key: 'prospect_finder', path: '/prospect-finder', icon: Search },
     { key: 'jobs', path: '/jobs', icon: Zap },
     { key: 'leads', path: '/leads', icon: Users },
-    { key: 'campaigns', path: '/campaigns', icon: Mail },
   ]},
   { title: 'CRM', module: 'crm', items: [
     { key: 'crm_sync', path: '/crm-sync', icon: RefreshCw },
   ]},
-  { title: 'Marketing', module: 'email_marketing', items: [
+  { title: 'Email Marketing', module: 'email_marketing', items: [
     { key: 'email_marketing', path: '/email-marketing', icon: AtSign },
+    { key: 'campaigns', path: '/campaigns', icon: Mail },
+    { key: 'templates', path: '/templates', icon: FileText },
   ]},
   { title: null, items: [
-    { key: 'templates', path: '/templates', icon: FileText },
     { key: 'analytics', path: '/analytics', icon: BarChart3 },
     { key: 'settings', path: '/settings', icon: Settings },
   ]},
