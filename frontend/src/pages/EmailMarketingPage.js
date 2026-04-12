@@ -13,6 +13,7 @@ import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clo
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import FlowBotButton from '@/components/FlowBotButton';
+import GuideBanner from '@/components/GuideBanner';
 
 const stepTypeIcons = { email: Mail, wait: Clock, condition: Zap };
 const stepTypeLabels = { email: "Enviar Email", wait: "Esperar", condition: "Condicion" };
@@ -152,6 +153,8 @@ export default function EmailMarketingPage() {
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">Email Marketing</h1>
         <FlowBotButton section="email_marketing" />
       </div>
+
+      <GuideBanner section="email_marketing" />
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">

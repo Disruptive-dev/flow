@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Pencil, Trash2, Loader2, Eye, Code, Send, Sparkles } from 'lucide-react';
+import { Plus, FileText, Pencil, Trash2, Loader2, Eye, Code, Send, Sparkles, Beaker, Trophy } from 'lucide-react';
 import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -28,6 +28,11 @@ export default function TemplatesPage() {
   const [aiIndustry, setAiIndustry] = useState('');
   const [aiTone, setAiTone] = useState('profesional');
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [abTests, setAbTests] = useState([]);
+  const [showAbPanel, setShowAbPanel] = useState(false);
+  const [abTemplateA, setAbTemplateA] = useState('');
+  const [abTemplateB, setAbTemplateB] = useState('');
+  const [abName, setAbName] = useState('');
 
   const generateWithAI = async () => {
     if (!aiIndustry) return toast.error('Selecciona una industria');
@@ -54,6 +59,7 @@ export default function TemplatesPage() {
 
   useEffect(() => {
     api.get('/templates').then(r => setTemplates(r.data)).catch(console.error).finally(() => setLoading(false));
+    api.get('/templates/ab-tests').then(r => setAbTests(r.data)).catch(() => {});
   }, []);
 
   const openCreate = () => {
@@ -104,6 +110,9 @@ export default function TemplatesPage() {
           <FlowBotButton section="plantillas" />
           <Button onClick={() => setShowAiPanel(!showAiPanel)} variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100" data-testid="flow-ia-neuro-button">
             <Sparkles className="w-4 h-4 mr-2" /> Flow IA Neuro
+          </Button>
+          <Button onClick={() => setShowAbPanel(!showAbPanel)} variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100" data-testid="ab-test-button">
+            <Beaker className="w-4 h-4 mr-2" /> A/B Test
           </Button>
           <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-template-button">
             <Plus className="w-4 h-4 mr-2" /> {t('create')} {t('template')}
@@ -197,7 +206,108 @@ export default function TemplatesPage() {
               </CardContent>
             </Card>
           ))}
-          {!templates.length && <p className="text-sm text-zinc-400 col-span-3">No templates yet. Create your first email template.</p>}
+          {!templates.length && <p className="text-sm text-zinc-400 col-span-3">No hay plantillas. Crea la primera.</p>}
+        </div>
+      )}
+
+      {/* A/B Test Panel */}
+      {showAbPanel && (
+        <Card className="border-amber-200 bg-amber-50/30 rounded-xl">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Beaker className="w-5 h-5 text-amber-600" />
+              <h3 className="font-heading font-medium text-zinc-900">A/B Testing de Plantillas</h3>
+            </div>
+            <p className="text-sm text-zinc-500 mb-4">Compara dos plantillas para ver cual tiene mejor rendimiento en aperturas y clics.</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <Label className="text-xs mb-1 block">Nombre del Test</Label>
+                <Input value={abName} onChange={e => setAbName(e.target.value)} placeholder="Test Q1 2026" data-testid="ab-name-input" />
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Plantilla A</Label>
+                <Select value={abTemplateA} onValueChange={setAbTemplateA}>
+                  <SelectTrigger data-testid="ab-template-a"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs mb-1 block">Plantilla B</Label>
+                <Select value={abTemplateB} onValueChange={setAbTemplateB}>
+                  <SelectTrigger data-testid="ab-template-b"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {templates.filter(t => t.id !== abTemplateA).map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <Button onClick={async () => {
+              if (!abName || !abTemplateA || !abTemplateB) return toast.error('Completa todos los campos');
+              try {
+                const { data } = await api.post('/templates/ab-test', { name: abName, template_a_id: abTemplateA, template_b_id: abTemplateB });
+                setAbTests(prev => [data, ...prev]);
+                setAbName(''); setAbTemplateA(''); setAbTemplateB('');
+                toast.success('A/B Test creado');
+              } catch (e) { toast.error(e?.response?.data?.detail || 'Error'); }
+            }} className="bg-amber-600 hover:bg-amber-700 text-white" data-testid="create-ab-test-btn">
+              Crear A/B Test
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* A/B Test Results */}
+      {abTests.length > 0 && (
+        <div className="space-y-4">
+          <h3 className="font-heading font-medium text-zinc-900">Tests A/B</h3>
+          {abTests.map((test, i) => (
+            <Card key={test.id} className="border-zinc-200 rounded-xl" data-testid={`ab-test-${i}`}>
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h4 className="font-medium text-zinc-900">{test.name}</h4>
+                    <Badge className={test.status === 'completado' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{test.status}</Badge>
+                  </div>
+                  {test.status === 'borrador' && (
+                    <Button size="sm" variant="outline" onClick={async () => {
+                      try {
+                        const { data } = await api.post(`/templates/ab-tests/${test.id}/simulate`);
+                        setAbTests(prev => prev.map(t => t.id === test.id ? data : t));
+                        toast.success(`Ganador: Variante ${data.winner}`);
+                      } catch { toast.error('Error'); }
+                    }} data-testid={`ab-simulate-${i}`}>Simular Test</Button>
+                  )}
+                  {test.winner && <div className="flex items-center gap-1.5 text-sm font-medium text-amber-600"><Trophy className="w-4 h-4" /> Ganador: Variante {test.winner}</div>}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  {['template_a', 'template_b'].map((k, vi) => {
+                    const v = test[k];
+                    const rate = v?.sent > 0 ? ((v.opens / v.sent) * 100).toFixed(1) : '0';
+                    return (
+                      <div key={k} className={`p-4 rounded-lg border ${test.winner === (vi === 0 ? 'A' : 'B') ? 'border-amber-300 bg-amber-50' : 'border-zinc-200 bg-zinc-50'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <Badge variant="outline">Variante {vi === 0 ? 'A' : 'B'}</Badge>
+                          {test.winner === (vi === 0 ? 'A' : 'B') && <Trophy className="w-4 h-4 text-amber-500" />}
+                        </div>
+                        <p className="text-sm font-medium text-zinc-900 mb-1">{v?.name}</p>
+                        <p className="text-xs text-zinc-500 mb-3">{v?.subject}</p>
+                        {v?.sent > 0 && (
+                          <div className="grid grid-cols-4 gap-2 text-center">
+                            {[{ l: 'Env.', n: v.sent }, { l: 'Apert.', n: v.opens }, { l: 'Clics', n: v.clicks }, { l: 'Resp.', n: v.replies }].map(({ l, n }) => (
+                              <div key={l}><p className="text-sm font-semibold text-zinc-900">{n}</p><p className="text-[9px] text-zinc-500 uppercase">{l}</p></div>
+                            ))}
+                          </div>
+                        )}
+                        {v?.sent > 0 && <p className="text-xs text-zinc-400 mt-2">Tasa apertura: {rate}%</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          ))}
         </div>
       )}
 

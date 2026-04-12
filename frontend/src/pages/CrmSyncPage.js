@@ -169,9 +169,13 @@ export default function CrmPage() {
           <Button variant="outline" size="sm" onClick={async () => {
             try {
               const response = await api.get('/export/crm-contacts', { responseType: 'blob' });
-              const url = window.URL.createObjectURL(new Blob([response.data]));
-              const a = document.createElement('a'); a.href = url; a.download = 'crm_contacts_spectra.xlsx'; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-              toast.success('Excel exportado');
+              const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.style.display = 'none'; a.href = url; a.download = 'crm_contacts_spectra.xlsx';
+              document.body.appendChild(a); a.click();
+              setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 200);
+              toast.success('Excel descargado');
             } catch { toast.error('Error al exportar'); }
           }} data-testid="export-crm-btn">
             <Download className="w-4 h-4 mr-1.5" /> Exportar

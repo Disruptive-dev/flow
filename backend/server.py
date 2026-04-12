@@ -254,18 +254,26 @@ async def refresh_token_endpoint(request: Request, response: Response):
 # ==================== DASHBOARD ====================
 
 @api_router.get("/dashboard/stats")
-async def get_dashboard_stats(request: Request):
+async def get_dashboard_stats(request: Request, from_date: Optional[str] = None, to_date: Optional[str] = None):
     user = await get_current_user(request)
     tid = user.get("tenant_id", "")
-    jobs_count = await db.prospect_jobs.count_documents({"tenant_id": tid})
-    total_leads = await db.leads.count_documents({"tenant_id": tid})
-    raw_leads = await db.leads.count_documents({"tenant_id": tid, "status": "raw"})
-    qualified = await db.leads.count_documents({"tenant_id": tid, "status": {"$in": ["scored", "approved"]}})
-    campaigns_active = await db.campaigns.count_documents({"tenant_id": tid, "status": "active"})
-    pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": None, "sent": {"$sum": "$sent_count"}, "opens": {"$sum": "$open_count"}, "clicks": {"$sum": "$click_count"}, "replies": {"$sum": "$reply_count"}, "interested": {"$sum": "$interested_count"}, "crm": {"$sum": "$crm_count"}}}]
+    date_filter = {}
+    if from_date:
+        date_filter["created_at"] = {"$gte": from_date}
+    if to_date:
+        date_filter.setdefault("created_at", {})
+        date_filter["created_at"]["$lte"] = to_date
+    lead_filter = {"tenant_id": tid, **date_filter}
+    campaign_filter = {"tenant_id": tid, **date_filter}
+    jobs_count = await db.prospect_jobs.count_documents({"tenant_id": tid, **date_filter})
+    total_leads = await db.leads.count_documents(lead_filter)
+    raw_leads = await db.leads.count_documents({**lead_filter, "status": "raw"})
+    qualified = await db.leads.count_documents({**lead_filter, "status": {"$in": ["scored", "approved"]}})
+    campaigns_active = await db.campaigns.count_documents({**campaign_filter, "status": "active"})
+    pipeline = [{"$match": campaign_filter}, {"$group": {"_id": None, "sent": {"$sum": "$sent_count"}, "opens": {"$sum": "$open_count"}, "clicks": {"$sum": "$click_count"}, "replies": {"$sum": "$reply_count"}, "interested": {"$sum": "$interested_count"}, "crm": {"$sum": "$crm_count"}}}]
     email_stats = await db.campaigns.aggregate(pipeline).to_list(1)
     es = email_stats[0] if email_stats else {}
-    crm_synced = await db.crm_sync_logs.count_documents({"tenant_id": tid, "status": "synced"})
+    crm_synced = await db.crm_sync_logs.count_documents({"tenant_id": tid, **date_filter, "status": "synced"})
     recent = await db.audit_logs.find({"tenant_id": tid}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
     return {
         "jobs_this_month": jobs_count, "raw_leads": raw_leads, "qualified_leads": qualified,
@@ -574,6 +582,65 @@ async def delete_template(request: Request, template_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Template not found")
     return {"message": "Template deleted"}
+
+@api_router.post("/templates/ab-test")
+async def create_ab_test(request: Request, body: Dict[str, Any] = {}):
+    """Create an A/B test between two templates"""
+    user = await get_current_user(request)
+    template_a_id = body.get("template_a_id", "")
+    template_b_id = body.get("template_b_id", "")
+    name = body.get("name", "A/B Test")
+    split = body.get("split", 50)
+    if not template_a_id or not template_b_id:
+        raise HTTPException(status_code=400, detail="Se requieren dos plantillas")
+    template_a = await db.templates.find_one({"id": template_a_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    template_b = await db.templates.find_one({"id": template_b_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not template_a or not template_b:
+        raise HTTPException(status_code=404, detail="Plantilla no encontrada")
+    now = datetime.now(timezone.utc).isoformat()
+    test_id = str(uuid.uuid4())
+    doc = {
+        "id": test_id, "tenant_id": user["tenant_id"], "name": name,
+        "template_a": {"id": template_a_id, "name": template_a.get("name", ""), "subject": template_a.get("subject", ""), "sent": 0, "opens": 0, "clicks": 0, "replies": 0},
+        "template_b": {"id": template_b_id, "name": template_b.get("name", ""), "subject": template_b.get("subject", ""), "sent": 0, "opens": 0, "clicks": 0, "replies": 0},
+        "split": split, "status": "borrador", "winner": None, "created_at": now, "updated_at": now
+    }
+    await db.ab_tests.insert_one(doc)
+    return serialize_doc(doc)
+
+@api_router.get("/templates/ab-tests")
+async def list_ab_tests(request: Request):
+    user = await get_current_user(request)
+    tests = await db.ab_tests.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return tests
+
+@api_router.post("/templates/ab-tests/{test_id}/simulate")
+async def simulate_ab_test(request: Request, test_id: str):
+    user = await get_current_user(request)
+    test = await db.ab_tests.find_one({"id": test_id, "tenant_id": user["tenant_id"]})
+    if not test:
+        raise HTTPException(status_code=404, detail="A/B Test no encontrado")
+    now = datetime.now(timezone.utc).isoformat()
+    total = random.randint(100, 500)
+    split = test.get("split", 50)
+    sent_a = int(total * split / 100)
+    sent_b = total - sent_a
+    a_opens = int(sent_a * random.uniform(0.20, 0.55))
+    b_opens = int(sent_b * random.uniform(0.20, 0.55))
+    a_clicks = int(a_opens * random.uniform(0.10, 0.35))
+    b_clicks = int(b_opens * random.uniform(0.10, 0.35))
+    a_replies = int(a_clicks * random.uniform(0.20, 0.50))
+    b_replies = int(b_clicks * random.uniform(0.20, 0.50))
+    a_rate = (a_opens / max(sent_a, 1)) * 100
+    b_rate = (b_opens / max(sent_b, 1)) * 100
+    winner = "A" if a_rate > b_rate else ("B" if b_rate > a_rate else "Empate")
+    await db.ab_tests.update_one({"id": test_id}, {"$set": {
+        "template_a.sent": sent_a, "template_a.opens": a_opens, "template_a.clicks": a_clicks, "template_a.replies": a_replies,
+        "template_b.sent": sent_b, "template_b.opens": b_opens, "template_b.clicks": b_clicks, "template_b.replies": b_replies,
+        "status": "completado", "winner": winner, "updated_at": now
+    }})
+    updated = await db.ab_tests.find_one({"id": test_id}, {"_id": 0})
+    return updated
 
 class SendTestRequest(BaseModel):
     to_email: Optional[str] = "test@demo.com"

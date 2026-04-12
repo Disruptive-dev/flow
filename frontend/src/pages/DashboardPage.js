@@ -6,24 +6,26 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
   Briefcase, Users, Mail, MousePointerClick, MessageSquare,
-  ThumbsUp, Send, TrendingUp, BarChart3, Zap, Settings2, X, GripVertical, Eye, EyeOff, RotateCcw
+  ThumbsUp, Send, TrendingUp, TrendingDown, BarChart3, Zap, Settings2, RotateCcw, Calendar, ArrowUpDown
 } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import FlowBotButton from '@/components/FlowBotButton';
 
 const allKpis = [
-  { key: 'jobs_this_month', icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Trabajos del mes' },
+  { key: 'jobs_this_month', icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Trabajos' },
   { key: 'total_leads', icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-50', label: 'Total leads' },
-  { key: 'qualified_leads', icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'Leads calificados' },
+  { key: 'qualified_leads', icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50', label: 'Calificados' },
   { key: 'emails_sent', icon: Mail, color: 'text-amber-600', bg: 'bg-amber-50', label: 'Emails enviados' },
   { key: 'opens', icon: Mail, color: 'text-teal-600', bg: 'bg-teal-50', label: 'Aperturas' },
   { key: 'clicks', icon: MousePointerClick, color: 'text-cyan-600', bg: 'bg-cyan-50', label: 'Clics' },
   { key: 'replies', icon: MessageSquare, color: 'text-green-600', bg: 'bg-green-50', label: 'Respuestas' },
   { key: 'interested', icon: ThumbsUp, color: 'text-orange-600', bg: 'bg-orange-50', label: 'Interesados' },
-  { key: 'leads_sent_to_crm', icon: Send, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Enviados al CRM' },
+  { key: 'leads_sent_to_crm', icon: Send, color: 'text-purple-600', bg: 'bg-purple-50', label: 'Al CRM' },
   { key: 'opportunities', icon: Zap, color: 'text-fuchsia-600', bg: 'bg-fuchsia-50', label: 'Oportunidades' },
   { key: 'active_campaigns', icon: BarChart3, color: 'text-rose-600', bg: 'bg-rose-50', label: 'Campanas activas' },
 ];
@@ -39,51 +41,87 @@ const defaultKpiVisibility = Object.fromEntries(allKpis.map(k => [k.key, true]))
 const defaultPanelVisibility = Object.fromEntries(allPanels.map(p => [p.key, p.defaultVisible]));
 
 function loadPrefs() {
-  try {
-    const saved = localStorage.getItem('spectra_dashboard_prefs');
-    if (saved) return JSON.parse(saved);
-  } catch {}
+  try { const s = localStorage.getItem('spectra_dashboard_prefs'); if (s) return JSON.parse(s); } catch {}
   return { kpis: defaultKpiVisibility, panels: defaultPanelVisibility };
 }
+function savePrefs(p) { localStorage.setItem('spectra_dashboard_prefs', JSON.stringify(p)); }
 
-function savePrefs(prefs) {
-  localStorage.setItem('spectra_dashboard_prefs', JSON.stringify(prefs));
+function getDateRange(preset) {
+  const now = new Date();
+  const fmt = (d) => d.toISOString().split('T')[0] + 'T00:00:00';
+  const fmtEnd = (d) => d.toISOString().split('T')[0] + 'T23:59:59';
+  switch (preset) {
+    case 'today': return { from: fmt(now), to: fmtEnd(now) };
+    case 'week': { const d = new Date(now); d.setDate(d.getDate() - 7); return { from: fmt(d), to: fmtEnd(now) }; }
+    case 'month': { const d = new Date(now); d.setMonth(d.getMonth() - 1); return { from: fmt(d), to: fmtEnd(now) }; }
+    case 'quarter': { const d = new Date(now); d.setMonth(d.getMonth() - 3); return { from: fmt(d), to: fmtEnd(now) }; }
+    case 'year': { const d = new Date(now); d.setFullYear(d.getFullYear() - 1); return { from: fmt(d), to: fmtEnd(now) }; }
+    default: return { from: null, to: null };
+  }
+}
+
+function getPrevRange(preset) {
+  const now = new Date();
+  const fmt = (d) => d.toISOString().split('T')[0] + 'T00:00:00';
+  const fmtEnd = (d) => d.toISOString().split('T')[0] + 'T23:59:59';
+  switch (preset) {
+    case 'today': { const d = new Date(now); d.setDate(d.getDate() - 1); return { from: fmt(d), to: fmtEnd(d) }; }
+    case 'week': { const s = new Date(now); s.setDate(s.getDate() - 14); const e = new Date(now); e.setDate(e.getDate() - 7); return { from: fmt(s), to: fmtEnd(e) }; }
+    case 'month': { const s = new Date(now); s.setMonth(s.getMonth() - 2); const e = new Date(now); e.setMonth(e.getMonth() - 1); return { from: fmt(s), to: fmtEnd(e) }; }
+    case 'quarter': { const s = new Date(now); s.setMonth(s.getMonth() - 6); const e = new Date(now); e.setMonth(e.getMonth() - 3); return { from: fmt(s), to: fmtEnd(e) }; }
+    case 'year': { const s = new Date(now); s.setFullYear(s.getFullYear() - 2); const e = new Date(now); e.setFullYear(e.getFullYear() - 1); return { from: fmt(s), to: fmtEnd(e) }; }
+    default: return { from: null, to: null };
+  }
 }
 
 export default function DashboardPage() {
   const { t } = useLanguage();
   const [stats, setStats] = useState(null);
+  const [prevStats, setPrevStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [prefs, setPrefs] = useState(loadPrefs);
   const [configOpen, setConfigOpen] = useState(false);
+  const [datePreset, setDatePreset] = useState('all');
+  const [compareMode, setCompareMode] = useState(false);
 
-  useEffect(() => {
-    api.get('/dashboard/stats').then(r => setStats(r.data)).catch(console.error).finally(() => setLoading(false));
-  }, []);
-
-  const updatePrefs = (newPrefs) => {
-    setPrefs(newPrefs);
-    savePrefs(newPrefs);
+  const fetchStats = async (preset) => {
+    setLoading(true);
+    try {
+      const range = getDateRange(preset);
+      const params = {};
+      if (range.from) params.from_date = range.from;
+      if (range.to) params.to_date = range.to;
+      const { data } = await api.get('/dashboard/stats', { params });
+      setStats(data);
+      if (compareMode && preset !== 'all') {
+        const prev = getPrevRange(preset);
+        const { data: pd } = await api.get('/dashboard/stats', { params: { from_date: prev.from, to_date: prev.to } });
+        setPrevStats(pd);
+      } else {
+        setPrevStats(null);
+      }
+    } catch (e) { console.error(e); }
+    setLoading(false);
   };
 
-  const toggleKpi = (key) => {
-    const updated = { ...prefs, kpis: { ...prefs.kpis, [key]: !prefs.kpis[key] } };
-    updatePrefs(updated);
-  };
+  useEffect(() => { fetchStats(datePreset); }, [datePreset, compareMode]);
 
-  const togglePanel = (key) => {
-    const updated = { ...prefs, panels: { ...prefs.panels, [key]: !prefs.panels[key] } };
-    updatePrefs(updated);
-  };
-
-  const resetPrefs = () => {
-    const defaults = { kpis: defaultKpiVisibility, panels: defaultPanelVisibility };
-    updatePrefs(defaults);
-  };
+  const updatePrefs = (np) => { setPrefs(np); savePrefs(np); };
+  const toggleKpi = (key) => updatePrefs({ ...prefs, kpis: { ...prefs.kpis, [key]: !prefs.kpis[key] } });
+  const togglePanel = (key) => updatePrefs({ ...prefs, panels: { ...prefs.panels, [key]: !prefs.panels[key] } });
+  const resetPrefs = () => updatePrefs({ kpis: defaultKpiVisibility, panels: defaultPanelVisibility });
 
   const visibleKpis = allKpis.filter(k => prefs.kpis[k.key] !== false);
 
-  if (loading) {
+  const getDelta = (key) => {
+    if (!prevStats || !stats) return null;
+    const cur = stats[key] || 0;
+    const prev = prevStats[key] || 0;
+    if (prev === 0) return cur > 0 ? 100 : 0;
+    return Math.round(((cur - prev) / prev) * 100);
+  };
+
+  if (loading && !stats) {
     return (
       <div className="space-y-6 animate-fade-in">
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('dashboard')}</h1>
@@ -97,13 +135,13 @@ export default function DashboardPage() {
   }
 
   const chartData = [
-    { name: 'Leads', value: stats?.raw_leads || 0 },
-    { name: 'Calificados', value: stats?.qualified_leads || 0 },
-    { name: 'Enviados', value: stats?.emails_sent || 0 },
-    { name: 'Aperturas', value: stats?.opens || 0 },
-    { name: 'Respuestas', value: stats?.replies || 0 },
-    { name: 'Interesados', value: stats?.interested || 0 },
-    { name: 'Al CRM', value: stats?.leads_sent_to_crm || 0 },
+    { name: 'Leads', actual: stats?.raw_leads || 0, anterior: prevStats?.raw_leads || 0 },
+    { name: 'Calificados', actual: stats?.qualified_leads || 0, anterior: prevStats?.qualified_leads || 0 },
+    { name: 'Enviados', actual: stats?.emails_sent || 0, anterior: prevStats?.emails_sent || 0 },
+    { name: 'Aperturas', actual: stats?.opens || 0, anterior: prevStats?.opens || 0 },
+    { name: 'Respuestas', actual: stats?.replies || 0, anterior: prevStats?.replies || 0 },
+    { name: 'Interesados', actual: stats?.interested || 0, anterior: prevStats?.interested || 0 },
+    { name: 'Al CRM', actual: stats?.leads_sent_to_crm || 0, anterior: prevStats?.leads_sent_to_crm || 0 },
   ];
 
   const openRate = stats?.emails_sent > 0 ? ((stats?.opens || 0) / stats.emails_sent * 100).toFixed(1) : '0';
@@ -111,11 +149,34 @@ export default function DashboardPage() {
   const convRate = stats?.total_leads > 0 ? ((stats?.leads_sent_to_crm || 0) / stats.total_leads * 100).toFixed(1) : '0';
 
   return (
-    <div className="space-y-8 animate-fade-in" data-testid="dashboard-page">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-fade-in" data-testid="dashboard-page">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('dashboard')}</h1>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Date Filter */}
+          <Select value={datePreset} onValueChange={setDatePreset}>
+            <SelectTrigger className="w-[160px] h-9 text-sm" data-testid="date-filter">
+              <Calendar className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todo el tiempo</SelectItem>
+              <SelectItem value="today">Hoy</SelectItem>
+              <SelectItem value="week">Ultima semana</SelectItem>
+              <SelectItem value="month">Ultimo mes</SelectItem>
+              <SelectItem value="quarter">Ultimo trimestre</SelectItem>
+              <SelectItem value="year">Ultimo ano</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {datePreset !== 'all' && (
+            <Button variant={compareMode ? 'default' : 'outline'} size="sm" onClick={() => setCompareMode(!compareMode)} data-testid="compare-toggle" className={compareMode ? 'bg-blue-600 text-white' : ''}>
+              <ArrowUpDown className="w-3.5 h-3.5 mr-1.5" /> Comparar
+            </Button>
+          )}
+
           <FlowBotButton section="dashboard" />
+
           <Dialog open={configOpen} onOpenChange={setConfigOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" data-testid="dashboard-config-btn">
@@ -123,11 +184,8 @@ export default function DashboardPage() {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle className="font-heading">Personalizar Dashboard</DialogTitle>
-              </DialogHeader>
+              <DialogHeader><DialogTitle className="font-heading">Personalizar Dashboard</DialogTitle></DialogHeader>
               <div className="space-y-6 mt-4">
-                {/* Panels */}
                 <div>
                   <h4 className="text-sm font-medium text-zinc-900 mb-3">Secciones</h4>
                   <div className="space-y-2">
@@ -139,8 +197,6 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 </div>
-
-                {/* KPIs */}
                 <div>
                   <h4 className="text-sm font-medium text-zinc-900 mb-3">Metricas (KPIs)</h4>
                   <div className="grid grid-cols-2 gap-2">
@@ -155,14 +211,9 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 </div>
-
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={resetPrefs} data-testid="reset-dashboard-btn">
-                    <RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restaurar por defecto
-                  </Button>
-                  <Button size="sm" onClick={() => setConfigOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white">
-                    Listo
-                  </Button>
+                  <Button variant="outline" size="sm" onClick={resetPrefs} data-testid="reset-dashboard-btn"><RotateCcw className="w-3.5 h-3.5 mr-1.5" /> Restaurar</Button>
+                  <Button size="sm" onClick={() => setConfigOpen(false)} className="bg-blue-600 hover:bg-blue-700 text-white">Listo</Button>
                 </div>
               </div>
             </DialogContent>
@@ -172,22 +223,32 @@ export default function DashboardPage() {
 
       {/* KPI Grid */}
       {prefs.panels.kpis !== false && visibleKpis.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="dashboard-kpi-grid">
-          {visibleKpis.map(({ key, icon: Icon, color, bg, label }) => (
-            <Card key={key} className="border-zinc-200 rounded-xl hover:border-zinc-300 transition-colors">
-              <CardContent className="p-5">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
-                    <p className="text-2xl font-heading font-semibold text-zinc-900">{stats?.[key]?.toLocaleString() ?? 0}</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="dashboard-kpi-grid">
+          {visibleKpis.map(({ key, icon: Icon, color, bg, label }) => {
+            const delta = getDelta(key);
+            return (
+              <Card key={key} className="border-zinc-200 rounded-xl hover:border-zinc-300 transition-colors">
+                <CardContent className="p-5">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
+                      <p className="text-2xl font-heading font-semibold text-zinc-900">{stats?.[key]?.toLocaleString() ?? 0}</p>
+                      {delta !== null && compareMode && (
+                        <div className={`flex items-center gap-1 mt-1 text-xs ${delta >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                          <span>{delta >= 0 ? '+' : ''}{delta}%</span>
+                          <span className="text-zinc-400 ml-1">vs anterior</span>
+                        </div>
+                      )}
+                    </div>
+                    <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
+                      <Icon className={`w-4 h-4 ${color}`} />
+                    </div>
                   </div>
-                  <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
-                    <Icon className={`w-4 h-4 ${color}`} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -196,7 +257,7 @@ export default function DashboardPage() {
         {prefs.panels.pipeline !== false && (
           <Card className={`border-zinc-200 rounded-xl ${prefs.panels.activity !== false ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
             <CardContent className="p-6">
-              <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Pipeline General</h3>
+              <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Pipeline General {compareMode && prevStats ? '(Comparativo)' : ''}</h3>
               <div className="h-[280px]">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData}>
@@ -204,7 +265,9 @@ export default function DashboardPage() {
                     <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#71717a' }} />
                     <YAxis tick={{ fontSize: 11, fill: '#71717a' }} />
                     <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', fontSize: '13px' }} />
-                    <Bar dataKey="value" fill="#1D4ED8" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="actual" fill="#1D4ED8" radius={[4, 4, 0, 0]} name="Actual" />
+                    {compareMode && prevStats && <Bar dataKey="anterior" fill="#cbd5e1" radius={[4, 4, 0, 0]} name="Anterior" />}
+                    {compareMode && prevStats && <Legend />}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -228,23 +291,21 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 ))}
-                {(!stats?.recent_activity?.length) && (
-                  <p className="text-sm text-zinc-400">Sin actividad reciente</p>
-                )}
+                {(!stats?.recent_activity?.length) && <p className="text-sm text-zinc-400">Sin actividad reciente</p>}
               </div>
             </CardContent>
           </Card>
         )}
       </div>
 
-      {/* Conversion Rates Panel */}
+      {/* Conversion Rates */}
       {prefs.panels.rates !== false && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="dashboard-rates">
           {[
             { label: 'Tasa de Apertura', value: `${openRate}%`, desc: `${stats?.opens || 0} de ${stats?.emails_sent || 0} emails`, color: 'text-teal-600', bg: 'bg-teal-50' },
             { label: 'Tasa de Respuesta', value: `${replyRate}%`, desc: `${stats?.replies || 0} respuestas`, color: 'text-green-600', bg: 'bg-green-50' },
             { label: 'Conversion a CRM', value: `${convRate}%`, desc: `${stats?.leads_sent_to_crm || 0} de ${stats?.total_leads || 0} leads`, color: 'text-purple-600', bg: 'bg-purple-50' },
-          ].map(({ label, value, desc, color, bg }) => (
+          ].map(({ label, value, desc, color }) => (
             <Card key={label} className="border-zinc-200 rounded-xl">
               <CardContent className="p-5">
                 <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1">{label}</p>

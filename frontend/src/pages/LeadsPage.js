@@ -15,6 +15,8 @@ import { Progress } from '@/components/ui/progress';
 import { Search, MoreHorizontal, CheckCircle2, XCircle, Send, ExternalLink, Loader2, ChevronLeft, ChevronRight, Download, Upload, Globe, Mail, Phone, Star, TrendingUp, TrendingDown } from 'lucide-react';
 import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
+import GuideBanner from '@/components/GuideBanner';
+import LeadStatusGuide from '@/components/LeadStatusGuide';
 
 const leadStatusLabels = {
   raw: "Sin procesar", cleaned: "Limpiado", scored: "Calificado",
@@ -128,6 +130,7 @@ export default function LeadsPage() {
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('leads')}</h1>
         <div className="flex items-center gap-3">
+          <LeadStatusGuide />
           <FlowBotButton section="leads" />
           <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleImport} className="hidden" />
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-leads-btn">
@@ -136,9 +139,13 @@ export default function LeadsPage() {
           <Button variant="outline" size="sm" onClick={async () => {
             try {
               const response = await api.get('/export/leads', { responseType: 'blob' });
-              const url = window.URL.createObjectURL(new Blob([response.data]));
-              const a = document.createElement('a'); a.href = url; a.download = 'leads_spectra.xlsx'; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
-              toast.success('Excel exportado');
+              const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.style.display = 'none'; a.href = url; a.download = 'leads_spectra.xlsx';
+              document.body.appendChild(a); a.click();
+              setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 200);
+              toast.success('Excel descargado');
             } catch { toast.error('Error al exportar'); }
           }} data-testid="export-leads-btn">
             <Download className="w-4 h-4 mr-1.5" /> Exportar
@@ -146,6 +153,8 @@ export default function LeadsPage() {
           <span className="text-sm text-zinc-500">{total} leads</span>
         </div>
       </div>
+
+      <GuideBanner section="leads" />
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

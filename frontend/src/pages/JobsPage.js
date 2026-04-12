@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft } from 'lucide-react';
 import { toast } from 'sonner';
+import GuideBanner from '@/components/GuideBanner';
 
 const statusColors = { pending: "bg-slate-100 text-slate-700", processing: "bg-amber-50 text-amber-700", completed: "bg-emerald-50 text-emerald-700", failed: "bg-red-50 text-red-700", in_progress: "bg-amber-50 text-amber-700" };
 const stageLabels = { job_created: "Flow IA Initiated", scraping: "Searching prospects...", prospects_found: "Prospects Found", ai_cleaning: "AI Cleaning & Scoring...", scoring_completed: "Scoring Completed", ready_for_review: "Leads Ready" };
@@ -149,6 +150,7 @@ export default function JobsPage() {
   return (
     <div className="space-y-6 animate-fade-in" data-testid="jobs-list-page">
       <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">Flow IA</h1>
+      <GuideBanner section="flow_ia" />
       {loading ? (
         <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
       ) : (
