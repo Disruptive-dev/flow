@@ -28,7 +28,10 @@ export default function JobsPage() {
       setJobs(r.data);
       if (selectedId) {
         const found = r.data.find(j => j.id === selectedId);
-        if (found) setSelectedJob(found);
+        if (found) {
+          setSelectedJob(found);
+          if (found.status === 'processing') startPolling(found.id);
+        }
       }
     }).catch(console.error).finally(() => setLoading(false));
   }, [selectedId]);
@@ -37,30 +40,54 @@ export default function JobsPage() {
     setStarting(true);
     try {
       const { data } = await api.post(`/prospect-jobs/${jobId}/start`);
-      // Animate stages one by one
-      const stagesData = data.stages || [];
-      const animatedJob = { ...data, stages: stagesData.map(s => ({ ...s, status: 'pending' })), status: 'processing', raw_count: 0, cleaned_count: 0, qualified_count: 0 };
-      animatedJob.stages[0].status = 'completed';
-      setSelectedJob({ ...animatedJob });
-
-      for (let i = 1; i < stagesData.length; i++) {
-        await new Promise(r => setTimeout(r, 1200));
-        animatedJob.stages[i].status = 'completed';
-        animatedJob.stages[i].timestamp = new Date().toISOString();
-        if (i === 2) { animatedJob.raw_count = data.raw_count; animatedJob.status = 'processing'; }
-        if (i === 3) { animatedJob.cleaned_count = data.cleaned_count; }
-        if (i === 4) { animatedJob.qualified_count = data.qualified_count; animatedJob.rejected_count = data.rejected_count; }
-        if (i === 5) { animatedJob.status = 'completed'; }
+      
+      if (data.status === 'processing') {
+        // n8n mode - start polling
+        setSelectedJob(data);
+        toast.success('Trabajo enviado a n8n. Esperando resultados...');
+        startPolling(jobId);
+      } else {
+        // Demo mode - animate stages
+        const stagesData = data.stages || [];
+        const animatedJob = { ...data, stages: stagesData.map(s => ({ ...s, status: 'pending' })), status: 'processing', raw_count: 0, cleaned_count: 0, qualified_count: 0 };
+        animatedJob.stages[0].status = 'completed';
         setSelectedJob({ ...animatedJob });
+        for (let i = 1; i < stagesData.length; i++) {
+          await new Promise(r => setTimeout(r, 1200));
+          animatedJob.stages[i].status = 'completed';
+          animatedJob.stages[i].timestamp = new Date().toISOString();
+          if (i === 2) { animatedJob.raw_count = data.raw_count; animatedJob.status = 'processing'; }
+          if (i === 3) { animatedJob.cleaned_count = data.cleaned_count; }
+          if (i === 4) { animatedJob.qualified_count = data.qualified_count; animatedJob.rejected_count = data.rejected_count; }
+          if (i === 5) { animatedJob.status = 'completed'; }
+          setSelectedJob({ ...animatedJob });
+        }
+        setJobs(prev => prev.map(j => j.id === jobId ? data : j));
+        toast.success(`${data.qualified_count} leads calificados!`);
       }
-
-      setJobs(prev => prev.map(j => j.id === jobId ? data : j));
-      toast.success(`${data.qualified_count} leads calificados listos para revision!`);
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Failed to start job');
+      toast.error(err.response?.data?.detail || 'Error al iniciar');
     } finally {
       setStarting(false);
     }
+  };
+
+  const startPolling = (jobId) => {
+    const interval = setInterval(async () => {
+      try {
+        const { data } = await api.get(`/prospect-jobs/${jobId}`);
+        setSelectedJob(data);
+        if (data.status === 'completed' || data.status === 'failed') {
+          clearInterval(interval);
+          setJobs(prev => prev.map(j => j.id === jobId ? data : j));
+          if (data.status === 'completed') {
+            toast.success(`${data.qualified_count} leads calificados! Lista: ${data.auto_list_name || ''}`);
+          }
+        }
+      } catch { clearInterval(interval); }
+    }, 5000);
+    // Auto-stop after 5 minutes
+    setTimeout(() => clearInterval(interval), 300000);
   };
 
   const labels = lang === 'es' ? stageLabelsEs : stageLabels;
