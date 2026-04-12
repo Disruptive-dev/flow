@@ -1227,6 +1227,15 @@ async def bulk_deal_action(request: Request, body: BulkDealAction):
 
 # ==================== EXPORT ====================
 
+@api_router.get("/export/n8n-workflow")
+async def export_n8n_workflow():
+    """Download the n8n workflow JSON file"""
+    from fastapi.responses import FileResponse
+    filepath = ROOT_DIR.parent / "n8n-workflow-spectra-prospeccion.json"
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Workflow file not found")
+    return FileResponse(path=str(filepath), media_type="application/json", filename="spectra-flow-n8n-workflow.json")
+
 @api_router.get("/export/leads")
 async def export_leads(request: Request):
     from fastapi.responses import StreamingResponse

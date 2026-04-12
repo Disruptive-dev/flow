@@ -17,13 +17,13 @@ const navSections = [
     { key: 'jobs', path: '/jobs', icon: Zap },
     { key: 'leads', path: '/leads', icon: Users },
   ]},
-  { title: 'CRM', module: 'crm', items: [
-    { key: 'crm_sync', path: '/crm-sync', icon: RefreshCw },
-  ]},
   { title: 'Email Marketing', module: 'email_marketing', items: [
     { key: 'email_marketing', path: '/email-marketing', icon: AtSign },
     { key: 'campaigns', path: '/campaigns', icon: Mail },
     { key: 'templates', path: '/templates', icon: FileText },
+  ]},
+  { title: 'CRM', module: 'crm', items: [
+    { key: 'crm_sync', path: '/crm-sync', icon: RefreshCw },
   ]},
   { title: null, items: [
     { key: 'analytics', path: '/analytics', icon: BarChart3 },
