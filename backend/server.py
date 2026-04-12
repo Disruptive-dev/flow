@@ -727,7 +727,7 @@ async def get_crm_contact(request: Request, contact_id: str):
         raise HTTPException(status_code=404, detail="Contacto no encontrado")
     deals = await db.crm_deals.find({"contact_id": contact_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
     notes = await db.crm_notes.find({"contact_id": contact_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
-    return {**contact, "deals": deals, "notes": notes}
+    return {**contact, "deals": deals, "notes_list": notes}
 
 @api_router.get("/crm/deals")
 async def list_crm_deals(request: Request, stage: Optional[str] = None):

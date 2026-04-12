@@ -2,18 +2,26 @@ import { useState, useEffect } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
-import { Loader2, TrendingUp, Users, Mail, MousePointerClick, MessageSquare, Send, ThumbsUp, Briefcase, CheckCircle2, XCircle } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { Loader2, TrendingUp, Users, Mail, MousePointerClick, MessageSquare, Send, ThumbsUp, Briefcase, CheckCircle2, XCircle, DollarSign } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, FunnelChart, Funnel, LabelList } from 'recharts';
 
 const COLORS = ['#1D4ED8', '#16A34A', '#F59E0B', '#DC2626', '#6366F1', '#06B6D4', '#EC4899'];
+const FUNNEL_COLORS = ['#94a3b8', '#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444'];
 
 export default function AnalyticsPage() {
   const { t } = useLanguage();
   const [stats, setStats] = useState(null);
+  const [crmStats, setCrmStats] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.get('/analytics').then(r => setStats(r.data)).catch(console.error).finally(() => setLoading(false));
+    Promise.all([
+      api.get('/analytics'),
+      api.get('/crm/stats').catch(() => ({ data: null })),
+    ]).then(([a, c]) => {
+      setStats(a.data);
+      setCrmStats(c.data);
+    }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="flex items-center gap-2 text-zinc-400 animate-fade-in"><Loader2 className="w-4 h-4 animate-spin" /> Cargando analisis...</div>;
@@ -39,6 +47,17 @@ export default function AnalyticsPage() {
     { name: 'Calificados', value: stats?.qualified_leads || 0 },
     { name: 'Rechazados', value: stats?.rejected_leads || 0 },
     { name: 'Otros', value: Math.max(0, (stats?.total_leads || 0) - (stats?.qualified_leads || 0) - (stats?.rejected_leads || 0)) },
+  ];
+
+  // CRM Funnel data
+  const sc = crmStats?.stage_counts || {};
+  const funnelData = [
+    { name: 'Nuevo', value: sc.nuevo || 0, fill: '#94a3b8' },
+    { name: 'Contactado', value: sc.contactado || 0, fill: '#3b82f6' },
+    { name: 'Propuesta', value: sc.propuesta || 0, fill: '#8b5cf6' },
+    { name: 'Negociacion', value: sc.negociacion || 0, fill: '#f59e0b' },
+    { name: 'Ganado', value: sc.ganado || 0, fill: '#10b981' },
+    { name: 'Perdido', value: sc.perdido || 0, fill: '#ef4444' },
   ];
 
   const metricCards = [
@@ -74,6 +93,30 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
+      {/* CRM Stats Row */}
+      {crmStats && (crmStats.total_contacts > 0 || crmStats.total_deals > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-5 text-center">
+              <p className="text-3xl font-heading font-semibold text-blue-600">{crmStats.total_contacts}</p>
+              <p className="text-xs text-zinc-500 mt-1">Contactos en CRM</p>
+            </CardContent>
+          </Card>
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-5 text-center">
+              <p className="text-3xl font-heading font-semibold text-emerald-600">{crmStats.stage_counts?.ganado || 0}</p>
+              <p className="text-xs text-zinc-500 mt-1">Oportunidades Ganadas</p>
+            </CardContent>
+          </Card>
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-5 text-center">
+              <p className="text-3xl font-heading font-semibold text-amber-600">${(crmStats.won_value || 0).toLocaleString()}</p>
+              <p className="text-xs text-zinc-500 mt-1">Valor Total Ganado</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* Conversion Rates */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
@@ -91,7 +134,7 @@ export default function AnalyticsPage() {
         ))}
       </div>
 
-      {/* Charts */}
+      {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-zinc-200 rounded-xl">
           <CardContent className="p-6">
@@ -128,6 +171,32 @@ export default function AnalyticsPage() {
         </Card>
       </div>
 
+      {/* Funnel Chart - CRM Pipeline */}
+      <Card className="border-zinc-200 rounded-xl">
+        <CardContent className="p-6">
+          <h3 className="text-base font-heading font-medium text-zinc-900 mb-2">Embudo del Pipeline CRM</h3>
+          <p className="text-sm text-zinc-500 mb-4">Conversion de oportunidades por etapa</p>
+          {funnelData.some(d => d.value > 0) ? (
+            <div className="h-[300px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <FunnelChart>
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e4e4e7', fontSize: '13px' }} />
+                  <Funnel dataKey="value" data={funnelData} isAnimationActive>
+                    <LabelList position="right" fill="#27272a" stroke="none" dataKey="name" fontSize={12} />
+                    <LabelList position="center" fill="#fff" stroke="none" dataKey="value" fontSize={14} fontWeight={600} />
+                  </Funnel>
+                </FunnelChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-[200px] flex items-center justify-center text-zinc-400 text-sm">
+              No hay datos en el pipeline CRM todavia. Envia leads al CRM y crea oportunidades para ver el embudo.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Distribution Pie */}
       <Card className="border-zinc-200 rounded-xl">
         <CardContent className="p-6">
           <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Distribucion de Leads</h3>

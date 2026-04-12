@@ -10,8 +10,8 @@ import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft } from 'lucide-re
 import { toast } from 'sonner';
 
 const statusColors = { pending: "bg-slate-100 text-slate-700", processing: "bg-amber-50 text-amber-700", completed: "bg-emerald-50 text-emerald-700", failed: "bg-red-50 text-red-700", in_progress: "bg-amber-50 text-amber-700" };
-const stageLabels = { job_created: "Job Created", scraping: "Searching prospects...", prospects_found: "Prospects Found", ai_cleaning: "Cleaning & scoring with AI...", scoring_completed: "Scoring Completed", ready_for_review: "Leads Ready for Review" };
-const stageLabelsEs = { job_created: "Trabajo Creado", scraping: "Buscando prospectos...", prospects_found: "Prospectos Encontrados", ai_cleaning: "Limpiando y calificando con IA...", scoring_completed: "Calificacion Completada", ready_for_review: "Leads Listos para Revision" };
+const stageLabels = { job_created: "Flow IA Initiated", scraping: "Searching prospects...", prospects_found: "Prospects Found", ai_cleaning: "AI Cleaning & Scoring...", scoring_completed: "Scoring Completed", ready_for_review: "Leads Ready" };
+const stageLabelsEs = { job_created: "Flow IA Iniciado", scraping: "Buscando prospectos...", prospects_found: "Prospectos Encontrados", ai_cleaning: "Limpiando y calificando con IA...", scoring_completed: "Calificacion Completada", ready_for_review: "Leads Listos para Revision" };
 
 export default function JobsPage() {
   const { t, lang } = useLanguage();
@@ -72,7 +72,7 @@ export default function JobsPage() {
     return (
       <div className="space-y-6 animate-fade-in max-w-3xl" data-testid="job-detail-page">
         <button onClick={() => setSelectedJob(null)} className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 transition-colors" data-testid="job-back-button">
-          <ArrowLeft className="w-4 h-4" /> Volver a {t('jobs')}
+          <ArrowLeft className="w-4 h-4" /> Volver a Flow IA
         </button>
         <div className="flex items-center justify-between">
           <div>
@@ -149,7 +149,7 @@ export default function JobsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="jobs-list-page">
-      <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('jobs')}</h1>
+      <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">Flow IA</h1>
       {loading ? (
         <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
       ) : (
