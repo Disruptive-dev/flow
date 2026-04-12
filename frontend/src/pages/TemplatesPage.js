@@ -9,8 +9,10 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, FileText, Pencil, Trash2, Loader2, Eye, Code, Send } from 'lucide-react';
+import { Plus, FileText, Pencil, Trash2, Loader2, Eye, Code, Send, Sparkles } from 'lucide-react';
 import { toast } from 'sonner';
+import FlowBotButton from '@/components/FlowBotButton';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function TemplatesPage() {
   const { t } = useLanguage();
@@ -22,6 +24,25 @@ export default function TemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [previewId, setPreviewId] = useState(null);
   const [testResult, setTestResult] = useState(null);
+  const [generatingAI, setGeneratingAI] = useState(false);
+  const [aiIndustry, setAiIndustry] = useState('');
+  const [aiTone, setAiTone] = useState('profesional');
+  const [showAiPanel, setShowAiPanel] = useState(false);
+
+  const generateWithAI = async () => {
+    if (!aiIndustry) return toast.error('Selecciona una industria');
+    setGeneratingAI(true);
+    try {
+      const { data } = await api.post('/ai/generate-template', { industry: aiIndustry, objective: 'generar interes y agendar reunion', tone: aiTone });
+      setForm(f => ({ ...f, name: `Neuro - ${aiIndustry}`, subject: data.subject || f.subject, html_body: data.html_body || f.html_body, variables: data.variables || f.variables }));
+      setDialogOpen(true);
+      setShowAiPanel(false);
+      toast.success('Plantilla neuropersuasiva generada con Flow IA Neuro');
+    } catch (err) {
+      toast.error('Error al generar: ' + (err.response?.data?.error || err.message));
+    }
+    setGeneratingAI(false);
+  };
 
   const sendTestEmail = async (tmplId) => {
     try {
@@ -79,10 +100,60 @@ export default function TemplatesPage() {
     <div className="space-y-6 animate-fade-in" data-testid="templates-page">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('templates')}</h1>
-        <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-template-button">
-          <Plus className="w-4 h-4 mr-2" /> {t('create')} {t('template')}
-        </Button>
+        <div className="flex items-center gap-3">
+          <FlowBotButton section="plantillas" />
+          <Button onClick={() => setShowAiPanel(!showAiPanel)} variant="outline" className="border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100" data-testid="flow-ia-neuro-button">
+            <Sparkles className="w-4 h-4 mr-2" /> Flow IA Neuro
+          </Button>
+          <Button onClick={openCreate} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-template-button">
+            <Plus className="w-4 h-4 mr-2" /> {t('create')} {t('template')}
+          </Button>
+        </div>
       </div>
+
+      {/* AI Generation Panel */}
+      {showAiPanel && (
+        <Card className="border-purple-200 bg-purple-50/30 rounded-xl" data-testid="ai-neuro-panel">
+          <CardContent className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              <h3 className="font-heading font-medium text-zinc-900">Generar con Flow IA Neuro</h3>
+            </div>
+            <p className="text-sm text-zinc-500 mb-4">Genera plantillas neuropersuasivas usando tecnicas de neuromarketing: urgencia, reciprocidad, prueba social, escasez y autoridad.</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <Label className="text-sm mb-1.5 block">Industria</Label>
+                <Select value={aiIndustry} onValueChange={setAiIndustry}>
+                  <SelectTrigger data-testid="ai-industry-select"><SelectValue placeholder="Seleccionar..." /></SelectTrigger>
+                  <SelectContent>
+                    {["Inmobiliarias", "Tecnologia", "Gastronomia", "Legal", "Salud", "Educacion", "Seguros", "Consultoria", "Construccion", "Finanzas"].map(i => (
+                      <SelectItem key={i} value={i}>{i}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-sm mb-1.5 block">Tono</Label>
+                <Select value={aiTone} onValueChange={setAiTone}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="profesional">Profesional</SelectItem>
+                    <SelectItem value="cercano">Cercano</SelectItem>
+                    <SelectItem value="urgente">Urgente</SelectItem>
+                    <SelectItem value="exclusivo">Exclusivo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex items-end">
+                <Button onClick={generateWithAI} disabled={generatingAI} className="bg-purple-600 hover:bg-purple-700 text-white w-full h-10" data-testid="generate-ai-template-btn">
+                  {generatingAI ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                  Generar
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="flex items-center gap-2 text-zinc-400"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>

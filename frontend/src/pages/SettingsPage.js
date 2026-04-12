@@ -13,8 +13,9 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Palette, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot } from 'lucide-react';
+import { Palette, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package } from 'lucide-react';
 import { toast } from 'sonner';
+import DomainsPage from '@/pages/DomainsPage';
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -27,17 +28,20 @@ export default function SettingsPage() {
   const [branding, setBranding] = useState({ company_name: '', logo_url: '', primary_color: '#1D4ED8', secondary_color: '#6366F1' });
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'operator' });
+  const [modules, setModules] = useState({ prospeccion: true, crm: true, email_marketing: true });
 
   useEffect(() => {
     Promise.all([
       api.get('/settings'),
       api.get('/settings/integrations'),
       api.get('/users').catch(() => ({ data: [] })),
-    ]).then(([s, i, u]) => {
+      api.get('/tenant/modules').catch(() => ({ data: { prospeccion: true, crm: true, email_marketing: true } })),
+    ]).then(([s, i, u, m]) => {
       setSettings(s.data);
       setBranding(s.data?.branding || {});
       setIntegrations(i.data);
       setUsers(u.data);
+      setModules(m.data);
     }).catch(console.error).finally(() => setLoading(false));
   }, []);
 
@@ -46,9 +50,18 @@ export default function SettingsPage() {
     try {
       const { data } = await api.put('/settings', branding);
       setSettings(data);
-      toast.success('Settings saved');
-    } catch { toast.error('Failed to save'); }
+      toast.success('Configuracion guardada');
+    } catch { toast.error('Error al guardar'); }
     setSaving(false);
+  };
+
+  const toggleModule = async (mod, value) => {
+    const updated = { ...modules, [mod]: value };
+    setModules(updated);
+    try {
+      await api.put('/tenant/modules', updated);
+      toast.success(`Modulo ${mod} ${value ? 'activado' : 'desactivado'}`);
+    } catch { toast.error('Error al actualizar modulos'); }
   };
 
   const toggleIntegration = async (name, enabled) => {
@@ -88,6 +101,8 @@ export default function SettingsPage() {
           <TabsTrigger value="branding" data-testid="settings-tab-branding"><Palette className="w-4 h-4 mr-1.5" />{t('branding')}</TabsTrigger>
           <TabsTrigger value="users" data-testid="settings-tab-users"><Users className="w-4 h-4 mr-1.5" />{t('user_management')}</TabsTrigger>
           <TabsTrigger value="integrations" data-testid="settings-tab-integrations"><Link className="w-4 h-4 mr-1.5" />{t('integrations')}</TabsTrigger>
+          <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
+          <TabsTrigger value="modules" data-testid="settings-tab-modules"><Package className="w-4 h-4 mr-1.5" />Modulos</TabsTrigger>
           <TabsTrigger value="optimia" data-testid="settings-tab-optimia"><Bot className="w-4 h-4 mr-1.5" />OptimIA Bot</TabsTrigger>
         </TabsList>
 
@@ -216,6 +231,34 @@ export default function SettingsPage() {
         </TabsContent>
 
         {/* OptimIA Bot */}
+        <TabsContent value="domains">
+          <DomainsPage />
+        </TabsContent>
+
+        <TabsContent value="modules">
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-6 space-y-6">
+              <div>
+                <h3 className="font-heading font-medium text-zinc-900 mb-1">Gestion de Modulos</h3>
+                <p className="text-sm text-zinc-500 mb-6">Activa o desactiva los modulos disponibles para este tenant. Esto controla que secciones ve el cliente.</p>
+              </div>
+              {[
+                { key: 'prospeccion', label: 'Prospeccion', desc: 'Buscador de Prospectos, Flow IA, Leads, Campanas, Plantillas', color: 'bg-blue-50 text-blue-700' },
+                { key: 'crm', label: 'Spectra CRM', desc: 'Contactos, Pipeline de Oportunidades, Notas, Seguimiento', color: 'bg-emerald-50 text-emerald-700' },
+                { key: 'email_marketing', label: 'Email Marketing', desc: 'Listas, Campanas de Email, Automatizaciones', color: 'bg-purple-50 text-purple-700' },
+              ].map(({ key, label, desc, color }) => (
+                <div key={key} className="flex items-center justify-between p-4 border border-zinc-200 rounded-xl" data-testid={`module-${key}`}>
+                  <div className="flex items-center gap-4">
+                    <Badge className={color}>{label}</Badge>
+                    <p className="text-sm text-zinc-500">{desc}</p>
+                  </div>
+                  <Switch checked={modules[key] ?? true} onCheckedChange={v => toggleModule(key, v)} data-testid={`module-toggle-${key}`} />
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="optimia">
           <Card className="border-zinc-200 rounded-xl">
             <CardContent className="p-8 text-center space-y-6">

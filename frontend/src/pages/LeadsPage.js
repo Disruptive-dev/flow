@@ -11,8 +11,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
-import { Search, MoreHorizontal, CheckCircle2, XCircle, Send, ExternalLink, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Search, MoreHorizontal, CheckCircle2, XCircle, Send, ExternalLink, Loader2, ChevronLeft, ChevronRight, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import FlowBotButton from '@/components/FlowBotButton';
 
 const leadStatusColors = {
   raw: "bg-slate-100 text-slate-700", cleaned: "bg-blue-50 text-blue-700", scored: "bg-indigo-50 text-indigo-700",
@@ -92,7 +93,13 @@ export default function LeadsPage() {
     <div className="space-y-6 animate-fade-in" data-testid="leads-page">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('leads')}</h1>
-        <p className="text-sm text-zinc-500">{total} total leads</p>
+        <div className="flex items-center gap-3">
+          <FlowBotButton section="leads" />
+          <Button variant="outline" size="sm" asChild data-testid="export-leads-btn">
+            <a href={`${process.env.REACT_APP_BACKEND_URL}/api/export/leads`} target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Exportar Excel</a>
+          </Button>
+          <p className="text-sm text-zinc-500">{total} leads totales</p>
+        </div>
       </div>
 
       {/* Filters */}

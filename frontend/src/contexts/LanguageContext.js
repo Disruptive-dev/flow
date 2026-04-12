@@ -4,7 +4,7 @@ const translations = {
   en: {
     dashboard: "Dashboard", prospect_finder: "Prospect Finder", jobs: "Flow IA", leads: "Leads",
     campaigns: "Campaigns", templates: "Templates", domains: "Domains", crm_sync: "Spectra CRM",
-    analytics: "Analytics", settings: "Settings", search_prospects: "Search Prospects",
+    analytics: "Analytics", settings: "Settings", email_marketing: "Email Marketing", search_prospects: "Search Prospects",
     province: "Province", city: "City / Locality", category: "Industry / Category",
     quantity: "Target Quantity", filters: "Optional Filters", start_job: "Launch Job",
     recent_jobs: "Recent Jobs", job_progress: "Job Progress", raw_leads: "Raw Leads",
@@ -49,7 +49,7 @@ const translations = {
   es: {
     dashboard: "Panel Principal", prospect_finder: "Buscador de Prospectos", jobs: "Flow IA",
     leads: "Leads", campaigns: "Campanas", templates: "Plantillas", domains: "Dominios",
-    crm_sync: "Spectra CRM", analytics: "Analisis", settings: "Configuracion",
+    crm_sync: "Spectra CRM", analytics: "Analisis", settings: "Configuracion", email_marketing: "Email Marketing",
     search_prospects: "Buscar Prospectos", province: "Provincia", city: "Ciudad / Localidad",
     category: "Industria / Categoria", quantity: "Cantidad Objetivo",
     filters: "Filtros Opcionales", start_job: "Iniciar Busqueda",

@@ -93,10 +93,12 @@ class RegisterRequest(BaseModel):
     tenant_name: Optional[str] = None
 
 class ProspectJobCreate(BaseModel):
+    country: Optional[str] = "Argentina"
     province: str
     city: str
     category: str
     quantity: int = 100
+    postal_code: Optional[str] = ""
     filters: Optional[Dict[str, Any]] = None
 
 class LeadStatusUpdate(BaseModel):
@@ -276,8 +278,10 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
     now = datetime.now(timezone.utc).isoformat()
     job = {
         "id": job_id, "tenant_id": user["tenant_id"],
+        "country": body.country or "Argentina",
         "province": body.province, "city": body.city,
         "category": body.category, "quantity": body.quantity,
+        "postal_code": body.postal_code or "",
         "filters": body.filters or {}, "status": "pending",
         "raw_count": 0, "cleaned_count": 0, "qualified_count": 0,
         "rejected_count": 0, "approved_count": 0,
@@ -882,6 +886,248 @@ async def create_user(request: Request, body: UserCreate):
     result = await db.users.insert_one(user_doc)
     return {"id": str(result.inserted_id), "email": email, "name": body.name, "role": body.role}
 
+# ==================== EMAIL MARKETING ====================
+
+class EmailListCreate(BaseModel):
+    name: str
+    description: Optional[str] = ""
+
+class EmailCampaignCreate(BaseModel):
+    name: str
+    list_id: Optional[str] = ""
+    template_id: Optional[str] = ""
+    subject: Optional[str] = ""
+    from_name: Optional[str] = ""
+    from_email: Optional[str] = ""
+
+class AutomationCreate(BaseModel):
+    name: str
+    trigger: Optional[str] = "manual"
+    steps: Optional[List[Dict[str, Any]]] = []
+
+@api_router.get("/email-marketing/lists")
+async def list_email_lists(request: Request):
+    user = await get_current_user(request)
+    lists = await db.email_lists.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return lists
+
+@api_router.post("/email-marketing/lists")
+async def create_email_list(request: Request, body: EmailListCreate):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": body.name, "description": body.description or "", "subscriber_count": 0, "created_at": now, "updated_at": now}
+    await db.email_lists.insert_one(doc)
+    return serialize_doc(doc)
+
+@api_router.get("/email-marketing/campaigns")
+async def list_email_campaigns(request: Request):
+    user = await get_current_user(request)
+    campaigns = await db.email_campaigns.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return campaigns
+
+@api_router.post("/email-marketing/campaigns")
+async def create_email_campaign(request: Request, body: EmailCampaignCreate):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": body.name, "list_id": body.list_id or "", "template_id": body.template_id or "", "subject": body.subject or "", "from_name": body.from_name or "", "from_email": body.from_email or "", "status": "borrador", "sent_count": 0, "open_count": 0, "click_count": 0, "bounce_count": 0, "unsub_count": 0, "created_at": now, "updated_at": now}
+    await db.email_campaigns.insert_one(doc)
+    return serialize_doc(doc)
+
+@api_router.post("/email-marketing/campaigns/{campaign_id}/simulate")
+async def simulate_email_campaign(request: Request, campaign_id: str):
+    user = await get_current_user(request)
+    campaign = await db.email_campaigns.find_one({"id": campaign_id, "tenant_id": user["tenant_id"]})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campana no encontrada")
+    now = datetime.now(timezone.utc).isoformat()
+    sent = random.randint(200, 2000)
+    opens = int(sent * random.uniform(0.20, 0.45))
+    clicks = int(opens * random.uniform(0.10, 0.30))
+    bounces = int(sent * random.uniform(0.01, 0.05))
+    unsubs = int(sent * random.uniform(0.001, 0.01))
+    await db.email_campaigns.update_one({"id": campaign_id}, {"$set": {"status": "enviada", "sent_count": sent, "open_count": opens, "click_count": clicks, "bounce_count": bounces, "unsub_count": unsubs, "sent_at": now, "updated_at": now}})
+    updated = await db.email_campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    return updated
+
+@api_router.get("/email-marketing/automations")
+async def list_automations(request: Request):
+    user = await get_current_user(request)
+    autos = await db.email_automations.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    return autos
+
+@api_router.post("/email-marketing/automations")
+async def create_automation(request: Request, body: AutomationCreate):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    default_steps = [
+        {"type": "email", "delay_days": 0, "subject": "Primer contacto", "template": ""},
+        {"type": "wait", "delay_days": 3, "subject": "", "template": ""},
+        {"type": "condition", "delay_days": 0, "subject": "Si abrio email", "template": ""},
+        {"type": "email", "delay_days": 0, "subject": "Follow-up", "template": ""},
+        {"type": "wait", "delay_days": 5, "subject": "", "template": ""},
+        {"type": "email", "delay_days": 0, "subject": "Ultimo contacto", "template": ""},
+    ]
+    doc = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": body.name, "trigger": body.trigger or "manual", "steps": body.steps if body.steps else default_steps, "status": "borrador", "active_count": 0, "completed_count": 0, "created_at": now, "updated_at": now}
+    await db.email_automations.insert_one(doc)
+    return serialize_doc(doc)
+
+@api_router.get("/email-marketing/stats")
+async def email_marketing_stats(request: Request):
+    user = await get_current_user(request)
+    tid = user["tenant_id"]
+    lists = await db.email_lists.count_documents({"tenant_id": tid})
+    campaigns = await db.email_campaigns.count_documents({"tenant_id": tid})
+    automations = await db.email_automations.count_documents({"tenant_id": tid})
+    pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": None, "sent": {"$sum": "$sent_count"}, "opens": {"$sum": "$open_count"}, "clicks": {"$sum": "$click_count"}, "bounces": {"$sum": "$bounce_count"}, "unsubs": {"$sum": "$unsub_count"}}}]
+    totals = await db.email_campaigns.aggregate(pipeline).to_list(1)
+    t = totals[0] if totals else {}
+    return {"lists": lists, "campaigns": campaigns, "automations": automations, "total_sent": t.get("sent", 0), "total_opens": t.get("opens", 0), "total_clicks": t.get("clicks", 0), "total_bounces": t.get("bounces", 0), "total_unsubs": t.get("unsubs", 0), "open_rate": round((t.get("opens", 0) / max(t.get("sent", 0), 1)) * 100, 1), "click_rate": round((t.get("clicks", 0) / max(t.get("opens", 0), 1)) * 100, 1)}
+
+# ==================== AI ENDPOINTS ====================
+
+@api_router.post("/ai/generate-template")
+async def ai_generate_template(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    industry = body.get("industry", "general")
+    objective = body.get("objective", "generar interes")
+    tone = body.get("tone", "profesional")
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"template-{uuid.uuid4()}", system_message="Eres un experto en copywriting y neuromarketing. Generas emails comerciales persuasivos en español usando tecnicas de neuropersuasion (urgencia, reciprocidad, prueba social, escasez, autoridad). Responde SOLO en formato JSON con las keys: subject, html_body, plain_text, variables (array de strings), first_line.")
+        prompt = f"Genera un email de {objective} para la industria de {industry} con tono {tone}. Usa tecnicas de neuropersuasion. El email debe tener variables como {{{{business_name}}}}, {{{{city}}}}, {{{{sender_name}}}}. Responde en JSON."
+        response = await chat.send_message(UserMessage(text=prompt))
+        import json
+        try:
+            clean = response.strip()
+            if clean.startswith("```"):
+                clean = clean.split("\n", 1)[1].rsplit("```", 1)[0]
+            result = json.loads(clean)
+        except:
+            result = {"subject": f"Oportunidad exclusiva para {{{{business_name}}}} - {industry}", "html_body": f"<p>Estimado equipo de <strong>{{{{business_name}}}}</strong>,</p><p>{response[:500]}</p><p>Saludos cordiales,<br/>{{{{sender_name}}}}</p>", "plain_text": response[:500], "variables": ["business_name", "city", "sender_name"], "first_line": "Notamos que su empresa tiene una presencia destacada."}
+        return {"generated": True, **result}
+    except Exception as e:
+        logger.error(f"AI generation error: {e}")
+        return {"generated": False, "error": str(e), "subject": f"Oportunidad para {{{{business_name}}}} en {industry}", "html_body": f"<p>Estimado equipo de <strong>{{{{business_name}}}}</strong>,</p><p>Nos dirigimos a usted porque identificamos una oportunidad unica para su negocio en el sector de {industry}.</p><p>Nos encantaria coordinar una breve llamada para explorar como podemos ayudarlos.</p><p>Saludos cordiales,<br/>{{{{sender_name}}}}</p>", "plain_text": "", "variables": ["business_name", "sender_name"], "first_line": "Identificamos una oportunidad unica para su negocio."}
+
+@api_router.post("/ai/flow-bot")
+async def ai_flow_bot(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    section = body.get("section", "general")
+    tid = user["tenant_id"]
+    context_data = {}
+    context_data["total_leads"] = await db.leads.count_documents({"tenant_id": tid})
+    context_data["scored_leads"] = await db.leads.count_documents({"tenant_id": tid, "status": "scored"})
+    context_data["approved_leads"] = await db.leads.count_documents({"tenant_id": tid, "status": "approved"})
+    context_data["crm_contacts"] = await db.crm_contacts.count_documents({"tenant_id": tid})
+    context_data["campaigns"] = await db.campaigns.count_documents({"tenant_id": tid})
+    context_data["deals"] = await db.crm_deals.count_documents({"tenant_id": tid})
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"flowbot-{uuid.uuid4()}", system_message="Eres Flow Bot, el asistente inteligente de Spectra Flow. Analizas los datos del usuario y das recomendaciones accionables en español. Se breve y directo. Usa bullets. Maximo 5 recomendaciones.")
+        prompt = f"El usuario esta en la seccion '{section}'. Datos actuales: {json.dumps(context_data)}. Analiza y dame recomendaciones especificas de que deberia hacer ahora."
+        import json
+        response = await chat.send_message(UserMessage(text=prompt))
+        return {"response": response, "context": context_data}
+    except Exception as e:
+        recommendations = []
+        if context_data.get("scored_leads", 0) > 0:
+            recommendations.append(f"Tenes {context_data['scored_leads']} leads calificados sin revisar. Te recomiendo ir a Leads y aprobar los mejores.")
+        if context_data.get("approved_leads", 0) > 0 and context_data.get("campaigns", 0) == 0:
+            recommendations.append(f"Tenes {context_data['approved_leads']} leads aprobados. Crea una campana para contactarlos.")
+        if context_data.get("crm_contacts", 0) > 0 and context_data.get("deals", 0) == 0:
+            recommendations.append(f"Tenes {context_data['crm_contacts']} contactos en el CRM sin oportunidades. Crea oportunidades para trackear el pipeline.")
+        if not recommendations:
+            recommendations.append("Comenza buscando prospectos en el Buscador de Prospectos para alimentar tu pipeline.")
+        return {"response": "\n".join([f"- {r}" for r in recommendations]), "context": context_data}
+
+@api_router.post("/ai/help")
+async def ai_help(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    question = body.get("question", "")
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"help-{uuid.uuid4()}", system_message="Eres el asistente de ayuda de Spectra Flow. Explicas como usar la plataforma de manera clara y concisa en español. Spectra Flow es una plataforma de prospeccion, calificacion de leads, email marketing y CRM. Modulos: Buscador de Prospectos, Flow IA, Leads, Campanas, Plantillas, Dominios, Spectra CRM, Email Marketing, Analisis, Configuracion.")
+        response = await chat.send_message(UserMessage(text=question))
+        return {"response": response}
+    except Exception as e:
+        help_texts = {"general": "Spectra Flow te permite buscar prospectos, calificarlos con IA, crear campanas de email y gestionar oportunidades en el CRM.", "prospeccion": "En el Buscador de Prospectos selecciona pais, provincia, ciudad e industria. Flow IA buscara y calificara prospectos automaticamente.", "leads": "En Leads podes ver, aprobar, rechazar y enviar leads al CRM o a secuencias de email.", "crm": "En Spectra CRM gestionas contactos, creas oportunidades y moves el pipeline con drag & drop.", "email": "En Email Marketing creas listas, campanas masivas y automatizaciones de email."}
+        return {"response": help_texts.get(question.lower()[:10], help_texts["general"])}
+
+# ==================== MODULE MANAGEMENT ====================
+
+@api_router.get("/tenant/modules")
+async def get_tenant_modules(request: Request):
+    user = await get_current_user(request)
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    return tenant.get("modules", {"prospeccion": True, "crm": True, "email_marketing": True}) if tenant else {"prospeccion": True, "crm": True, "email_marketing": True}
+
+@api_router.put("/tenant/modules")
+async def update_tenant_modules(request: Request, body: Dict[str, bool] = {}):
+    user = await get_current_user(request)
+    if user["role"] not in ["super_admin", "tenant_admin"]:
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    await db.tenants.update_one({"id": user["tenant_id"]}, {"$set": {"modules": body}})
+    return body
+
+# ==================== BULK DEAL ACTIONS ====================
+
+class BulkDealAction(BaseModel):
+    deal_ids: List[str]
+    action: str
+    stage: Optional[str] = None
+
+@api_router.post("/crm/deals/bulk-action")
+async def bulk_deal_action(request: Request, body: BulkDealAction):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    if body.action == "move" and body.stage:
+        result = await db.crm_deals.update_many({"id": {"$in": body.deal_ids}, "tenant_id": user["tenant_id"]}, {"$set": {"stage": body.stage, "updated_at": now}})
+        return {"message": f"{result.modified_count} oportunidades movidas a {body.stage}"}
+    elif body.action == "delete":
+        result = await db.crm_deals.delete_many({"id": {"$in": body.deal_ids}, "tenant_id": user["tenant_id"]})
+        return {"message": f"{result.deleted_count} oportunidades eliminadas"}
+    raise HTTPException(status_code=400, detail="Accion invalida")
+
+# ==================== EXPORT ====================
+
+@api_router.get("/export/leads")
+async def export_leads(request: Request):
+    from fastapi.responses import StreamingResponse
+    import openpyxl
+    import io
+    user = await get_current_user(request)
+    leads = await db.leads.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).to_list(5000)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Leads"
+    headers = ["business_name", "normalized_category", "province", "city", "email", "phone", "website", "ai_score", "quality_level", "status", "recommendation"]
+    ws.append(headers)
+    for lead in leads:
+        ws.append([lead.get(h, "") for h in headers])
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=leads_export.xlsx"})
+
+@api_router.get("/export/crm-contacts")
+async def export_crm_contacts(request: Request):
+    from fastapi.responses import StreamingResponse
+    import openpyxl
+    import io
+    user = await get_current_user(request)
+    contacts = await db.crm_contacts.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).to_list(5000)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "CRM Contacts"
+    headers = ["business_name", "contact_name", "email", "phone", "city", "province", "category", "stage", "ai_score", "deal_count", "total_value"]
+    ws.append(headers)
+    for c in contacts:
+        ws.append([c.get(h, "") for h in headers])
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=crm_contacts_export.xlsx"})
+
 # ==================== SEED DATA ====================
 
 async def seed_data():
@@ -901,7 +1147,7 @@ async def seed_data():
     tenant_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
-    await db.tenants.insert_one({"id": tenant_id, "name": "Spectra Demo", "branding": {"company_name": "Spectra Demo", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "sender_defaults": {"name": "Spectra Flow", "email": "noreply@spectraflow.com"}, "created_at": now})
+    await db.tenants.insert_one({"id": tenant_id, "name": "Spectra Demo", "branding": {"company_name": "Spectra Demo", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "sender_defaults": {"name": "Spectra Flow", "email": "noreply@spectraflow.com"}, "modules": {"prospeccion": True, "crm": True, "email_marketing": True}, "created_at": now})
     await db.users.insert_one({"email": admin_email, "password_hash": hash_password(admin_password), "name": "Admin", "role": "super_admin", "tenant_id": tenant_id, "created_at": now})
     await db.users.insert_one({"email": "demo@spectraflow.com", "password_hash": hash_password("Demo123!"), "name": "Maria Garcia", "role": "operator", "tenant_id": tenant_id, "created_at": now})
 

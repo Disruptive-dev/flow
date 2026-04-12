@@ -4,6 +4,7 @@ import { LanguageProvider } from '@/contexts/LanguageContext';
 import { DemoProvider } from '@/contexts/DemoContext';
 import { Toaster } from '@/components/ui/sonner';
 import AppLayout from '@/components/layout/AppLayout';
+import HelpBot from '@/components/HelpBot';
 import LoginPage from '@/pages/LoginPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProspectFinderPage from '@/pages/ProspectFinderPage';
@@ -12,9 +13,10 @@ import LeadsPage from '@/pages/LeadsPage';
 import CampaignsPage from '@/pages/CampaignsPage';
 import TemplatesPage from '@/pages/TemplatesPage';
 import DomainsPage from '@/pages/DomainsPage';
-import CrmSyncPage from '@/pages/CrmSyncPage';
+import CrmPage from '@/pages/CrmSyncPage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import SettingsPage from '@/pages/SettingsPage';
+import EmailMarketingPage from '@/pages/EmailMarketingPage';
 import { Loader2 } from 'lucide-react';
 
 function ProtectedRoute({ children }) {
@@ -37,22 +39,26 @@ function AppRoutes() {
   );
 
   return (
-    <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
-      <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-        <Route path="/" element={<DashboardPage />} />
-        <Route path="/prospect-finder" element={<ProspectFinderPage />} />
-        <Route path="/jobs" element={<JobsPage />} />
-        <Route path="/leads" element={<LeadsPage />} />
-        <Route path="/campaigns" element={<CampaignsPage />} />
-        <Route path="/templates" element={<TemplatesPage />} />
-        <Route path="/domains" element={<DomainsPage />} />
-        <Route path="/crm-sync" element={<CrmSyncPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Route>
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/prospect-finder" element={<ProspectFinderPage />} />
+          <Route path="/jobs" element={<JobsPage />} />
+          <Route path="/leads" element={<LeadsPage />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
+          <Route path="/templates" element={<TemplatesPage />} />
+          <Route path="/domains" element={<DomainsPage />} />
+          <Route path="/crm-sync" element={<CrmPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/email-marketing" element={<EmailMarketingPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      {user && <HelpBot />}
+    </>
   );
 }
 

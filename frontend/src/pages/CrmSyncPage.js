@@ -11,8 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Users, Briefcase, Plus, Search, Loader2, Building2, Mail, Phone, MapPin, Star, TrendingUp, Send, GripVertical, DollarSign } from 'lucide-react';
+import { Users, Briefcase, Plus, Search, Loader2, Building2, Mail, Phone, MapPin, Star, TrendingUp, Send, GripVertical, DollarSign, Download } from 'lucide-react';
 import { toast } from 'sonner';
+import FlowBotButton from '@/components/FlowBotButton';
 
 const stageColors = {
   nuevo: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200", header: "bg-slate-50" },
@@ -142,6 +143,12 @@ export default function CrmPage() {
           <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">Spectra CRM</h1>
           <p className="text-sm text-zinc-500 mt-1">Gestiona contactos, oportunidades y seguimiento comercial</p>
         </div>
+        <div className="flex items-center gap-3">
+          <FlowBotButton section="crm" />
+          <Button variant="outline" size="sm" asChild data-testid="export-crm-btn">
+            <a href={`${process.env.REACT_APP_BACKEND_URL}/api/export/crm-contacts`} target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Exportar Excel</a>
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -172,10 +179,10 @@ export default function CrmPage() {
         </Card>
       </div>
 
-      <Tabs defaultValue="pipeline">
+      <Tabs defaultValue="contacts">
         <TabsList className="bg-zinc-100">
-          <TabsTrigger value="pipeline" data-testid="crm-tab-pipeline"><Briefcase className="w-4 h-4 mr-1.5" />Pipeline</TabsTrigger>
           <TabsTrigger value="contacts" data-testid="crm-tab-contacts"><Users className="w-4 h-4 mr-1.5" />Contactos</TabsTrigger>
+          <TabsTrigger value="pipeline" data-testid="crm-tab-pipeline"><Briefcase className="w-4 h-4 mr-1.5" />Pipeline</TabsTrigger>
         </TabsList>
 
         {/* Pipeline Tab - Drag & Drop */}
