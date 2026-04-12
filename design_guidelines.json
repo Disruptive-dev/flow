@@ -1,0 +1,115 @@
+{
+  "theme": "hybrid",
+  "archetype": "Archetype 4: Swiss & High-Contrast (Premium Business Variant)",
+  "brand": {
+    "name": "Spectra Flow",
+    "description": "Premium multi-tenant SaaS for AI-powered prospecting, lead qualification, email outreach, and CRM handoff.",
+    "emotional_tone": "Authority, Clarity, Premium, Trustworthy"
+  },
+  "colors": {
+    "sidebar_background": "#0A0A0A",
+    "sidebar_text": "#FFFFFF",
+    "sidebar_text_muted": "#A1A1AA",
+    "sidebar_active_bg": "#27272A",
+    "main_background": "#F8F9FA",
+    "surface": "#FFFFFF",
+    "primary": "#1D4ED8",
+    "primary_hover": "#1E40AF",
+    "text_main": "#09090B",
+    "text_muted": "#71717A",
+    "border": "#E4E4E7",
+    "success": "#16A34A",
+    "warning": "#F59E0B",
+    "danger": "#DC2626",
+    "lead_statuses": {
+      "raw": "bg-slate-100 text-slate-700",
+      "cleaned": "bg-blue-50 text-blue-700",
+      "scored": "bg-indigo-50 text-indigo-700",
+      "approved": "bg-emerald-50 text-emerald-700",
+      "rejected": "bg-red-50 text-red-700",
+      "queued_for_sequence": "bg-purple-50 text-purple-700",
+      "contacted": "bg-amber-50 text-amber-700",
+      "opened": "bg-teal-50 text-teal-700",
+      "clicked": "bg-cyan-50 text-cyan-700",
+      "replied": "bg-green-50 text-green-700",
+      "interested": "bg-orange-50 text-orange-700",
+      "sent_to_crm": "bg-blue-100 text-blue-800",
+      "opportunity": "bg-fuchsia-50 text-fuchsia-700",
+      "closed_won": "bg-emerald-100 text-emerald-800 font-medium",
+      "closed_lost": "bg-slate-200 text-slate-800"
+    }
+  },
+  "typography": {
+    "font_families": {
+      "headings": "Outfit, sans-serif",
+      "body": "Manrope, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "hierarchy": {
+      "h1": "text-4xl sm:text-5xl font-semibold tracking-tight text-slate-900",
+      "h2": "text-2xl sm:text-3xl font-medium tracking-tight text-slate-900",
+      "h3": "text-xl font-medium text-slate-800",
+      "body": "text-base text-slate-600 leading-relaxed",
+      "small": "text-sm text-slate-500",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-slate-400"
+    }
+  },
+  "layout_and_spacing": {
+    "spacing_scale": "Generous (p-6, p-8 for containers)",
+    "sidebar": "Fixed left sidebar, width 280px (w-72), dark theme applied exclusively to this section.",
+    "main_content": "Light theme, full height, properly padded (pt-8 px-8 pb-12).",
+    "grid_system": "Bento grid protocol for Dashboard: grid-cols-1 md:grid-cols-3 lg:grid-cols-4 with gap-6.",
+    "cards": "Flat solid surfaces. 1px border (border-slate-200), no heavy shadows. Rounded-xl for premium feel."
+  },
+  "components": {
+    "buttons": "Shadcn based. Primary buttons use #1D4ED8 background. Minimalist styling, slight hover lift (-translate-y-[1px]).",
+    "tables": "Premium data-dense tables for Leads Review. No vertical borders. Generous row padding (py-4). Hover state on rows.",
+    "drawers": "Use Shadcn Sheet for Lead Detail Drawer. Slide in from right. Width 400px or larger.",
+    "forms": "Shadcn Form primitives. Inputs have 1px border, focus:ring-2 focus:ring-blue-600/20.",
+    "tabs": "Shadcn Tabs for multi-view (e.g., Settings, Campaigns).",
+    "badges": "Used for lead statuses, tenant roles. Soft backgrounds with high contrast text."
+  },
+  "key_functionalities_guidelines": {
+    "dashboard": "Top row: 4 KPI summary cards (col-span-1). Middle row: Wide charts (col-span-3) and Activity feed (col-span-1).",
+    "prospect_finder": "Complex search form using grid layout. Clean inputs, clear primary 'Search' CTA.",
+    "job_progress_timeline": "Vertical stepped timeline component showing stages of prospect scraping/cleaning.",
+    "leads_review_table": "Data-rich table. Sticky header. Action menu (three dots) on the right for Approve/Reject/Details.",
+    "campaign_management": "List of campaigns with status toggles (Active/Paused) and progress bars for completion.",
+    "email_template_editor": "Rich text area (or structured textarea) with variable insertion tags (e.g., {{first_name}}).",
+    "crm_sync_panel": "Card showing connected CRM (Espo CRM) status, last sync time, and manual 'Sync Now' button.",
+    "multilingual": "Include a toggle in the top-right header for EN/ES. Implement using a simple React context or state for the MVP.",
+    "auth": "Dark themed auth page to set the premium tone before entering the hybrid app."
+  },
+  "media": {
+    "icons": {
+      "library": "@phosphor-icons/react",
+      "instructions": "Use duotone or regular weights. Ensure sizes are consistent (w-5 h-5 for inline, w-6 h-6 for sidebar)."
+    },
+    "images": {
+      "auth_background": {
+        "url": "https://images.unsplash.com/photo-1550151733-f2bc199db8fc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwxfHxtb2Rlcm4lMjBwcm9mZXNzaW9uYWwlMjBhYnN0cmFjdCUyMHRlY2glMjBhcmNoaXRlY3R1cmV8ZW58MHx8fHwxNzc1OTc2NTg2fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Blue architectural abstract design used for the login/signup page background. Overlay with bg-black/50 for text readability."
+      },
+      "empty_states": {
+        "url": "https://images.unsplash.com/photo-1623832676498-0e7403f321b6?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1NjZ8MHwxfHNlYXJjaHwzfHxtb2Rlcm4lMjBwcm9mZXNzaW9uYWwlMjBhYnN0cmFjdCUyMHRlY2glMjBhcmNoaXRlY3R1cmV8ZW58MHx8fHwxNzc1OTc2NTg2fDA&ixlib=rb-4.1.0&q=85",
+        "description": "Black and white modern architecture used subtly for 'No Leads Found' or 'No Campaigns' empty states. Use low opacity (opacity-20) as a backdrop or framed asset."
+      }
+    }
+  },
+  "accessibility_and_interactions": {
+    "testing_attributes": "All interactive elements MUST include data-testid attributes (e.g., data-testid='sidebar-nav-dashboard', data-testid='lead-approve-button').",
+    "hover_states": "All buttons and links must have explicit hover states changing background or text color.",
+    "focus_states": "Inputs and buttons must have visible focus rings for keyboard navigation.",
+    "animations": "Subtle Framer Motion usage. Page transitions (fade in), list item stagger (for the leads table or job progress), and smooth drawer slides."
+  },
+  "instructions_to_main_agent": [
+    "Initialize Tailwind config with Outfit and Manrope fonts.",
+    "Install @phosphor-icons/react for premium iconography.",
+    "Implement a hybrid layout: Sidebar uses dark classes hardcoded (bg-zinc-950 text-white), Main content uses light classes (bg-zinc-50 text-zinc-900).",
+    "Use Shadcn UI components extensively but customize them to remove the 'default Vercel look'. Use flat cards with 1px border and rounded-xl.",
+    "Implement the bilingual feature using a React Context holding translations for EN/ES, toggleable from the top header.",
+    "Ensure the Leads Review Table is responsive or has horizontal scrolling, utilizing Shadcn Table.",
+    "Use Shadcn Sheet for the Lead Detail Drawer.",
+    "Apply the data-testid convention strictly for QA."
+  ]
+}
