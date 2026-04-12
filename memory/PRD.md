@@ -1,48 +1,29 @@
-# Spectra Flow - Product Requirements Document
-
-## Original Problem Statement
-Build a premium multi-tenant SaaS web application called Spectra Flow - an AI-powered prospecting, lead qualification, email outreach, and CRM handoff platform.
+# Spectra Flow - PRD
 
 ## Architecture
-- **Frontend**: React 19 + Tailwind CSS + Shadcn UI + Recharts (PWA)
-- **Backend**: FastAPI + Motor (MongoDB async driver)
-- **Database**: MongoDB
-- **Auth**: JWT with Bearer tokens + bcrypt
-- **Multi-tenancy**: Row-level using tenant_id
-- **Email**: Resend API (spectra-metrics.com verified)
-- **AI**: Emergent LLM Key (FlowBot context-aware, Neuro Copywriting)
+React 19 + FastAPI + MongoDB + Resend + Emergent LLM (PWA)
 
-## What's Been Implemented
+## Implemented Features
+- Multi-tenant auth, Demo Mode, Spanish UI
+- CRM Kanban with auto-deal creation on stage change
+- Email Marketing: Full CRUD (campaigns, lists, automations) + auto-list from scored leads
+- Real Resend email integration (spectra-metrics.com)
+- FlowBot context-aware AI assistant
+- A/B template testing
+- Customizable dashboard (dates, compare, rates on top)
+- Chatwoot webhook upsert with "bot" tag
+- Scoring customization endpoint
+- PWA support, Emergent badge hidden
+- Contextual guide banners, lead status lifecycle dialog
 
-### Core
-- JWT auth, multi-tenant, Demo Mode, Spanish UI
-- Spectra CRM (Kanban drag-drop), Email Marketing, Integration configs
-- Real Resend email sending, Domain management
+## Key Endpoints
+- POST /api/crm/contacts/{id} (auto-deal on stage change)
+- POST /api/webhooks/chatwoot/lead (upsert + bot tag)
+- CRUD /api/email-marketing/lists, campaigns, automations
+- POST /api/email-marketing/auto-list-from-leads
+- POST /api/email-marketing/lists/{id}/add-leads
+- GET/PUT /api/settings/scoring
 
-### UI/UX
-- Customizable dashboard (show/hide KPIs + panels, localStorage)
-- Date filters (today/week/month/quarter/year) + comparison mode
-- Contextual guide banners on each page
-- Lead status lifecycle explanation dialog
-- Spanish lead statuses (15 states)
-- Quality parameter breakdown in lead detail
-- API key masking in integrations
-- Company data fields (industry, phone, CUIT, etc.)
-- Editable automations with step editor
-- Context-aware FlowBot (searches items by name)
-- A/B template testing with simulation
-- PWA support (manifest + service worker + icons)
-- Emergent badge hidden
-
-### Fixes Applied
-- FlowBot KeyError on deals without 'name'
-- FlowBot auto-scroll to bottom
-- Excel export with proper auth token (blob download)
-
-## Prioritized Backlog
-### P1
-- Digital Ocean / EasyPanel deployment plan
-### P2
-- Lead scoring customization
-- Chatwoot → CRM webhook
-- Advanced analytics time-series
+## Backlog
+- P1: EasyPanel deployment plan
+- P2: Advanced analytics time-series
