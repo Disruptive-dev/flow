@@ -218,6 +218,10 @@ async def logout(response: Response):
 async def refresh_token_endpoint(request: Request, response: Response):
     token = request.cookies.get("refresh_token")
     if not token:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]
+    if not token:
         raise HTTPException(status_code=401, detail="No refresh token")
     try:
         payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
@@ -229,7 +233,7 @@ async def refresh_token_endpoint(request: Request, response: Response):
         user_id = str(user["_id"])
         new_access = create_access_token(user_id, user["email"])
         response.set_cookie(key="access_token", value=new_access, httponly=True, secure=False, samesite="lax", max_age=86400, path="/")
-        return {"message": "Token refreshed"}
+        return {"message": "Token refreshed", "access_token": new_access}
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
 

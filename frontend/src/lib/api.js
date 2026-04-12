@@ -8,24 +8,58 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' }
 });
 
+// Add Bearer token from localStorage to every request
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('sf_access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401 && !error.config._retry && !error.config.url?.includes('/auth/')) {
+    // Don't retry auth endpoints
+    if (error.config?.url?.includes('/auth/')) {
+      return Promise.reject(error);
+    }
+    // On 401, try refresh once
+    if (error.response?.status === 401 && !error.config._retry) {
       error.config._retry = true;
       try {
-        await axios.post(`${API_BASE}/api/auth/refresh`, {}, { withCredentials: true });
-        return api(error.config);
+        const token = localStorage.getItem('sf_refresh_token');
+        if (token) {
+          const res = await axios.post(`${API_BASE}/api/auth/refresh`, {}, {
+            withCredentials: true,
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (res.data?.access_token) {
+            localStorage.setItem('sf_access_token', res.data.access_token);
+          }
+          return api(error.config);
+        }
       } catch (e) {
-        return Promise.reject(e);
+        localStorage.removeItem('sf_access_token');
+        localStorage.removeItem('sf_refresh_token');
       }
     }
     return Promise.reject(error);
   }
 );
 
+export function setAuthTokens(accessToken, refreshToken) {
+  if (accessToken) localStorage.setItem('sf_access_token', accessToken);
+  if (refreshToken) localStorage.setItem('sf_refresh_token', refreshToken);
+}
+
+export function clearAuthTokens() {
+  localStorage.removeItem('sf_access_token');
+  localStorage.removeItem('sf_refresh_token');
+}
+
 export function formatApiError(detail) {
-  if (detail == null) return "Something went wrong. Please try again.";
+  if (detail == null) return "Algo salio mal. Intenta de nuevo.";
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) return detail.map((e) => (e?.msg || JSON.stringify(e))).filter(Boolean).join(" ");
   if (detail?.msg) return detail.msg;
