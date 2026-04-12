@@ -356,6 +356,21 @@ async def start_prospect_job(request: Request, job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     now = datetime.now(timezone.utc).isoformat()
+    # Check if n8n is configured - if so, just mark as processing and wait for callback
+    n8n_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "n8n", "enabled": True}, {"_id": 0})
+    if n8n_config and n8n_config.get("base_url"):
+        stages = [
+            {"name": "job_created", "status": "completed", "timestamp": job["created_at"]},
+            {"name": "scraping", "status": "processing", "timestamp": now},
+            {"name": "prospects_found", "status": "pending", "timestamp": None},
+            {"name": "ai_cleaning", "status": "pending", "timestamp": None},
+            {"name": "scoring_completed", "status": "pending", "timestamp": None},
+            {"name": "ready_for_review", "status": "pending", "timestamp": None}
+        ]
+        await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "processing", "stages": stages, "updated_at": now}})
+        updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
+        return updated_job
+    # Demo mode - generate simulated data
     quantity = job.get("quantity", 100)
     raw_count = random.randint(int(quantity * 0.8), int(quantity * 1.2))
     cleaned_count = int(raw_count * random.uniform(0.7, 0.85))
@@ -448,15 +463,19 @@ async def start_prospect_job(request: Request, job_id: str):
         await db.leads.insert_many(leads_to_insert)
     # Auto-create/update email list with scored leads
     scored_ids = [l["id"] for l in leads_to_insert if l["status"] in ("scored", "approved")]
+    auto_list_name = f"{job['category']} - {job['city']} - Calificados"
+    auto_list_id = ""
     if scored_ids:
-        auto_list_name = f"Prospeccion / {job['category']} - Leads calificados"
         existing_list = await db.email_lists.find_one({"tenant_id": user["tenant_id"], "name": auto_list_name})
         if existing_list:
             old_ids = existing_list.get("lead_ids", [])
             new_ids = old_ids + [sid for sid in scored_ids if sid not in old_ids]
             await db.email_lists.update_one({"id": existing_list["id"]}, {"$set": {"lead_ids": new_ids, "subscriber_count": len(new_ids), "updated_at": now}})
+            auto_list_id = existing_list["id"]
         else:
-            await db.email_lists.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": auto_list_name, "description": f"Auto-generada: {len(scored_ids)} leads calificados de {job['category']} en {job['city']}", "subscriber_count": len(scored_ids), "lead_ids": scored_ids, "created_at": now, "updated_at": now})
+            auto_list_id = str(uuid.uuid4())
+            await db.email_lists.insert_one({"id": auto_list_id, "tenant_id": user["tenant_id"], "name": auto_list_name, "description": f"Auto: {len(scored_ids)} leads calificados de {job['category']} en {job['city']}", "subscriber_count": len(scored_ids), "lead_ids": scored_ids, "created_at": now, "updated_at": now})
+    await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"auto_list_name": auto_list_name, "auto_list_id": auto_list_id}})
     updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
     return updated_job
 
@@ -1935,18 +1954,29 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
         "qualified_count": qualified, "rejected_count": rejected, "stages": stages, "updated_at": now
     }})
     # Auto-create/update email list with scored leads from n8n
-    scored_lead_ids = [l["id"] for l in leads_data if int(l.get("ai_score", 0)) >= 50] if leads_data else []
+    scored_lead_ids = []
+    for ld in leads_data:
+        if int(ld.get("ai_score", 0)) >= 50:
+            # Find the lead we just inserted by matching business_name
+            lead_doc = await db.leads.find_one({"tenant_id": job["tenant_id"], "job_id": job_id, "business_name": ld.get("business_name", ld.get("name", ""))}, {"id": 1, "_id": 0})
+            if lead_doc:
+                scored_lead_ids.append(lead_doc["id"])
+    cat = job.get("category", "Prospeccion")
+    city = job.get("city", "")
+    auto_list_name = f"{cat} - {city} - Calificados"
+    auto_list_id = ""
     if scored_lead_ids:
-        cat = job.get("category", "Prospeccion")
-        auto_name = f"Prospeccion / {cat} - Leads calificados"
-        existing_list = await db.email_lists.find_one({"tenant_id": job["tenant_id"], "name": auto_name})
+        existing_list = await db.email_lists.find_one({"tenant_id": job["tenant_id"], "name": auto_list_name})
         if existing_list:
             old_ids = existing_list.get("lead_ids", [])
             new_ids = old_ids + [sid for sid in scored_lead_ids if sid not in old_ids]
             await db.email_lists.update_one({"id": existing_list["id"]}, {"$set": {"lead_ids": new_ids, "subscriber_count": len(new_ids), "updated_at": now}})
+            auto_list_id = existing_list["id"]
         else:
-            await db.email_lists.insert_one({"id": str(uuid.uuid4()), "tenant_id": job["tenant_id"], "name": auto_name, "description": f"Auto: {len(scored_lead_ids)} leads calificados", "subscriber_count": len(scored_lead_ids), "lead_ids": scored_lead_ids, "created_at": now, "updated_at": now})
-    return {"message": f"{inserted} leads imported, {qualified} qualified", "job_id": job_id}
+            auto_list_id = str(uuid.uuid4())
+            await db.email_lists.insert_one({"id": auto_list_id, "tenant_id": job["tenant_id"], "name": auto_list_name, "description": f"Auto: {len(scored_lead_ids)} leads calificados via n8n", "subscriber_count": len(scored_lead_ids), "lead_ids": scored_lead_ids, "created_at": now, "updated_at": now})
+    await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"auto_list_name": auto_list_name, "auto_list_id": auto_list_id}})
+    return {"message": f"{inserted} leads imported, {qualified} qualified", "job_id": job_id, "auto_list": auto_list_name}
 
 @api_router.post("/webhooks/n8n/job-progress/{job_id}")
 async def n8n_job_progress(request: Request, job_id: str, body: Dict[str, Any] = {}):

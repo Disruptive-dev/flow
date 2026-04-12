@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft, Users, Mail } from 'lucide-react';
 import { toast } from 'sonner';
 import GuideBanner from '@/components/GuideBanner';
 
@@ -141,8 +141,44 @@ export default function JobsPage() {
                 {t('start_job')}
               </Button>
             )}
+            {selectedJob.status === 'processing' && (
+              <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
+                <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
+                <div>
+                  <p className="text-sm font-medium text-amber-800">Procesando via n8n...</p>
+                  <p className="text-xs text-amber-600">Outscraper busca negocios → Dify los clasifica → Los resultados llegaran automaticamente</p>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
+
+        {/* Results & Links */}
+        {selectedJob.status === 'completed' && (
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-6 space-y-4">
+              <h3 className="text-base font-heading font-medium text-zinc-900">Resultados</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <a href={`/leads?job_id=${selectedJob.id}`} className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors">
+                  <Users className="w-5 h-5 text-blue-600" />
+                  <div>
+                    <p className="text-sm font-medium text-blue-800">Ver {selectedJob.qualified_count + selectedJob.rejected_count} Leads de este trabajo</p>
+                    <p className="text-xs text-blue-600">{selectedJob.qualified_count} calificados, {selectedJob.rejected_count} rechazados</p>
+                  </div>
+                </a>
+                {selectedJob.auto_list_name && (
+                  <a href="/email-marketing" className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-lg hover:bg-emerald-100 transition-colors">
+                    <Mail className="w-5 h-5 text-emerald-600" />
+                    <div>
+                      <p className="text-sm font-medium text-emerald-800">Lista: {selectedJob.auto_list_name}</p>
+                      <p className="text-xs text-emerald-600">Ir a Email Marketing para crear campana</p>
+                    </div>
+                  </a>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
     );
   }

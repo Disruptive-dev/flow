@@ -64,6 +64,8 @@ function getScoreBreakdown(lead) {
 
 export default function LeadsPage() {
   const { t } = useLanguage();
+  const [searchParams] = typeof window !== 'undefined' ? [new URLSearchParams(window.location.search)] : [new URLSearchParams()];
+  const jobIdFromUrl = searchParams.get('job_id') || '';
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -71,6 +73,7 @@ export default function LeadsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [jobFilter, setJobFilter] = useState(jobIdFromUrl);
   const [selected, setSelected] = useState([]);
   const [detailLead, setDetailLead] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -98,6 +101,7 @@ export default function LeadsPage() {
       const params = { page, limit: 30 };
       if (search) params.search = search;
       if (statusFilter) params.status = statusFilter;
+      if (jobFilter) params.job_id = jobFilter;
       const { data } = await api.get('/leads', { params });
       setLeads(data.leads);
       setTotal(data.total);
@@ -106,7 +110,7 @@ export default function LeadsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchLeads(); }, [page, statusFilter]);
+  useEffect(() => { fetchLeads(); }, [page, statusFilter, jobFilter]);
 
   const handleSearch = (e) => { e.preventDefault(); setPage(1); fetchLeads(); };
   const updateStatus = async (leadId, status) => {
@@ -158,6 +162,11 @@ export default function LeadsPage() {
             {Object.entries(leadStatusLabels).map(([key, label]) => <SelectItem key={key} value={key}>{label}</SelectItem>)}
           </SelectContent>
         </Select>
+        {jobFilter && (
+          <Button variant="outline" size="sm" onClick={() => { setJobFilter(''); setPage(1); }} className="border-amber-200 bg-amber-50 text-amber-700">
+            Filtro: Trabajo activo &times;
+          </Button>
+        )}
         {selected.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
