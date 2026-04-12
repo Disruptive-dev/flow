@@ -886,6 +886,123 @@ async def create_user(request: Request, body: UserCreate):
     result = await db.users.insert_one(user_doc)
     return {"id": str(result.inserted_id), "email": email, "name": body.name, "role": body.role}
 
+# ==================== CRM BULK CONTACT ACTIONS ====================
+
+class BulkContactAction(BaseModel):
+    contact_ids: List[str]
+    action: str
+    stage: Optional[str] = None
+
+@api_router.post("/crm/contacts/bulk-action")
+async def bulk_contact_action(request: Request, body: BulkContactAction):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    if body.action == "move" and body.stage:
+        result = await db.crm_contacts.update_many({"id": {"$in": body.contact_ids}, "tenant_id": user["tenant_id"]}, {"$set": {"stage": body.stage, "updated_at": now}})
+        return {"message": f"{result.modified_count} contactos movidos a {body.stage}"}
+    elif body.action == "delete":
+        result = await db.crm_contacts.delete_many({"id": {"$in": body.contact_ids}, "tenant_id": user["tenant_id"]})
+        await db.crm_deals.delete_many({"contact_id": {"$in": body.contact_ids}, "tenant_id": user["tenant_id"]})
+        return {"message": f"{result.deleted_count} contactos eliminados"}
+    raise HTTPException(status_code=400, detail="Accion invalida")
+
+# ==================== IMPORT ====================
+
+@api_router.post("/import/leads")
+async def import_leads(request: Request):
+    import openpyxl
+    import io
+    user = await get_current_user(request)
+    form = await request.form()
+    file = form.get("file")
+    if not file:
+        raise HTTPException(status_code=400, detail="No se recibio archivo")
+    contents = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        ws = wb.active
+        rows = list(ws.iter_rows(min_row=1, values_only=True))
+        if len(rows) < 2:
+            raise HTTPException(status_code=400, detail="El archivo esta vacio o solo tiene headers")
+        headers = [str(h).strip().lower() if h else "" for h in rows[0]]
+        now = datetime.now(timezone.utc).isoformat()
+        imported = 0
+        for row in rows[1:]:
+            data = {}
+            for i, val in enumerate(row):
+                if i < len(headers) and headers[i]:
+                    data[headers[i]] = str(val).strip() if val else ""
+            bname = data.get("business_name") or data.get("empresa") or data.get("nombre") or data.get("name") or ""
+            if not bname:
+                continue
+            lead = {
+                "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "job_id": "",
+                "business_name": bname,
+                "raw_category": data.get("category") or data.get("categoria") or data.get("raw_category") or "",
+                "normalized_category": data.get("normalized_category") or data.get("categoria") or data.get("category") or "",
+                "province": data.get("province") or data.get("provincia") or "",
+                "city": data.get("city") or data.get("ciudad") or "",
+                "website": data.get("website") or data.get("web") or data.get("sitio_web") or "",
+                "email": data.get("email") or data.get("correo") or "",
+                "phone": data.get("phone") or data.get("telefono") or data.get("tel") or "",
+                "ai_score": int(data.get("ai_score") or data.get("score") or 0) if str(data.get("ai_score") or data.get("score") or "0").isdigit() else 0,
+                "quality_level": data.get("quality_level") or "imported",
+                "recommendation": data.get("recommendation") or "Importado desde Excel",
+                "recommended_first_line": data.get("recommended_first_line") or "",
+                "status": "raw", "created_at": now, "updated_at": now
+            }
+            await db.leads.insert_one(lead)
+            imported += 1
+        return {"message": f"{imported} leads importados exitosamente", "imported": imported}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al procesar archivo: {str(e)}")
+
+@api_router.post("/import/crm-contacts")
+async def import_crm_contacts(request: Request):
+    import openpyxl
+    import io
+    user = await get_current_user(request)
+    form = await request.form()
+    file = form.get("file")
+    if not file:
+        raise HTTPException(status_code=400, detail="No se recibio archivo")
+    contents = await file.read()
+    try:
+        wb = openpyxl.load_workbook(io.BytesIO(contents))
+        ws = wb.active
+        rows = list(ws.iter_rows(min_row=1, values_only=True))
+        if len(rows) < 2:
+            raise HTTPException(status_code=400, detail="El archivo esta vacio")
+        headers = [str(h).strip().lower() if h else "" for h in rows[0]]
+        now = datetime.now(timezone.utc).isoformat()
+        imported = 0
+        for row in rows[1:]:
+            data = {}
+            for i, val in enumerate(row):
+                if i < len(headers) and headers[i]:
+                    data[headers[i]] = str(val).strip() if val else ""
+            bname = data.get("business_name") or data.get("empresa") or data.get("nombre") or data.get("name") or ""
+            if not bname:
+                continue
+            contact = {
+                "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "lead_id": "",
+                "business_name": bname,
+                "contact_name": data.get("contact_name") or data.get("contacto") or "",
+                "email": data.get("email") or data.get("correo") or "",
+                "phone": data.get("phone") or data.get("telefono") or "",
+                "city": data.get("city") or data.get("ciudad") or "",
+                "province": data.get("province") or data.get("provincia") or "",
+                "category": data.get("category") or data.get("categoria") or "",
+                "source": "excel_import", "notes": data.get("notes") or data.get("notas") or "",
+                "stage": "nuevo", "ai_score": 0, "deal_count": 0, "total_value": 0,
+                "created_at": now, "updated_at": now
+            }
+            await db.crm_contacts.insert_one(contact)
+            imported += 1
+        return {"message": f"{imported} contactos importados al CRM", "imported": imported}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al procesar archivo: {str(e)}")
+
 # ==================== EMAIL MARKETING ====================
 
 class EmailListCreate(BaseModel):

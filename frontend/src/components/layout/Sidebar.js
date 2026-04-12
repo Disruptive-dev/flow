@@ -17,7 +17,6 @@ const navSections = [
     { key: 'jobs', path: '/jobs', icon: Zap },
     { key: 'leads', path: '/leads', icon: Users },
     { key: 'campaigns', path: '/campaigns', icon: Mail },
-    { key: 'templates', path: '/templates', icon: FileText },
   ]},
   { title: 'CRM', module: 'crm', items: [
     { key: 'crm_sync', path: '/crm-sync', icon: RefreshCw },
@@ -26,6 +25,7 @@ const navSections = [
     { key: 'email_marketing', path: '/email-marketing', icon: AtSign },
   ]},
   { title: null, items: [
+    { key: 'templates', path: '/templates', icon: FileText },
     { key: 'analytics', path: '/analytics', icon: BarChart3 },
     { key: 'settings', path: '/settings', icon: Settings },
   ]},

@@ -8,34 +8,41 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Progress } from '@/components/ui/progress';
-import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clock, CheckCircle2, X } from 'lucide-react';
+import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clock, CheckCircle2, X, FileText } from 'lucide-react';
 import { toast } from 'sonner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useNavigate } from 'react-router-dom';
 
 const stepTypeIcons = { email: Mail, wait: Clock, condition: Zap };
 const stepTypeLabels = { email: "Enviar Email", wait: "Esperar", condition: "Condicion" };
 
 export default function EmailMarketingPage() {
+  const navigate = useNavigate();
   const [lists, setLists] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [automations, setAutomations] = useState([]);
   const [stats, setStats] = useState(null);
+  const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateList, setShowCreateList] = useState(false);
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showCreateAutomation, setShowCreateAutomation] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [newCampaignName, setNewCampaignName] = useState('');
+  const [newCampaignTemplate, setNewCampaignTemplate] = useState('');
+  const [newCampaignList, setNewCampaignList] = useState('');
   const [newAutoName, setNewAutoName] = useState('');
 
   const fetchData = async () => {
     try {
-      const [l, c, a, s] = await Promise.all([
+      const [l, c, a, s, t] = await Promise.all([
         api.get('/email-marketing/lists'),
         api.get('/email-marketing/campaigns'),
         api.get('/email-marketing/automations'),
         api.get('/email-marketing/stats'),
+        api.get('/templates'),
       ]);
-      setLists(l.data); setCampaigns(c.data); setAutomations(a.data); setStats(s.data);
+      setLists(l.data); setCampaigns(c.data); setAutomations(a.data); setStats(s.data); setTemplates(t.data);
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -55,9 +62,9 @@ export default function EmailMarketingPage() {
   const createCampaign = async () => {
     if (!newCampaignName.trim()) return;
     try {
-      const { data } = await api.post('/email-marketing/campaigns', { name: newCampaignName });
+      const { data } = await api.post('/email-marketing/campaigns', { name: newCampaignName, template_id: newCampaignTemplate, list_id: newCampaignList });
       setCampaigns(prev => [data, ...prev]);
-      setNewCampaignName(''); setShowCreateCampaign(false);
+      setNewCampaignName(''); setNewCampaignTemplate(''); setNewCampaignList(''); setShowCreateCampaign(false);
       toast.success('Campana de email creada');
     } catch { toast.error('Error'); }
   };
@@ -123,10 +130,36 @@ export default function EmailMarketingPage() {
               <Card className="border-blue-200 bg-blue-50/30 rounded-xl">
                 <CardContent className="p-5">
                   <div className="flex items-center justify-between mb-3"><h3 className="font-medium text-zinc-900">Nueva Campana de Email</h3><Button variant="ghost" size="sm" onClick={() => setShowCreateCampaign(false)}><X className="w-4 h-4" /></Button></div>
-                  <form onSubmit={e => { e.preventDefault(); createCampaign(); }} className="flex gap-3">
-                    <Input value={newCampaignName} onChange={e => setNewCampaignName(e.target.value)} placeholder="Nombre de la campana" className="flex-1" autoFocus data-testid="em-campaign-name-input" />
-                    <Button type="submit" className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="em-campaign-save-btn">Crear</Button>
-                  </form>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-xs mb-1 block">Nombre *</Label>
+                      <Input value={newCampaignName} onChange={e => setNewCampaignName(e.target.value)} placeholder="Nombre de la campana" autoFocus data-testid="em-campaign-name-input" />
+                    </div>
+                    <div>
+                      <Label className="text-xs mb-1 block">Plantilla</Label>
+                      <Select value={newCampaignTemplate} onValueChange={setNewCampaignTemplate}>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar plantilla" /></SelectTrigger>
+                        <SelectContent>
+                          {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                          {!templates.length && <SelectItem value="none" disabled>Sin plantillas</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label className="text-xs mb-1 block">Lista</Label>
+                      <Select value={newCampaignList} onValueChange={setNewCampaignList}>
+                        <SelectTrigger><SelectValue placeholder="Seleccionar lista" /></SelectTrigger>
+                        <SelectContent>
+                          {lists.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.subscriber_count})</SelectItem>)}
+                          {!lists.length && <SelectItem value="none" disabled>Sin listas</SelectItem>}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 mt-4">
+                    <Button onClick={createCampaign} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="em-campaign-save-btn">Crear Campana</Button>
+                    <Button variant="ghost" size="sm" onClick={() => navigate('/templates')} className="text-blue-600"><FileText className="w-3.5 h-3.5 mr-1" /> Ir a Plantillas</Button>
+                  </div>
                 </CardContent>
               </Card>
             )}

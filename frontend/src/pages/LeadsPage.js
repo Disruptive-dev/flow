@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import api from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
@@ -37,6 +37,23 @@ export default function LeadsPage() {
   const [selected, setSelected] = useState([]);
   const [detailLead, setDetailLead] = useState(null);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef(null);
+
+  const handleImport = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const { data } = await api.post('/import/leads', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      toast.success(data.message);
+      fetchLeads();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error al importar'); }
+    setImporting(false);
+    e.target.value = '';
+  };
 
   const fetchLeads = async () => {
     setLoading(true);
@@ -95,10 +112,14 @@ export default function LeadsPage() {
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('leads')}</h1>
         <div className="flex items-center gap-3">
           <FlowBotButton section="leads" />
-          <Button variant="outline" size="sm" asChild data-testid="export-leads-btn">
-            <a href={`${process.env.REACT_APP_BACKEND_URL}/api/export/leads`} target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Exportar Excel</a>
+          <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleImport} className="hidden" />
+          <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-leads-btn">
+            {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />} Importar Excel
           </Button>
-          <p className="text-sm text-zinc-500">{total} leads totales</p>
+          <Button variant="outline" size="sm" asChild data-testid="export-leads-btn">
+            <a href={`${process.env.REACT_APP_BACKEND_URL}/api/export/leads`} target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Exportar</a>
+          </Button>
+          <span className="text-sm text-zinc-500">{total} leads</span>
         </div>
       </div>
 
