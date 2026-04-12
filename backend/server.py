@@ -1469,6 +1469,91 @@ async def simulate_email_campaign(request: Request, campaign_id: str):
     updated = await db.email_campaigns.find_one({"id": campaign_id}, {"_id": 0})
     return updated
 
+@api_router.post("/email-marketing/campaigns/{campaign_id}/send-real")
+async def send_real_email_campaign(request: Request, campaign_id: str):
+    """Send real emails via Resend to leads in the campaign's linked list"""
+    user = await get_current_user(request)
+    campaign = await db.email_campaigns.find_one({"id": campaign_id, "tenant_id": user["tenant_id"]})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campana no encontrada")
+    template = None
+    if campaign.get("template_id"):
+        template = await db.templates.find_one({"id": campaign["template_id"]}, {"_id": 0})
+    email_list = None
+    if campaign.get("list_id"):
+        email_list = await db.email_lists.find_one({"id": campaign["list_id"]}, {"_id": 0})
+    if not email_list or not email_list.get("lead_ids"):
+        raise HTTPException(status_code=400, detail="La campana no tiene una lista con leads asignados")
+    verified_domain = await db.domains.find_one({"tenant_id": user["tenant_id"], "status": {"$in": ["verified", "warmup_recommended", "ready_to_send"]}}, {"_id": 0})
+    from_email = verified_domain.get("sender_email", "onboarding@resend.dev") if verified_domain else "onboarding@resend.dev"
+    from_name = verified_domain.get("sender_name", "Spectra Flow") if verified_domain else "Spectra Flow"
+    now = datetime.now(timezone.utc).isoformat()
+    sent_count = 0
+    errors = []
+    lead_ids = email_list.get("lead_ids", [])
+    for lid in lead_ids[:50]:
+        lead = await db.leads.find_one({"id": lid, "tenant_id": user["tenant_id"]}, {"_id": 0})
+        if not lead or not lead.get("email"):
+            continue
+        subject = campaign.get("subject") or (template.get("subject", "Contacto de Spectra Flow") if template else "Contacto de Spectra Flow")
+        html_body = template.get("html_body", "<p>Hola {business_name}</p>") if template else "<p>Hola {business_name}</p>"
+        subject = subject.replace("{business_name}", lead.get("business_name", "")).replace("{city}", lead.get("city", "")).replace("{normalized_category}", lead.get("normalized_category", ""))
+        html_body = html_body.replace("{business_name}", lead.get("business_name", "")).replace("{city}", lead.get("city", "")).replace("{normalized_category}", lead.get("normalized_category", "")).replace("{recommended_first_line}", lead.get("recommended_first_line", "")).replace("{sender_name}", from_name)
+        if resend.api_key:
+            try:
+                params = {"from": f"{from_name} <{from_email}>", "to": [lead["email"]], "subject": subject, "html": html_body}
+                await asyncio.to_thread(resend.Emails.send, params)
+                sent_count += 1
+                await db.leads.update_one({"id": lid}, {"$set": {"status": "contacted", "updated_at": now}})
+            except Exception as e:
+                errors.append(f"{lead['email']}: {str(e)[:50]}")
+    await db.email_campaigns.update_one({"id": campaign_id}, {"$set": {"status": "enviada", "sent_count": sent_count, "sent_at": now, "updated_at": now}})
+    return {"message": f"{sent_count} emails enviados via Resend", "sent": sent_count, "errors": errors[:5], "limited_to": "Max 50 por envio (warmup)"}
+
+@api_router.post("/ai/dify-score-lead")
+async def dify_score_lead(request: Request, body: Dict[str, Any] = {}):
+    """Score a single lead using Dify AI"""
+    user = await get_current_user(request)
+    lead_id = body.get("lead_id", "")
+    lead = await db.leads.find_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"_id": 0}) if lead_id else None
+    business_data = body.get("business_data", "")
+    if lead and not business_data:
+        business_data = f"Nombre: {lead.get('business_name','')}\nDireccion: {lead.get('city','')}, {lead.get('province','')}\nTelefono: {lead.get('phone','')}\nWebsite: {lead.get('website','')}\nEmail: {lead.get('email','')}\nCategoria: {lead.get('normalized_category','')}"
+    if not business_data:
+        raise HTTPException(status_code=400, detail="Se requiere business_data o lead_id")
+    dify_base = os.environ.get("DIFY_BASE_URL", "")
+    dify_key = os.environ.get("DIFY_APP_KEY", "")
+    if not dify_base or not dify_key:
+        dify_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "dify"}, {"_id": 0})
+        if dify_config:
+            dify_base = dify_config.get("base_url", dify_base)
+            dify_key = dify_config.get("api_key", dify_key)
+    if not dify_base or not dify_key:
+        raise HTTPException(status_code=400, detail="Dify no configurado. Configura Base URL y API Key en Integraciones.")
+    try:
+        import httpx
+        dify_url = dify_base.rstrip("/")
+        if dify_url.startswith("http://"):
+            dify_url = "https://" + dify_url[7:]
+        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+            resp = await client.post(f"{dify_url}/workflows/run", headers={"Authorization": f"Bearer {dify_key}", "Content-Type": "application/json"}, json={"inputs": {"business_data": business_data}, "response_mode": "blocking", "user": user.get("email", "spectra")})
+            result = resp.json()
+            output = result.get("data", {}).get("outputs", {}).get("result", "")
+            if output:
+                import json as json_mod
+                try:
+                    scored = json_mod.loads(output) if isinstance(output, str) else output
+                    if lead_id and scored.get("ai_score"):
+                        now = datetime.now(timezone.utc).isoformat()
+                        await db.leads.update_one({"id": lead_id}, {"$set": {"ai_score": int(scored["ai_score"]), "quality_level": scored.get("quality_level", ""), "recommendation": scored.get("recommendation", ""), "recommended_first_line": scored.get("recommended_first_line", ""), "normalized_category": scored.get("normalized_category", lead.get("normalized_category", "")), "status": "scored", "updated_at": now}})
+                    return {"success": True, "scoring": scored, "raw_output": output}
+                except:
+                    return {"success": True, "scoring": None, "raw_output": output}
+            return {"success": False, "error": "Dify retorno output vacio. Verifica la config de tu workflow.", "raw_response": result}
+    except Exception as e:
+        logger.error(f"Dify scoring error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error llamando a Dify: {str(e)}")
+
 @api_router.get("/email-marketing/automations")
 async def list_automations(request: Request):
     user = await get_current_user(request)
