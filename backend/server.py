@@ -1407,25 +1407,28 @@ async def ai_flow_bot(request: Request, body: Dict[str, Any] = {}):
         # Search campaigns by name
         all_campaigns = await db.campaigns.find({"tenant_id": tid}, {"_id": 0}).to_list(50)
         for c in all_campaigns:
-            if c.get("name", "").lower() in q_lower or any(w in q_lower for w in c.get("name", "").lower().split() if len(w) > 3):
-                specific_data += f"\nCampana '{c['name']}': estado={c.get('status','')}, leads={c.get('lead_count',0)}, enviados={c.get('sent_count',0)}, aperturas={c.get('open_count',0)}, clics={c.get('click_count',0)}, respuestas={c.get('reply_count',0)}, interesados={c.get('interested_count',0)}, al CRM={c.get('crm_count',0)}"
+            cname = c.get("name", "")
+            if cname and (cname.lower() in q_lower or any(w in q_lower for w in cname.lower().split() if len(w) > 3)):
+                specific_data += f"\nCampana '{cname}': estado={c.get('status','')}, leads={c.get('lead_count',0)}, enviados={c.get('sent_count',0)}, aperturas={c.get('open_count',0)}, clics={c.get('click_count',0)}, respuestas={c.get('reply_count',0)}, interesados={c.get('interested_count',0)}, al CRM={c.get('crm_count',0)}"
         # Search deals by name
         all_deals = await db.crm_deals.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
         for d in all_deals:
-            if d.get("name", "").lower() in q_lower or any(w in q_lower for w in d.get("name", "").lower().split() if len(w) > 3):
-                specific_data += f"\nOportunidad '{d['name']}': etapa={d.get('stage','')}, valor=${d.get('value',0)}, contacto={d.get('contact_name','')}, empresa={d.get('company','')}, probabilidad={d.get('probability',0)}%"
+            dname = d.get("name", d.get("title", ""))
+            if dname and (dname.lower() in q_lower or any(w in q_lower for w in dname.lower().split() if len(w) > 3)):
+                specific_data += f"\nOportunidad '{dname}': etapa={d.get('stage','')}, valor=${d.get('value',0)}, contacto={d.get('contact_name','')}, empresa={d.get('company','')}, probabilidad={d.get('probability',0)}%"
         # Search contacts by name
         all_contacts = await db.crm_contacts.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
         for ct in all_contacts:
             bname = ct.get("business_name", ct.get("company", "")).lower()
-            cname = ct.get("contact_name", "").lower()
-            if bname and bname in q_lower or cname and cname in q_lower or any(w in q_lower for w in bname.split() if len(w) > 3):
+            cname_ct = ct.get("contact_name", "").lower()
+            if (bname and bname in q_lower) or (cname_ct and cname_ct in q_lower) or (bname and any(w in q_lower for w in bname.split() if len(w) > 3)):
                 specific_data += f"\nContacto CRM '{ct.get('business_name', ct.get('company',''))}': nombre={ct.get('contact_name','')}, email={ct.get('email','')}, etapa={ct.get('stage','')}, score={ct.get('ai_score',0)}, fuente={ct.get('source','')}"
         # Search leads by name
         all_leads = await db.leads.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
         for l in all_leads:
-            if l.get("business_name", "").lower() in q_lower or any(w in q_lower for w in l.get("business_name", "").lower().split() if len(w) > 3):
-                specific_data += f"\nLead '{l['business_name']}': score={l.get('ai_score',0)}, calidad={l.get('quality_level','')}, estado={l.get('status','')}, email={l.get('email','')}, ciudad={l.get('city','')}, categoria={l.get('normalized_category','')}"
+            lname = l.get("business_name", "")
+            if lname and (lname.lower() in q_lower or any(w in q_lower for w in lname.lower().split() if len(w) > 3)):
+                specific_data += f"\nLead '{lname}': score={l.get('ai_score',0)}, calidad={l.get('quality_level','')}, estado={l.get('status','')}, email={l.get('email','')}, ciudad={l.get('city','')}, categoria={l.get('normalized_category','')}"
         # Search email marketing campaigns
         all_em_campaigns = await db.email_campaigns.find({"tenant_id": tid}, {"_id": 0}).to_list(50)
         for ec in all_em_campaigns:

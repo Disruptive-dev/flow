@@ -166,8 +166,15 @@ export default function CrmPage() {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-crm-btn">
             {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />} Importar Excel
           </Button>
-          <Button variant="outline" size="sm" asChild data-testid="export-crm-btn">
-            <a href={`${process.env.REACT_APP_BACKEND_URL}/api/export/crm-contacts`} target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Exportar</a>
+          <Button variant="outline" size="sm" onClick={async () => {
+            try {
+              const response = await api.get('/export/crm-contacts', { responseType: 'blob' });
+              const url = window.URL.createObjectURL(new Blob([response.data]));
+              const a = document.createElement('a'); a.href = url; a.download = 'crm_contacts_spectra.xlsx'; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+              toast.success('Excel exportado');
+            } catch { toast.error('Error al exportar'); }
+          }} data-testid="export-crm-btn">
+            <Download className="w-4 h-4 mr-1.5" /> Exportar
           </Button>
           <Button size="sm" onClick={() => setShowCreateContact(true)} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-contact-btn">
             <Plus className="w-4 h-4 mr-1.5" /> Crear Contacto

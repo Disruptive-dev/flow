@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,6 +11,15 @@ export default function FlowBotButton({ section }) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [context, setContext] = useState(null);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, loading]);
 
   const initialAnalysis = async () => {
     if (open) { setOpen(false); return; }
@@ -35,8 +44,7 @@ export default function FlowBotButton({ section }) {
     setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
     setLoading(true);
     try {
-      const contextStr = context ? ` Datos actuales: ${JSON.stringify(context)}` : '';
-      const { data } = await api.post('/ai/flow-bot', { section, question: `${userMsg}${contextStr}` });
+      const { data } = await api.post('/ai/flow-bot', { section, question: userMsg });
       setMessages(prev => [...prev, { role: 'bot', text: data.response }]);
       if (data.context) setContext(data.context);
     } catch {
@@ -62,7 +70,6 @@ export default function FlowBotButton({ section }) {
       {open && (
         <Card className="absolute right-0 top-12 w-[420px] z-50 shadow-2xl border-blue-200 animate-fade-in" data-testid="flow-bot-panel">
           <CardContent className="p-0">
-            {/* Header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 bg-zinc-50 rounded-t-xl">
               <div className="flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-blue-600" />
@@ -71,7 +78,6 @@ export default function FlowBotButton({ section }) {
               <button onClick={() => setOpen(false)} className="text-zinc-400 hover:text-zinc-600"><X className="w-4 h-4" /></button>
             </div>
 
-            {/* Messages */}
             <div className="max-h-[320px] overflow-y-auto p-4 space-y-3">
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -89,9 +95,9 @@ export default function FlowBotButton({ section }) {
                   </div>
                 </div>
               )}
+              <div ref={messagesEndRef} />
             </div>
 
-            {/* Context tags */}
             {context && (
               <div className="px-4 pb-2 flex flex-wrap gap-1.5">
                 {Object.entries(context).map(([key, val]) => (
@@ -100,7 +106,6 @@ export default function FlowBotButton({ section }) {
               </div>
             )}
 
-            {/* Input */}
             <form onSubmit={sendMessage} className="p-3 border-t border-zinc-200 flex gap-2">
               <Input
                 value={input}

@@ -133,8 +133,15 @@ export default function LeadsPage() {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-leads-btn">
             {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />} Importar Excel
           </Button>
-          <Button variant="outline" size="sm" asChild data-testid="export-leads-btn">
-            <a href={`${process.env.REACT_APP_BACKEND_URL}/api/export/leads`} target="_blank" rel="noopener noreferrer"><Download className="w-4 h-4 mr-1.5" /> Exportar</a>
+          <Button variant="outline" size="sm" onClick={async () => {
+            try {
+              const response = await api.get('/export/leads', { responseType: 'blob' });
+              const url = window.URL.createObjectURL(new Blob([response.data]));
+              const a = document.createElement('a'); a.href = url; a.download = 'leads_spectra.xlsx'; document.body.appendChild(a); a.click(); a.remove(); window.URL.revokeObjectURL(url);
+              toast.success('Excel exportado');
+            } catch { toast.error('Error al exportar'); }
+          }} data-testid="export-leads-btn">
+            <Download className="w-4 h-4 mr-1.5" /> Exportar
           </Button>
           <span className="text-sm text-zinc-500">{total} leads</span>
         </div>
