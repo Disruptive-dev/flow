@@ -297,6 +297,26 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
     }
     await db.prospect_jobs.insert_one(job)
     await db.audit_logs.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "user_id": user["_id"], "user_name": user["name"], "action": "created_prospect_job", "entity_type": "prospect_job", "entity_id": job_id, "details": f"Job: {body.category} in {body.city}, {body.province}", "created_at": now})
+    # Try to trigger n8n webhook if configured
+    try:
+        n8n_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "n8n", "enabled": True}, {"_id": 0})
+        if n8n_config and n8n_config.get("base_url"):
+            import httpx
+            webhook_url = n8n_config["base_url"].rstrip("/")
+            callback_url = os.environ.get("FRONTEND_URL", "http://localhost:8001") + f"/api/webhooks/n8n/job-result/{job_id}"
+            progress_url = os.environ.get("FRONTEND_URL", "http://localhost:8001") + f"/api/webhooks/n8n/job-progress/{job_id}"
+            async with httpx.AsyncClient(timeout=10) as client:
+                await client.post(webhook_url, json={
+                    "job_id": job_id, "tenant_id": user["tenant_id"],
+                    "country": body.country or "Argentina", "province": body.province,
+                    "city": body.city, "category": body.category, "quantity": body.quantity,
+                    "postal_code": body.postal_code or "",
+                    "callback_url": callback_url, "progress_url": progress_url,
+                    "api_key": n8n_config.get("api_key", "")
+                })
+            logger.info(f"n8n webhook triggered for job {job_id}")
+    except Exception as e:
+        logger.warning(f"n8n webhook failed (will use demo mode): {e}")
     return serialize_doc(job)
 
 @api_router.get("/prospect-jobs/{job_id}")
@@ -1244,6 +1264,117 @@ async def export_crm_contacts(request: Request):
     wb.save(buffer)
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers={"Content-Disposition": "attachment; filename=crm_contacts_export.xlsx"})
+
+# ==================== INTEGRATION WEBHOOKS ====================
+
+@api_router.post("/webhooks/n8n/job-result/{job_id}")
+async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {}):
+    """Receives processed leads from n8n after Outscraper + Dify pipeline"""
+    api_key = request.headers.get("X-Api-Key", "")
+    if not api_key:
+        raise HTTPException(status_code=401, detail="API key required")
+    job = await db.prospect_jobs.find_one({"id": job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    now = datetime.now(timezone.utc).isoformat()
+    leads_data = body.get("leads", [])
+    raw_count = body.get("raw_count", len(leads_data))
+    inserted = 0
+    for ld in leads_data:
+        lead = {
+            "id": str(uuid.uuid4()), "tenant_id": job["tenant_id"], "job_id": job_id,
+            "business_name": ld.get("business_name", ld.get("name", "")),
+            "raw_category": ld.get("raw_category", ld.get("category", "")),
+            "normalized_category": ld.get("normalized_category", ld.get("category", "")),
+            "province": ld.get("province", ld.get("state", job.get("province", ""))),
+            "city": ld.get("city", job.get("city", "")),
+            "website": ld.get("website", ld.get("site", "")),
+            "email": ld.get("email", ""),
+            "phone": ld.get("phone", ld.get("phone_number", "")),
+            "ai_score": int(ld.get("ai_score", ld.get("score", 0))),
+            "quality_level": ld.get("quality_level", "scored"),
+            "recommendation": ld.get("recommendation", ""),
+            "recommended_first_line": ld.get("recommended_first_line", ld.get("first_line", "")),
+            "address": ld.get("address", ld.get("full_address", "")),
+            "rating": ld.get("rating", 0),
+            "reviews_count": ld.get("reviews_count", ld.get("reviews", 0)),
+            "status": "scored" if int(ld.get("ai_score", 0)) >= 50 else "cleaned",
+            "created_at": now, "updated_at": now
+        }
+        await db.leads.insert_one(lead)
+        inserted += 1
+    qualified = sum(1 for ld in leads_data if int(ld.get("ai_score", 0)) >= 50)
+    rejected = inserted - qualified
+    stages = [
+        {"name": "job_created", "status": "completed", "timestamp": job.get("created_at", now)},
+        {"name": "scraping", "status": "completed", "timestamp": now},
+        {"name": "prospects_found", "status": "completed", "timestamp": now},
+        {"name": "ai_cleaning", "status": "completed", "timestamp": now},
+        {"name": "scoring_completed", "status": "completed", "timestamp": now},
+        {"name": "ready_for_review", "status": "completed", "timestamp": now}
+    ]
+    await db.prospect_jobs.update_one({"id": job_id}, {"$set": {
+        "status": "completed", "raw_count": raw_count, "cleaned_count": inserted,
+        "qualified_count": qualified, "rejected_count": rejected, "stages": stages, "updated_at": now
+    }})
+    return {"message": f"{inserted} leads imported, {qualified} qualified", "job_id": job_id}
+
+@api_router.post("/webhooks/n8n/job-progress/{job_id}")
+async def n8n_job_progress(request: Request, job_id: str, body: Dict[str, Any] = {}):
+    """Updates job progress from n8n (stage by stage)"""
+    stage_name = body.get("stage", "")
+    stage_status = body.get("status", "completed")
+    raw_count = body.get("raw_count")
+    job = await db.prospect_jobs.find_one({"id": job_id})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    now = datetime.now(timezone.utc).isoformat()
+    stages = job.get("stages", [])
+    for s in stages:
+        if s["name"] == stage_name:
+            s["status"] = stage_status
+            s["timestamp"] = now
+    update = {"stages": stages, "updated_at": now, "status": "processing"}
+    if raw_count is not None:
+        update["raw_count"] = raw_count
+    await db.prospect_jobs.update_one({"id": job_id}, {"$set": update})
+    return {"message": f"Stage {stage_name} updated to {stage_status}"}
+
+@api_router.post("/webhooks/chatwoot/lead")
+async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
+    """Receives new leads from Chatwoot/OptimIA Bot via n8n"""
+    api_key = request.headers.get("X-Api-Key", "")
+    tenant_id = body.get("tenant_id", "")
+    if not tenant_id:
+        tenant = await db.tenants.find_one({}, {"_id": 0, "id": 1})
+        tenant_id = tenant["id"] if tenant else ""
+    if not tenant_id:
+        raise HTTPException(status_code=400, detail="tenant_id required")
+    now = datetime.now(timezone.utc).isoformat()
+    contact = {
+        "id": str(uuid.uuid4()), "tenant_id": tenant_id, "lead_id": "",
+        "business_name": body.get("name", body.get("business_name", "Lead de OptimIA Bot")),
+        "contact_name": body.get("contact_name", body.get("name", "")),
+        "email": body.get("email", ""),
+        "phone": body.get("phone", body.get("phone_number", "")),
+        "city": body.get("city", ""),
+        "province": body.get("province", ""),
+        "category": body.get("category", ""),
+        "source": "optimia_bot",
+        "notes": body.get("message", body.get("notes", "")),
+        "stage": "nuevo", "ai_score": 0, "deal_count": 0, "total_value": 0,
+        "created_at": now, "updated_at": now
+    }
+    await db.crm_contacts.insert_one(contact)
+    return {"message": "Contact created from OptimIA Bot", "contact_id": contact["id"]}
+
+@api_router.post("/webhooks/resend/events")
+async def resend_events_webhook(request: Request, body: Dict[str, Any] = {}):
+    """Receives email events from Resend (opens, clicks, bounces)"""
+    event_type = body.get("type", "")
+    email_data = body.get("data", {})
+    logger.info(f"Resend event: {event_type} - {email_data.get('email_id', '')}")
+    return {"received": True}
 
 # ==================== SEED DATA ====================
 
