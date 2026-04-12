@@ -66,10 +66,31 @@ export function formatApiError(detail) {
   return String(detail);
 }
 
-export function downloadFile(apiPath) {
+export async function downloadFile(apiPath) {
   const token = localStorage.getItem('sf_access_token');
-  const url = `${API_BASE}/api${apiPath}${apiPath.includes('?') ? '&' : '?'}token=${token}`;
-  window.location.href = url;
+  try {
+    const response = await fetch(`${API_BASE}/api${apiPath}`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    if (!response.ok) throw new Error('Download failed');
+    const blob = await response.blob();
+    const contentDisposition = response.headers.get('content-disposition') || '';
+    const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+    const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, '') : 'download';
+    const reader = new FileReader();
+    reader.onload = function() {
+      const a = document.createElement('a');
+      a.href = reader.result;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { document.body.removeChild(a); }, 100);
+    };
+    reader.readAsDataURL(blob);
+  } catch (e) {
+    console.error('Download error:', e);
+  }
 }
 
 export default api;
