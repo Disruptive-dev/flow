@@ -148,12 +148,13 @@ export default function DashboardPage() {
   const replyRate = stats?.emails_sent > 0 ? ((stats?.replies || 0) / stats.emails_sent * 100).toFixed(1) : '0';
   const convRate = stats?.total_leads > 0 ? ((stats?.leads_sent_to_crm || 0) / stats.total_leads * 100).toFixed(1) : '0';
 
+  const ganados = stats?.opportunities || 0;
+
   return (
     <div className="space-y-6 animate-fade-in" data-testid="dashboard-page">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('dashboard')}</h1>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Date Filter */}
           <Select value={datePreset} onValueChange={setDatePreset}>
             <SelectTrigger className="w-[160px] h-9 text-sm" data-testid="date-filter">
               <Calendar className="w-3.5 h-3.5 mr-1.5 text-zinc-400" />
@@ -168,20 +169,15 @@ export default function DashboardPage() {
               <SelectItem value="year">Ultimo ano</SelectItem>
             </SelectContent>
           </Select>
-
           {datePreset !== 'all' && (
             <Button variant={compareMode ? 'default' : 'outline'} size="sm" onClick={() => setCompareMode(!compareMode)} data-testid="compare-toggle" className={compareMode ? 'bg-blue-600 text-white' : ''}>
               <ArrowUpDown className="w-3.5 h-3.5 mr-1.5" /> Comparar
             </Button>
           )}
-
           <FlowBotButton section="dashboard" />
-
           <Dialog open={configOpen} onOpenChange={setConfigOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm" data-testid="dashboard-config-btn">
-                <Settings2 className="w-4 h-4 mr-1.5" /> Personalizar
-              </Button>
+              <Button variant="outline" size="sm" data-testid="dashboard-config-btn"><Settings2 className="w-4 h-4 mr-1.5" /> Personalizar</Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
               <DialogHeader><DialogTitle className="font-heading">Personalizar Dashboard</DialogTitle></DialogHeader>
@@ -202,10 +198,7 @@ export default function DashboardPage() {
                   <div className="grid grid-cols-2 gap-2">
                     {allKpis.map(k => (
                       <div key={k.key} className="flex items-center justify-between p-2.5 bg-zinc-50 rounded-lg" data-testid={`kpi-toggle-${k.key}`}>
-                        <div className="flex items-center gap-2">
-                          <k.icon className={`w-3.5 h-3.5 ${k.color}`} />
-                          <Label className="text-xs">{k.label}</Label>
-                        </div>
+                        <div className="flex items-center gap-2"><k.icon className={`w-3.5 h-3.5 ${k.color}`} /><Label className="text-xs">{k.label}</Label></div>
                         <Switch checked={prefs.kpis[k.key] !== false} onCheckedChange={() => toggleKpi(k.key)} />
                       </div>
                     ))}
@@ -221,29 +214,63 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* KPI Grid */}
+      {/* Top Row: Rates + Ganados (4 columns) */}
+      {prefs.panels.rates !== false && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4" data-testid="dashboard-rates">
+          <Card className="border-teal-200 rounded-xl bg-teal-50/30">
+            <CardContent className="p-5">
+              <p className="text-[10px] font-medium text-teal-600 uppercase tracking-wider mb-1">Tasa de Apertura</p>
+              <p className="text-3xl font-heading font-semibold text-teal-700">{openRate}%</p>
+              <p className="text-xs text-zinc-400 mt-1">{stats?.opens || 0} de {stats?.emails_sent || 0}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-green-200 rounded-xl bg-green-50/30">
+            <CardContent className="p-5">
+              <p className="text-[10px] font-medium text-green-600 uppercase tracking-wider mb-1">Tasa de Respuesta</p>
+              <p className="text-3xl font-heading font-semibold text-green-700">{replyRate}%</p>
+              <p className="text-xs text-zinc-400 mt-1">{stats?.replies || 0} respuestas</p>
+            </CardContent>
+          </Card>
+          <Card className="border-purple-200 rounded-xl bg-purple-50/30">
+            <CardContent className="p-5">
+              <p className="text-[10px] font-medium text-purple-600 uppercase tracking-wider mb-1">Conversion a CRM</p>
+              <p className="text-3xl font-heading font-semibold text-purple-700">{convRate}%</p>
+              <p className="text-xs text-zinc-400 mt-1">{stats?.leads_sent_to_crm || 0} de {stats?.total_leads || 0}</p>
+            </CardContent>
+          </Card>
+          <Card className="border-emerald-300 rounded-xl bg-emerald-50/50">
+            <CardContent className="p-5">
+              <p className="text-[10px] font-medium text-emerald-600 uppercase tracking-wider mb-1">Contactos Ganados</p>
+              <p className="text-3xl font-heading font-semibold text-emerald-700">{ganados}</p>
+              <p className="text-xs text-zinc-400 mt-1">Oportunidades cerradas</p>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Separator */}
+      <div className="border-t border-zinc-200" />
+
+      {/* KPI Grid (Leads metrics) */}
       {prefs.panels.kpis !== false && visibleKpis.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4" data-testid="dashboard-kpi-grid">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3" data-testid="dashboard-kpi-grid">
           {visibleKpis.map(({ key, icon: Icon, color, bg, label }) => {
             const delta = getDelta(key);
             return (
               <Card key={key} className="border-zinc-200 rounded-xl hover:border-zinc-300 transition-colors">
-                <CardContent className="p-5">
+                <CardContent className="p-4">
                   <div className="flex items-start justify-between">
                     <div>
                       <p className="text-[10px] font-medium text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
-                      <p className="text-2xl font-heading font-semibold text-zinc-900">{stats?.[key]?.toLocaleString() ?? 0}</p>
+                      <p className="text-xl font-heading font-semibold text-zinc-900">{stats?.[key]?.toLocaleString() ?? 0}</p>
                       {delta !== null && compareMode && (
-                        <div className={`flex items-center gap-1 mt-1 text-xs ${delta >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                          {delta >= 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                        <div className={`flex items-center gap-1 mt-0.5 text-[10px] ${delta >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {delta >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
                           <span>{delta >= 0 ? '+' : ''}{delta}%</span>
-                          <span className="text-zinc-400 ml-1">vs anterior</span>
                         </div>
                       )}
                     </div>
-                    <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center`}>
-                      <Icon className={`w-4 h-4 ${color}`} />
-                    </div>
+                    <div className={`w-8 h-8 rounded-lg ${bg} flex items-center justify-center`}><Icon className={`w-3.5 h-3.5 ${color}`} /></div>
                   </div>
                 </CardContent>
               </Card>
@@ -255,7 +282,7 @@ export default function DashboardPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {prefs.panels.pipeline !== false && (
-          <Card className={`border-zinc-200 rounded-xl ${prefs.panels.activity !== false ? 'lg:col-span-2' : 'lg:col-span-3'}`}>
+          <Card className="lg:col-span-2 border-zinc-200 rounded-xl">
             <CardContent className="p-6">
               <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Pipeline General {compareMode && prevStats ? '(Comparativo)' : ''}</h3>
               <div className="h-[280px]">
@@ -276,7 +303,7 @@ export default function DashboardPage() {
         )}
 
         {prefs.panels.activity !== false && (
-          <Card className={`border-zinc-200 rounded-xl ${prefs.panels.pipeline !== false ? '' : 'lg:col-span-3'}`}>
+          <Card className="border-zinc-200 rounded-xl">
             <CardContent className="p-6">
               <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Actividad Reciente</h3>
               <div className="space-y-3">
@@ -297,25 +324,6 @@ export default function DashboardPage() {
           </Card>
         )}
       </div>
-
-      {/* Conversion Rates */}
-      {prefs.panels.rates !== false && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4" data-testid="dashboard-rates">
-          {[
-            { label: 'Tasa de Apertura', value: `${openRate}%`, desc: `${stats?.opens || 0} de ${stats?.emails_sent || 0} emails`, color: 'text-teal-600', bg: 'bg-teal-50' },
-            { label: 'Tasa de Respuesta', value: `${replyRate}%`, desc: `${stats?.replies || 0} respuestas`, color: 'text-green-600', bg: 'bg-green-50' },
-            { label: 'Conversion a CRM', value: `${convRate}%`, desc: `${stats?.leads_sent_to_crm || 0} de ${stats?.total_leads || 0} leads`, color: 'text-purple-600', bg: 'bg-purple-50' },
-          ].map(({ label, value, desc, color }) => (
-            <Card key={label} className="border-zinc-200 rounded-xl">
-              <CardContent className="p-5">
-                <p className="text-xs font-medium text-zinc-500 uppercase tracking-wider mb-1">{label}</p>
-                <p className={`text-3xl font-heading font-semibold ${color}`}>{value}</p>
-                <p className="text-xs text-zinc-400 mt-1">{desc}</p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

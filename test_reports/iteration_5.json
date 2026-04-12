@@ -1,0 +1,110 @@
+{
+  "summary": "Iteration 5 testing completed successfully. All new features verified: CRM auto-deal creation on stage change (individual and bulk), Chatwoot webhook upsert with 'bot' tag, Email Marketing full CRUD (lists and campaigns), auto-list from scored leads, add leads to lists, scoring config endpoints, and Dashboard reorganized layout with rates on top row.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Dashboard", "issues": ["Chart rendering warnings - width/height (-1) should be greater than 0 (known cosmetic issue from previous iterations)"]}
+    ]
+  },
+  "passed_tests": [
+    "Admin login with admin@spectraflow.com / Admin123!",
+    "Dashboard: Rates row on top (4 cards: Tasa de Apertura, Tasa de Respuesta, Conversion a CRM, Contactos Ganados)",
+    "Dashboard: Separator between rates and KPIs",
+    "Dashboard: KPIs below separator in compact 6-column grid (11 KPI cards)",
+    "CRM: PUT /api/crm/contacts/{id} with stage change auto-creates deal with business_name as title",
+    "CRM: Bulk contact move to stage auto-creates deals with business_name as title",
+    "Chatwoot webhook: POST /api/webhooks/chatwoot/lead creates contact with 'bot' tag",
+    "Chatwoot webhook: POST /api/webhooks/chatwoot/lead upserts existing contact (by email/phone)",
+    "Email Marketing: POST /api/email-marketing/lists creates list",
+    "Email Marketing: PUT /api/email-marketing/lists/{id} updates list",
+    "Email Marketing: DELETE /api/email-marketing/lists/{id} deletes list",
+    "Email Marketing: POST /api/email-marketing/campaigns creates campaign",
+    "Email Marketing: PUT /api/email-marketing/campaigns/{id} updates campaign",
+    "Email Marketing: DELETE /api/email-marketing/campaigns/{id} deletes campaign",
+    "Auto-list: POST /api/email-marketing/auto-list-from-leads creates list with scored leads",
+    "Add leads to list: POST /api/email-marketing/lists/{id}/add-leads adds leads by status filter",
+    "Scoring config: GET /api/settings/scoring returns defaults",
+    "Scoring config: PUT /api/settings/scoring saves custom config",
+    "Pipeline: All 6 stages visible (nuevo, contactado, propuesta, negociacion, ganado, perdido)",
+    "Pipeline: Cards have visible colored borders (border-l-4 class)",
+    "Pipeline: Stage headers have distinct colors"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iteration5.py",
+    "/app/test_reports/pytest/pytest_results_v5.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_iteration5.py"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16 tests passed)",
+    "frontend": "100% (all features working)"
+  },
+  "test_credentials": {
+    "admin": "admin@spectraflow.com / Admin123!"
+  },
+  "seed_data_creation": "Created TEST_ prefixed contacts and deals for testing (cleaned up after tests)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iteration 5 features all working: 1) CRM auto-deal creation when contact stage changes - uses business_name as deal title, works for both individual PUT and bulk action, 2) Chatwoot webhook upserts contacts (checks email/phone before creating) and adds 'bot' tag, 3) Email Marketing full CRUD for lists and campaigns (create/update/delete), 4) Auto-list from scored leads endpoint, 5) Add leads to list by status filter, 6) Scoring config GET/PUT endpoints, 7) Dashboard reorganized with rates on top row (4 cards) + separator + KPIs in 6-column grid below, 8) Pipeline colors more visible with border-l-4 on cards and colored stage headers.",
+  "mocked_apis": {
+    "Campaign simulation": "/api/email-marketing/campaigns/{campaign_id}/simulate uses random data",
+    "A/B test simulation": "/api/templates/ab-tests/{id}/simulate uses random data"
+  },
+  "verified_features": {
+    "crm_auto_deal_creation": {
+      "feature": "Auto-create deals when contact stage changes",
+      "endpoints": ["PUT /api/crm/contacts/{id}", "POST /api/crm/contacts/bulk-action"],
+      "deal_title_source": "business_name from contact",
+      "verified": true
+    },
+    "chatwoot_webhook": {
+      "feature": "Chatwoot webhook upserts contacts with bot tag",
+      "endpoint": "POST /api/webhooks/chatwoot/lead",
+      "behavior": "Creates new contact with source='bot' and tags=['bot'], or updates existing contact by email/phone and adds 'bot' tag",
+      "verified": true
+    },
+    "email_marketing_crud": {
+      "feature": "Full CRUD for email lists and campaigns",
+      "lists_endpoints": ["GET", "POST", "PUT", "DELETE /api/email-marketing/lists"],
+      "campaigns_endpoints": ["GET", "POST", "PUT", "DELETE /api/email-marketing/campaigns"],
+      "verified": true
+    },
+    "auto_list_from_leads": {
+      "feature": "Auto-create email list from scored/approved leads",
+      "endpoint": "POST /api/email-marketing/auto-list-from-leads",
+      "verified": true
+    },
+    "add_leads_to_list": {
+      "feature": "Add leads to email list by status filter",
+      "endpoint": "POST /api/email-marketing/lists/{id}/add-leads",
+      "verified": true
+    },
+    "scoring_config": {
+      "feature": "Customizable scoring configuration",
+      "endpoints": ["GET /api/settings/scoring", "PUT /api/settings/scoring"],
+      "default_keys": ["website", "email", "phone", "min_excellent", "min_good"],
+      "verified": true
+    },
+    "dashboard_layout": {
+      "feature": "Dashboard reorganized with rates on top",
+      "top_row": ["Tasa de Apertura", "Tasa de Respuesta", "Conversion a CRM", "Contactos Ganados"],
+      "separator": "border-t border-zinc-200",
+      "kpi_grid": "6-column grid with 11 KPI cards",
+      "verified": true
+    },
+    "pipeline_colors": {
+      "feature": "Pipeline cards with visible colored borders",
+      "implementation": "border-l-4 class on deal cards, colored stage headers",
+      "stages": ["nuevo (slate)", "contactado (blue)", "propuesta (purple)", "negociacion (amber)", "ganado (emerald)", "perdido (red)"],
+      "verified": true
+    }
+  }
+}

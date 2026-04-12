@@ -1013,6 +1013,30 @@ async def get_crm_contact(request: Request, contact_id: str):
     notes = await db.crm_notes.find({"contact_id": contact_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
     return {**contact, "deals": deals, "notes_list": notes}
 
+@api_router.put("/crm/contacts/{contact_id}")
+async def update_crm_contact(request: Request, contact_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {k: v for k, v in body.items() if v is not None and k not in ("id", "tenant_id", "_id")}
+    update_data["updated_at"] = now
+    new_stage = body.get("stage")
+    result = await db.crm_contacts.update_one({"id": contact_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Contacto no encontrado")
+    # Auto-create deal if stage changed and no deal exists
+    if new_stage:
+        existing_deal = await db.crm_deals.find_one({"contact_id": contact_id, "tenant_id": user["tenant_id"]})
+        contact = await db.crm_contacts.find_one({"id": contact_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+        if not existing_deal and contact:
+            deal_title = contact.get("business_name", "Oportunidad")
+            prob = {"nuevo": 10, "contactado": 30, "propuesta": 50, "negociacion": 70, "ganado": 100, "perdido": 0}.get(new_stage, 20)
+            await db.crm_deals.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "contact_id": contact_id, "contact_name": contact.get("business_name", ""), "company": contact.get("business_name", ""), "title": deal_title, "name": deal_title, "value": 0, "stage": new_stage, "probability": prob, "assigned_to": user.get("name", ""), "created_at": now, "updated_at": now})
+            await db.crm_contacts.update_one({"id": contact_id}, {"$inc": {"deal_count": 1}})
+        elif existing_deal:
+            await db.crm_deals.update_one({"contact_id": contact_id, "tenant_id": user["tenant_id"]}, {"$set": {"stage": new_stage, "updated_at": now}})
+    updated = await db.crm_contacts.find_one({"id": contact_id}, {"_id": 0})
+    return updated
+
 @api_router.get("/crm/deals")
 async def list_crm_deals(request: Request, stage: Optional[str] = None):
     user = await get_current_user(request)
@@ -1193,7 +1217,18 @@ async def bulk_contact_action(request: Request, body: BulkContactAction):
     now = datetime.now(timezone.utc).isoformat()
     if body.action == "move" and body.stage:
         result = await db.crm_contacts.update_many({"id": {"$in": body.contact_ids}, "tenant_id": user["tenant_id"]}, {"$set": {"stage": body.stage, "updated_at": now}})
-        return {"message": f"{result.modified_count} contactos movidos a {body.stage}"}
+        # Auto-create deals for contacts that don't have one
+        for cid in body.contact_ids:
+            existing_deal = await db.crm_deals.find_one({"contact_id": cid, "tenant_id": user["tenant_id"]})
+            if not existing_deal:
+                contact = await db.crm_contacts.find_one({"id": cid, "tenant_id": user["tenant_id"]}, {"_id": 0})
+                if contact:
+                    deal_title = contact.get("business_name", "Oportunidad")
+                    await db.crm_deals.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "contact_id": cid, "contact_name": contact.get("business_name", ""), "company": contact.get("business_name", ""), "title": deal_title, "name": deal_title, "value": 0, "stage": body.stage, "probability": 10 if body.stage == "nuevo" else 30 if body.stage == "contactado" else 50 if body.stage == "propuesta" else 70 if body.stage == "negociacion" else 100 if body.stage == "ganado" else 0, "assigned_to": user.get("name", ""), "created_at": now, "updated_at": now})
+                    await db.crm_contacts.update_one({"id": cid}, {"$inc": {"deal_count": 1}})
+            else:
+                await db.crm_deals.update_one({"contact_id": cid, "tenant_id": user["tenant_id"]}, {"$set": {"stage": body.stage, "updated_at": now}})
+        return {"message": f"{result.modified_count} contactos movidos a {body.stage} con oportunidades creadas"}
     elif body.action == "delete":
         result = await db.crm_contacts.delete_many({"id": {"$in": body.contact_ids}, "tenant_id": user["tenant_id"]})
         await db.crm_deals.delete_many({"contact_id": {"$in": body.contact_ids}, "tenant_id": user["tenant_id"]})
@@ -1326,7 +1361,62 @@ async def list_email_lists(request: Request):
 async def create_email_list(request: Request, body: EmailListCreate):
     user = await get_current_user(request)
     now = datetime.now(timezone.utc).isoformat()
-    doc = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": body.name, "description": body.description or "", "subscriber_count": 0, "created_at": now, "updated_at": now}
+    doc = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": body.name, "description": body.description or "", "subscriber_count": 0, "lead_ids": [], "created_at": now, "updated_at": now}
+    await db.email_lists.insert_one(doc)
+    return serialize_doc(doc)
+
+@api_router.put("/email-marketing/lists/{list_id}")
+async def update_email_list(request: Request, list_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {k: v for k, v in body.items() if k not in ("id", "tenant_id", "_id") and v is not None}
+    update_data["updated_at"] = now
+    result = await db.email_lists.update_one({"id": list_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    return await db.email_lists.find_one({"id": list_id}, {"_id": 0})
+
+@api_router.delete("/email-marketing/lists/{list_id}")
+async def delete_email_list(request: Request, list_id: str):
+    user = await get_current_user(request)
+    result = await db.email_lists.delete_one({"id": list_id, "tenant_id": user["tenant_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    return {"message": "Lista eliminada"}
+
+@api_router.post("/email-marketing/lists/{list_id}/add-leads")
+async def add_leads_to_list(request: Request, list_id: str, body: Dict[str, Any] = {}):
+    """Add scored/approved leads to an email list"""
+    user = await get_current_user(request)
+    lead_ids = body.get("lead_ids", [])
+    status_filter = body.get("status", "")
+    now = datetime.now(timezone.utc).isoformat()
+    lst = await db.email_lists.find_one({"id": list_id, "tenant_id": user["tenant_id"]})
+    if not lst:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    existing_ids = lst.get("lead_ids", [])
+    if lead_ids:
+        new_ids = [lid for lid in lead_ids if lid not in existing_ids]
+    elif status_filter:
+        leads = await db.leads.find({"tenant_id": user["tenant_id"], "status": status_filter}, {"id": 1, "_id": 0}).to_list(5000)
+        new_ids = [l["id"] for l in leads if l["id"] not in existing_ids]
+    else:
+        leads = await db.leads.find({"tenant_id": user["tenant_id"], "status": {"$in": ["scored", "approved"]}}, {"id": 1, "_id": 0}).to_list(5000)
+        new_ids = [l["id"] for l in leads if l["id"] not in existing_ids]
+    all_ids = existing_ids + new_ids
+    await db.email_lists.update_one({"id": list_id}, {"$set": {"lead_ids": all_ids, "subscriber_count": len(all_ids), "updated_at": now}})
+    return {"message": f"{len(new_ids)} leads agregados a la lista", "total": len(all_ids)}
+
+@api_router.post("/email-marketing/auto-list-from-leads")
+async def auto_create_list_from_leads(request: Request, body: Dict[str, Any] = {}):
+    """Auto-create an email list from scored/approved leads"""
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    status = body.get("status", "scored")
+    name = body.get("name", f"Leads calificados - {now[:10]}")
+    leads = await db.leads.find({"tenant_id": user["tenant_id"], "status": {"$in": [status, "approved", "scored"]}}, {"id": 1, "_id": 0}).to_list(5000)
+    lead_ids = [l["id"] for l in leads]
+    doc = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": name, "description": f"Lista auto-generada con {len(lead_ids)} leads calificados", "subscriber_count": len(lead_ids), "lead_ids": lead_ids, "created_at": now, "updated_at": now}
     await db.email_lists.insert_one(doc)
     return serialize_doc(doc)
 
@@ -1343,6 +1433,25 @@ async def create_email_campaign(request: Request, body: EmailCampaignCreate):
     doc = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": body.name, "list_id": body.list_id or "", "template_id": body.template_id or "", "subject": body.subject or "", "from_name": body.from_name or "", "from_email": body.from_email or "", "status": "borrador", "sent_count": 0, "open_count": 0, "click_count": 0, "bounce_count": 0, "unsub_count": 0, "created_at": now, "updated_at": now}
     await db.email_campaigns.insert_one(doc)
     return serialize_doc(doc)
+
+@api_router.put("/email-marketing/campaigns/{campaign_id}")
+async def update_email_campaign(request: Request, campaign_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {k: v for k, v in body.items() if k not in ("id", "tenant_id", "_id") and v is not None}
+    update_data["updated_at"] = now
+    result = await db.email_campaigns.update_one({"id": campaign_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Campana no encontrada")
+    return await db.email_campaigns.find_one({"id": campaign_id}, {"_id": 0})
+
+@api_router.delete("/email-marketing/campaigns/{campaign_id}")
+async def delete_email_campaign(request: Request, campaign_id: str):
+    user = await get_current_user(request)
+    result = await db.email_campaigns.delete_one({"id": campaign_id, "tenant_id": user["tenant_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Campana no encontrada")
+    return {"message": "Campana eliminada"}
 
 @api_router.post("/email-marketing/campaigns/{campaign_id}/simulate")
 async def simulate_email_campaign(request: Request, campaign_id: str):
@@ -1408,6 +1517,20 @@ async def delete_automation(request: Request, automation_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Automatizacion no encontrada")
     return {"message": "Automatizacion eliminada"}
+
+@api_router.get("/settings/scoring")
+async def get_scoring_config(request: Request):
+    user = await get_current_user(request)
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    defaults = {"website": 20, "email": 15, "phone": 10, "address": 10, "rating_excellent": 20, "rating_good": 15, "rating_fair": 10, "reviews_100": 10, "reviews_50": 7, "reviews_10": 4, "category_match": 10, "professional_name": 5, "min_excellent": 80, "min_good": 60, "min_average": 40}
+    return tenant.get("scoring_config", defaults) if tenant else defaults
+
+@api_router.put("/settings/scoring")
+async def update_scoring_config(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    await db.tenants.update_one({"id": user["tenant_id"]}, {"$set": {"scoring_config": body, "updated_at": now}})
+    return body
 
 @api_router.get("/email-marketing/stats")
 async def email_marketing_stats(request: Request):
@@ -1696,8 +1819,7 @@ async def n8n_job_progress(request: Request, job_id: str, body: Dict[str, Any] =
 
 @api_router.post("/webhooks/chatwoot/lead")
 async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
-    """Receives new leads from Chatwoot/OptimIA Bot via n8n"""
-    api_key = request.headers.get("X-Api-Key", "")
+    """Receives new leads from Chatwoot/OptimIA Bot via n8n - upserts contact with BOT tag"""
     tenant_id = body.get("tenant_id", "")
     if not tenant_id:
         tenant = await db.tenants.find_one({}, {"_id": 0, "id": 1})
@@ -1705,22 +1827,53 @@ async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
     if not tenant_id:
         raise HTTPException(status_code=400, detail="tenant_id required")
     now = datetime.now(timezone.utc).isoformat()
-    contact = {
-        "id": str(uuid.uuid4()), "tenant_id": tenant_id, "lead_id": "",
-        "business_name": body.get("name", body.get("business_name", "Lead de OptimIA Bot")),
-        "contact_name": body.get("contact_name", body.get("name", "")),
-        "email": body.get("email", ""),
-        "phone": body.get("phone", body.get("phone_number", "")),
-        "city": body.get("city", ""),
-        "province": body.get("province", ""),
-        "category": body.get("category", ""),
-        "source": "optimia_bot",
-        "notes": body.get("message", body.get("notes", "")),
-        "stage": "nuevo", "ai_score": 0, "deal_count": 0, "total_value": 0,
-        "created_at": now, "updated_at": now
-    }
-    await db.crm_contacts.insert_one(contact)
-    return {"message": "Contact created from OptimIA Bot", "contact_id": contact["id"]}
+    email = body.get("email", "")
+    phone = body.get("phone", body.get("phone_number", ""))
+    contact_name = body.get("contact_name", body.get("name", ""))
+    business_name = body.get("business_name", body.get("name", "Lead de Bot"))
+    # Try to find existing contact by email or phone
+    existing = None
+    if email:
+        existing = await db.crm_contacts.find_one({"email": email, "tenant_id": tenant_id})
+    if not existing and phone:
+        existing = await db.crm_contacts.find_one({"phone": phone, "tenant_id": tenant_id})
+    if existing:
+        # Update existing contact
+        update_fields = {"updated_at": now, "source": "bot"}
+        if contact_name and not existing.get("contact_name"):
+            update_fields["contact_name"] = contact_name
+        if phone and not existing.get("phone"):
+            update_fields["phone"] = phone
+        if email and not existing.get("email"):
+            update_fields["email"] = email
+        if body.get("message"):
+            update_fields["notes"] = (existing.get("notes", "") + f"\n[BOT {now[:10]}] {body['message']}").strip()
+        # Add bot tag
+        tags = existing.get("tags", [])
+        if "bot" not in tags:
+            tags.append("bot")
+        update_fields["tags"] = tags
+        await db.crm_contacts.update_one({"_id": existing["_id"]}, {"$set": update_fields})
+        return {"message": "Contacto actualizado desde Bot", "contact_id": existing["id"], "action": "updated"}
+    else:
+        # Create new contact with bot tag
+        contact = {
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "lead_id": "",
+            "business_name": business_name,
+            "contact_name": contact_name,
+            "email": email,
+            "phone": phone,
+            "city": body.get("city", ""),
+            "province": body.get("province", ""),
+            "category": body.get("category", ""),
+            "source": "bot",
+            "tags": ["bot"],
+            "notes": body.get("message", body.get("notes", "")),
+            "stage": "nuevo", "ai_score": 0, "deal_count": 0, "total_value": 0,
+            "created_at": now, "updated_at": now
+        }
+        await db.crm_contacts.insert_one(contact)
+        return {"message": "Contacto creado desde Bot", "contact_id": contact["id"], "action": "created"}
 
 @api_router.post("/webhooks/resend/events")
 async def resend_events_webhook(request: Request, body: Dict[str, Any] = {}):

@@ -18,12 +18,12 @@ import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
 
 const stageColors = {
-  nuevo: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200", header: "bg-slate-50" },
-  contactado: { bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200", header: "bg-blue-50" },
-  propuesta: { bg: "bg-purple-50", text: "text-purple-700", border: "border-purple-200", header: "bg-purple-50" },
-  negociacion: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200", header: "bg-amber-50" },
-  ganado: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200", header: "bg-emerald-50" },
-  perdido: { bg: "bg-red-50", text: "text-red-700", border: "border-red-200", header: "bg-red-50" },
+  nuevo: { bg: "bg-slate-50", text: "text-slate-800", border: "border-slate-300", header: "bg-slate-200", card: "border-l-4 border-l-slate-400" },
+  contactado: { bg: "bg-blue-50", text: "text-blue-800", border: "border-blue-300", header: "bg-blue-200", card: "border-l-4 border-l-blue-500" },
+  propuesta: { bg: "bg-purple-50", text: "text-purple-800", border: "border-purple-300", header: "bg-purple-200", card: "border-l-4 border-l-purple-500" },
+  negociacion: { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-300", header: "bg-amber-200", card: "border-l-4 border-l-amber-500" },
+  ganado: { bg: "bg-emerald-50", text: "text-emerald-800", border: "border-emerald-300", header: "bg-emerald-300", card: "border-l-4 border-l-emerald-600" },
+  perdido: { bg: "bg-red-50", text: "text-red-800", border: "border-red-300", header: "bg-red-200", card: "border-l-4 border-l-red-500" },
 };
 const stageLabels = { nuevo: "Nuevo", contactado: "Contactado", propuesta: "Propuesta", negociacion: "Negociacion", ganado: "Ganado", perdido: "Perdido" };
 const stages = ["nuevo", "contactado", "propuesta", "negociacion", "ganado", "perdido"];
