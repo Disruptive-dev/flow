@@ -1840,7 +1840,7 @@ async def export_n8n_workflow():
     filepath = ROOT_DIR.parent / "n8n-workflow-spectra-prospeccion.json"
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Workflow file not found")
-    return FileResponse(path=str(filepath), media_type="application/json", filename="spectra-flow-n8n-workflow.json")
+    return FileResponse(path=str(filepath), media_type="application/octet-stream", filename="spectra-flow-n8n-workflow.json")
 
 @api_router.get("/export/leads")
 async def export_leads(request: Request):
