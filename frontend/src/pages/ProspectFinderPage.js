@@ -112,14 +112,14 @@ export default function ProspectFinderPage() {
                   </div>
                   <div>
                     <p className="font-medium text-zinc-900 text-sm">{job.category} - {job.city}, {job.province}</p>
-                    <p className="text-xs text-zinc-500">{job.quantity} requested &middot; {job.raw_count} found &middot; {job.qualified_count} qualified</p>
+                    <p className="text-xs text-zinc-500">{job.quantity} solicitados &middot; {job.raw_count} encontrados &middot; {job.qualified_count} calificados</p>
                   </div>
                 </div>
                 <Badge className={statusColors[job.status] || statusColors.pending}>{job.status}</Badge>
               </CardContent>
             </Card>
           ))}
-          {!jobs.length && <p className="text-sm text-zinc-400">No jobs yet. Start your first prospect search above.</p>}
+          {!jobs.length && <p className="text-sm text-zinc-400">No hay trabajos todavia. Inicia tu primera busqueda arriba.</p>}
         </div>
       </div>
     </div>

@@ -72,12 +72,12 @@ export default function JobsPage() {
     return (
       <div className="space-y-6 animate-fade-in max-w-3xl" data-testid="job-detail-page">
         <button onClick={() => setSelectedJob(null)} className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 transition-colors" data-testid="job-back-button">
-          <ArrowLeft className="w-4 h-4" /> Back to {t('jobs')}
+          <ArrowLeft className="w-4 h-4" /> Volver a {t('jobs')}
         </button>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-heading font-semibold text-zinc-900 tracking-tight">{selectedJob.category} - {selectedJob.city}</h1>
-            <p className="text-sm text-zinc-500 mt-1">{selectedJob.province} &middot; {selectedJob.quantity} requested</p>
+            <p className="text-sm text-zinc-500 mt-1">{selectedJob.province} &middot; {selectedJob.quantity} solicitados</p>
           </div>
           <Badge className={statusColors[selectedJob.status] || statusColors.pending}>{selectedJob.status}</Badge>
         </div>
@@ -85,11 +85,11 @@ export default function JobsPage() {
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           {[
-            { label: 'Raw Found', value: selectedJob.raw_count },
-            { label: 'Cleaned', value: selectedJob.cleaned_count },
-            { label: 'Qualified', value: selectedJob.qualified_count },
-            { label: 'Rejected', value: selectedJob.rejected_count },
-            { label: 'Approved', value: selectedJob.approved_count },
+            { label: 'Encontrados', value: selectedJob.raw_count },
+            { label: 'Limpiados', value: selectedJob.cleaned_count },
+            { label: 'Calificados', value: selectedJob.qualified_count },
+            { label: 'Rechazados', value: selectedJob.rejected_count },
+            { label: 'Aprobados', value: selectedJob.approved_count },
           ].map(({ label, value }) => (
             <Card key={label} className="border-zinc-200 rounded-xl">
               <CardContent className="p-4 text-center">
@@ -151,7 +151,7 @@ export default function JobsPage() {
     <div className="space-y-6 animate-fade-in" data-testid="jobs-list-page">
       <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('jobs')}</h1>
       {loading ? (
-        <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>
+        <div className="flex items-center gap-2 text-zinc-500"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>
       ) : (
         <div className="space-y-3">
           {jobs.map((job, i) => (
@@ -163,14 +163,14 @@ export default function JobsPage() {
                   </div>
                   <div>
                     <p className="font-medium text-zinc-900 text-sm">{job.category} - {job.city}, {job.province}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{job.quantity} requested &middot; {job.qualified_count} qualified &middot; {job.approved_count} approved</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">{job.quantity} solicitados &middot; {job.qualified_count} calificados &middot; {job.approved_count} aprobados</p>
                   </div>
                 </div>
                 <Badge className={statusColors[job.status] || statusColors.pending}>{job.status}</Badge>
               </CardContent>
             </Card>
           ))}
-          {!jobs.length && <p className="text-sm text-zinc-400">No prospecting jobs yet.</p>}
+          {!jobs.length && <p className="text-sm text-zinc-400">No hay trabajos de prospeccion todavia.</p>}
         </div>
       )}
     </div>

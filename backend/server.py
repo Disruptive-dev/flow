@@ -440,6 +440,10 @@ async def update_lead_status(request: Request, lead_id: str, body: LeadStatusUpd
     lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
     if lead and lead.get("job_id") and body.status == "approved":
         await db.prospect_jobs.update_one({"id": lead["job_id"]}, {"$inc": {"approved_count": 1}})
+    if lead and body.status == "sent_to_crm":
+        existing = await db.crm_contacts.find_one({"lead_id": lead_id, "tenant_id": user["tenant_id"]})
+        if not existing:
+            await db.crm_contacts.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "lead_id": lead_id, "business_name": lead.get("business_name", ""), "contact_name": "", "email": lead.get("email", ""), "phone": lead.get("phone", ""), "city": lead.get("city", ""), "province": lead.get("province", ""), "category": lead.get("normalized_category", ""), "source": "spectra_flow", "notes": lead.get("recommendation", ""), "stage": "nuevo", "ai_score": lead.get("ai_score", 0), "deal_count": 0, "total_value": 0, "created_at": now, "updated_at": now})
     return {"message": "Status updated", "status": body.status}
 
 @api_router.post("/leads/bulk-action")
@@ -451,7 +455,15 @@ async def bulk_lead_action(request: Request, body: BulkActionRequest):
     if not new_status:
         raise HTTPException(status_code=400, detail="Invalid action")
     result = await db.leads.update_many({"id": {"$in": body.lead_ids}, "tenant_id": user["tenant_id"]}, {"$set": {"status": new_status, "updated_at": now}})
-    return {"message": f"{result.modified_count} leads updated to {new_status}"}
+    # If sending to CRM, also create CRM contacts
+    if body.action == "send_to_crm":
+        for lead_id in body.lead_ids:
+            lead = await db.leads.find_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+            if lead:
+                existing = await db.crm_contacts.find_one({"lead_id": lead_id, "tenant_id": user["tenant_id"]})
+                if not existing:
+                    await db.crm_contacts.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "lead_id": lead_id, "business_name": lead.get("business_name", ""), "contact_name": "", "email": lead.get("email", ""), "phone": lead.get("phone", ""), "city": lead.get("city", ""), "province": lead.get("province", ""), "category": lead.get("normalized_category", ""), "source": "spectra_flow", "notes": lead.get("recommendation", ""), "stage": "nuevo", "ai_score": lead.get("ai_score", 0), "deal_count": 0, "total_value": 0, "created_at": now, "updated_at": now})
+    return {"message": f"{result.modified_count} leads actualizados a {new_status}"}
 
 # ==================== CAMPAIGNS ====================
 
@@ -636,6 +648,141 @@ async def retry_crm_sync(request: Request, log_id: str):
     now = datetime.now(timezone.utc).isoformat()
     await db.crm_sync_logs.update_one({"id": log_id, "tenant_id": user["tenant_id"]}, {"$set": {"status": "synced", "error": "", "synced_at": now}})
     return {"message": "Retry successful"}
+
+# ==================== CRM MODULE ====================
+
+class CrmContactCreate(BaseModel):
+    lead_id: Optional[str] = ""
+    business_name: str
+    contact_name: Optional[str] = ""
+    email: Optional[str] = ""
+    phone: Optional[str] = ""
+    city: Optional[str] = ""
+    province: Optional[str] = ""
+    category: Optional[str] = ""
+    source: Optional[str] = "spectra_flow"
+    notes: Optional[str] = ""
+
+class CrmDealCreate(BaseModel):
+    contact_id: str
+    title: str
+    value: Optional[float] = 0
+    stage: Optional[str] = "nuevo"
+    assigned_to: Optional[str] = ""
+
+class CrmDealUpdate(BaseModel):
+    title: Optional[str] = None
+    value: Optional[float] = None
+    stage: Optional[str] = None
+    assigned_to: Optional[str] = None
+
+class CrmNoteCreate(BaseModel):
+    contact_id: str
+    content: str
+    note_type: Optional[str] = "nota"
+
+@api_router.get("/crm/contacts")
+async def list_crm_contacts(request: Request, search: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"tenant_id": user["tenant_id"]}
+    if search:
+        query["$or"] = [{"business_name": {"$regex": search, "$options": "i"}}, {"contact_name": {"$regex": search, "$options": "i"}}, {"email": {"$regex": search, "$options": "i"}}]
+    contacts = await db.crm_contacts.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return contacts
+
+@api_router.post("/crm/contacts")
+async def create_crm_contact(request: Request, body: CrmContactCreate):
+    user = await get_current_user(request)
+    contact_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    contact = {"id": contact_id, "tenant_id": user["tenant_id"], "lead_id": body.lead_id or "", "business_name": body.business_name, "contact_name": body.contact_name or "", "email": body.email or "", "phone": body.phone or "", "city": body.city or "", "province": body.province or "", "category": body.category or "", "source": body.source or "spectra_flow", "notes": body.notes or "", "stage": "nuevo", "deal_count": 0, "total_value": 0, "created_at": now, "updated_at": now}
+    await db.crm_contacts.insert_one(contact)
+    if body.lead_id:
+        await db.leads.update_one({"id": body.lead_id}, {"$set": {"status": "sent_to_crm", "updated_at": now}})
+    return serialize_doc(contact)
+
+@api_router.post("/crm/contacts/from-leads")
+async def create_contacts_from_leads(request: Request, body: CrmPushRequest):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    created = []
+    for lead_id in body.lead_ids:
+        lead = await db.leads.find_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+        if not lead:
+            continue
+        existing = await db.crm_contacts.find_one({"lead_id": lead_id, "tenant_id": user["tenant_id"]})
+        if existing:
+            continue
+        contact = {"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "lead_id": lead_id, "business_name": lead.get("business_name", ""), "contact_name": "", "email": lead.get("email", ""), "phone": lead.get("phone", ""), "city": lead.get("city", ""), "province": lead.get("province", ""), "category": lead.get("normalized_category", ""), "source": "spectra_flow", "notes": lead.get("recommendation", ""), "stage": "nuevo", "ai_score": lead.get("ai_score", 0), "deal_count": 0, "total_value": 0, "created_at": now, "updated_at": now}
+        await db.crm_contacts.insert_one(contact)
+        await db.leads.update_one({"id": lead_id}, {"$set": {"status": "sent_to_crm", "updated_at": now}})
+        created.append(serialize_doc(contact))
+    return {"message": f"{len(created)} contactos creados en el CRM", "contacts": created}
+
+@api_router.get("/crm/contacts/{contact_id}")
+async def get_crm_contact(request: Request, contact_id: str):
+    user = await get_current_user(request)
+    contact = await db.crm_contacts.find_one({"id": contact_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contacto no encontrado")
+    deals = await db.crm_deals.find({"contact_id": contact_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    notes = await db.crm_notes.find({"contact_id": contact_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    return {**contact, "deals": deals, "notes": notes}
+
+@api_router.get("/crm/deals")
+async def list_crm_deals(request: Request, stage: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"tenant_id": user["tenant_id"]}
+    if stage:
+        query["stage"] = stage
+    deals = await db.crm_deals.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return deals
+
+@api_router.post("/crm/deals")
+async def create_crm_deal(request: Request, body: CrmDealCreate):
+    user = await get_current_user(request)
+    deal_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    contact = await db.crm_contacts.find_one({"id": body.contact_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    deal = {"id": deal_id, "tenant_id": user["tenant_id"], "contact_id": body.contact_id, "contact_name": contact.get("business_name", "") if contact else "", "title": body.title, "value": body.value or 0, "stage": body.stage or "nuevo", "assigned_to": body.assigned_to or user.get("name", ""), "created_at": now, "updated_at": now}
+    await db.crm_deals.insert_one(deal)
+    await db.crm_contacts.update_one({"id": body.contact_id}, {"$inc": {"deal_count": 1, "total_value": body.value or 0}})
+    return serialize_doc(deal)
+
+@api_router.put("/crm/deals/{deal_id}")
+async def update_crm_deal(request: Request, deal_id: str, body: CrmDealUpdate):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {k: v for k, v in body.model_dump().items() if v is not None}
+    update_data["updated_at"] = now
+    result = await db.crm_deals.update_one({"id": deal_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Oportunidad no encontrada")
+    updated = await db.crm_deals.find_one({"id": deal_id}, {"_id": 0})
+    return updated
+
+@api_router.post("/crm/notes")
+async def create_crm_note(request: Request, body: CrmNoteCreate):
+    user = await get_current_user(request)
+    note_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
+    note = {"id": note_id, "tenant_id": user["tenant_id"], "contact_id": body.contact_id, "content": body.content, "note_type": body.note_type or "nota", "author": user.get("name", ""), "created_at": now}
+    await db.crm_notes.insert_one(note)
+    return serialize_doc(note)
+
+@api_router.get("/crm/stats")
+async def get_crm_stats(request: Request):
+    user = await get_current_user(request)
+    tid = user["tenant_id"]
+    total_contacts = await db.crm_contacts.count_documents({"tenant_id": tid})
+    total_deals = await db.crm_deals.count_documents({"tenant_id": tid})
+    stages = ["nuevo", "contactado", "propuesta", "negociacion", "ganado", "perdido"]
+    stage_counts = {}
+    for s in stages:
+        stage_counts[s] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": s})
+    pipeline = [{"$match": {"tenant_id": tid, "stage": "ganado"}}, {"$group": {"_id": None, "total": {"$sum": "$value"}}}]
+    won_value = await db.crm_deals.aggregate(pipeline).to_list(1)
+    return {"total_contacts": total_contacts, "total_deals": total_deals, "stage_counts": stage_counts, "won_value": won_value[0]["total"] if won_value else 0}
 
 # ==================== ANALYTICS ====================
 

@@ -2,7 +2,7 @@ import { createContext, useContext, useState } from 'react';
 
 const translations = {
   en: {
-    dashboard: "Dashboard", prospect_finder: "Prospect Finder", jobs: "Jobs", leads: "Leads",
+    dashboard: "Dashboard", prospect_finder: "Prospect Finder", jobs: "Flow IA", leads: "Leads",
     campaigns: "Campaigns", templates: "Templates", domains: "Domains", crm_sync: "Spectra CRM",
     analytics: "Analytics", settings: "Settings", search_prospects: "Search Prospects",
     province: "Province", city: "City / Locality", category: "Industry / Category",
@@ -43,9 +43,11 @@ const translations = {
     normalized_category: "Normalized Category", raw_category: "Raw Category",
     processing: "Processing", pending: "Pending", search: "Search...",
     create: "Create", edit: "Edit", close: "Close",
+    pipeline_overview: "Pipeline Overview",
+    leads_sent_to_crm: "Sent to CRM",
   },
   es: {
-    dashboard: "Panel Principal", prospect_finder: "Buscador de Prospectos", jobs: "Trabajos",
+    dashboard: "Panel Principal", prospect_finder: "Buscador de Prospectos", jobs: "Flow IA",
     leads: "Leads", campaigns: "Campanas", templates: "Plantillas", domains: "Dominios",
     crm_sync: "Spectra CRM", analytics: "Analisis", settings: "Configuracion",
     search_prospects: "Buscar Prospectos", province: "Provincia", city: "Ciudad / Localidad",
@@ -91,6 +93,8 @@ const translations = {
     normalized_category: "Categoria Normalizada", raw_category: "Categoria Original",
     processing: "Procesando", pending: "Pendiente", search: "Buscar...",
     create: "Crear", edit: "Editar", close: "Cerrar",
+    pipeline_overview: "Vista del Pipeline",
+    leads_sent_to_crm: "Enviados al CRM",
   }
 };
 

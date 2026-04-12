@@ -16,34 +16,34 @@ export default function AnalyticsPage() {
     api.get('/analytics').then(r => setStats(r.data)).catch(console.error).finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="flex items-center gap-2 text-zinc-400 animate-fade-in"><Loader2 className="w-4 h-4 animate-spin" /> Loading analytics...</div>;
+  if (loading) return <div className="flex items-center gap-2 text-zinc-400 animate-fade-in"><Loader2 className="w-4 h-4 animate-spin" /> Cargando analisis...</div>;
 
   const pipelineData = [
-    { name: 'Raw', value: stats?.raw_leads || 0 },
-    { name: 'Cleaned', value: stats?.cleaned_leads || 0 },
-    { name: 'Scored', value: stats?.scored_leads || 0 },
-    { name: 'Approved', value: stats?.approved_leads || 0 },
-    { name: 'Rejected', value: stats?.rejected_leads || 0 },
+    { name: 'Sin procesar', value: stats?.raw_leads || 0 },
+    { name: 'Limpiados', value: stats?.cleaned_leads || 0 },
+    { name: 'Calificados', value: stats?.scored_leads || 0 },
+    { name: 'Aprobados', value: stats?.approved_leads || 0 },
+    { name: 'Rechazados', value: stats?.rejected_leads || 0 },
   ];
 
   const emailData = [
-    { name: 'Sent', value: stats?.emails_sent || 0 },
-    { name: 'Opens', value: stats?.opens || 0 },
-    { name: 'Clicks', value: stats?.clicks || 0 },
-    { name: 'Replies', value: stats?.replies || 0 },
-    { name: 'Interested', value: stats?.interested || 0 },
+    { name: 'Enviados', value: stats?.emails_sent || 0 },
+    { name: 'Aperturas', value: stats?.opens || 0 },
+    { name: 'Clics', value: stats?.clicks || 0 },
+    { name: 'Respuestas', value: stats?.replies || 0 },
+    { name: 'Interesados', value: stats?.interested || 0 },
     { name: 'CRM', value: stats?.crm_handoffs || 0 },
   ];
 
   const pieData = [
-    { name: 'Qualified', value: stats?.qualified_leads || 0 },
-    { name: 'Rejected', value: stats?.rejected_leads || 0 },
-    { name: 'Other', value: Math.max(0, (stats?.total_leads || 0) - (stats?.qualified_leads || 0) - (stats?.rejected_leads || 0)) },
+    { name: 'Calificados', value: stats?.qualified_leads || 0 },
+    { name: 'Rechazados', value: stats?.rejected_leads || 0 },
+    { name: 'Otros', value: Math.max(0, (stats?.total_leads || 0) - (stats?.qualified_leads || 0) - (stats?.rejected_leads || 0)) },
   ];
 
   const metricCards = [
     { key: 'jobs_created', icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { key: 'total_leads', label: 'Total Leads', icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-50' },
+    { key: 'total_leads', label: 'Total de Leads', icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-50' },
     { key: 'qualified_leads', icon: TrendingUp, color: 'text-indigo-600', bg: 'bg-indigo-50' },
     { key: 'approved_leads', icon: CheckCircle2, color: 'text-green-600', bg: 'bg-green-50' },
     { key: 'rejected_leads', icon: XCircle, color: 'text-red-600', bg: 'bg-red-50' },
@@ -52,7 +52,7 @@ export default function AnalyticsPage() {
     { key: 'clicks', icon: MousePointerClick, color: 'text-cyan-600', bg: 'bg-cyan-50' },
     { key: 'replies', icon: MessageSquare, color: 'text-green-600', bg: 'bg-green-50' },
     { key: 'interested', icon: ThumbsUp, color: 'text-orange-600', bg: 'bg-orange-50' },
-    { key: 'crm_handoffs', label: 'CRM Handoffs', icon: Send, color: 'text-purple-600', bg: 'bg-purple-50' },
+    { key: 'crm_handoffs', label: 'Enviados al CRM', icon: Send, color: 'text-purple-600', bg: 'bg-purple-50' },
   ];
 
   return (
@@ -77,10 +77,10 @@ export default function AnalyticsPage() {
       {/* Conversion Rates */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {[
-          { label: 'Qualification Rate', value: `${stats?.qualification_rate || 0}%` },
-          { label: 'Approval Rate', value: `${stats?.approval_rate || 0}%` },
-          { label: 'Email Open Rate', value: `${stats?.email_open_rate || 0}%` },
-          { label: 'Reply Rate', value: `${stats?.reply_rate || 0}%` },
+          { label: 'Tasa de Calificacion', value: `${stats?.qualification_rate || 0}%` },
+          { label: 'Tasa de Aprobacion', value: `${stats?.approval_rate || 0}%` },
+          { label: 'Tasa de Apertura Email', value: `${stats?.email_open_rate || 0}%` },
+          { label: 'Tasa de Respuesta', value: `${stats?.reply_rate || 0}%` },
         ].map(({ label, value }) => (
           <Card key={label} className="border-zinc-200 rounded-xl">
             <CardContent className="p-5 text-center">
@@ -95,7 +95,7 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Card className="border-zinc-200 rounded-xl">
           <CardContent className="p-6">
-            <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Lead Pipeline</h3>
+            <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Pipeline de Leads</h3>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={pipelineData}>
@@ -112,7 +112,7 @@ export default function AnalyticsPage() {
 
         <Card className="border-zinc-200 rounded-xl">
           <CardContent className="p-6">
-            <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Email Engagement</h3>
+            <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Engagement de Email</h3>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={emailData}>
@@ -130,7 +130,7 @@ export default function AnalyticsPage() {
 
       <Card className="border-zinc-200 rounded-xl">
         <CardContent className="p-6">
-          <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Lead Distribution</h3>
+          <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Distribucion de Leads</h3>
           <div className="h-[250px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>

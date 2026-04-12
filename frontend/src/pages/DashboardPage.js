@@ -82,7 +82,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 border-zinc-200 rounded-xl">
           <CardContent className="p-6">
-            <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">Pipeline Overview</h3>
+            <h3 className="text-base font-heading font-medium text-zinc-900 mb-4">{t('pipeline_overview')}</h3>
             <div className="h-[280px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData}>
