@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import api from '@/lib/api';
+import api, { downloadFile } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -166,10 +166,7 @@ export default function CrmPage() {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-crm-btn">
             {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />} Importar Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => {
-            const token = localStorage.getItem('sf_access_token');
-            window.open(`${process.env.REACT_APP_BACKEND_URL}/api/export/crm-contacts?token=${token}`, '_blank');
-          }} data-testid="export-crm-btn">
+          <Button variant="outline" size="sm" onClick={() => downloadFile('/export/crm-contacts', 'crm_contacts_spectra.xlsx')} data-testid="export-crm-btn">
             <Download className="w-4 h-4 mr-1.5" /> Exportar
           </Button>
           <Button size="sm" onClick={() => setShowCreateContact(true)} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-contact-btn">

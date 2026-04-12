@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
-import api from '@/lib/api';
+import api, { downloadFile } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -136,10 +136,7 @@ export default function LeadsPage() {
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-leads-btn">
             {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />} Importar Excel
           </Button>
-          <Button variant="outline" size="sm" onClick={() => {
-            const token = localStorage.getItem('sf_access_token');
-            window.open(`${process.env.REACT_APP_BACKEND_URL}/api/export/leads?token=${token}`, '_blank');
-          }} data-testid="export-leads-btn">
+          <Button variant="outline" size="sm" onClick={() => downloadFile('/export/leads', 'leads_spectra.xlsx')} data-testid="export-leads-btn">
             <Download className="w-4 h-4 mr-1.5" /> Exportar
           </Button>
           <span className="text-sm text-zinc-500">{total} leads</span>

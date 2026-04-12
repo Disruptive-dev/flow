@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useAuth } from '@/contexts/AuthContext';
-import api from '@/lib/api';
+import api, { downloadFile } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -292,10 +292,7 @@ export default function SettingsPage() {
                     <Badge className={intg.status === 'connected' || intg.status === 'configured' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{intg.status === 'connected' ? 'Conectado' : intg.status === 'configured' ? 'Configurado' : intg.status === 'not_configured' ? 'Sin configurar' : intg.status?.replace(/_/g, ' ')}</Badge>
                     {intg.last_sync && <span className="text-xs text-zinc-400">Ultima sync: {new Date(intg.last_sync).toLocaleString()}</span>}
                     {intg.name === 'n8n' && (
-                      <Button size="sm" variant="outline" className="ml-auto" onClick={() => {
-                        const token = localStorage.getItem('sf_access_token');
-                        window.open(`${process.env.REACT_APP_BACKEND_URL}/api/export/n8n-workflow?token=${token}`, '_blank');
-                      }} data-testid="download-n8n-workflow">
+                      <Button size="sm" variant="outline" className="ml-auto" onClick={() => downloadFile('/export/n8n-workflow', 'spectra-flow-n8n-workflow.json')} data-testid="download-n8n-workflow">
                         <Download className="w-3.5 h-3.5 mr-1.5" /> Descargar Workflow n8n
                       </Button>
                     )}

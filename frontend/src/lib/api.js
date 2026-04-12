@@ -66,4 +66,14 @@ export function formatApiError(detail) {
   return String(detail);
 }
 
+export function downloadFile(apiPath, filename) {
+  const token = localStorage.getItem('sf_access_token');
+  const url = `${API_BASE}/api${apiPath}${apiPath.includes('?') ? '&' : '?'}token=${token}`;
+  const iframe = document.createElement('iframe');
+  iframe.style.display = 'none';
+  iframe.src = url;
+  document.body.appendChild(iframe);
+  setTimeout(() => document.body.removeChild(iframe), 10000);
+}
+
 export default api;
