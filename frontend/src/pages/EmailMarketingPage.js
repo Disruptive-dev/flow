@@ -6,16 +6,17 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Progress } from '@/components/ui/progress';
-import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clock, CheckCircle2, X, FileText } from 'lucide-react';
-import { toast } from 'sonner';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
+import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clock, CheckCircle2, X, FileText, Pencil, Trash2, GripVertical } from 'lucide-react';
+import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import FlowBotButton from '@/components/FlowBotButton';
 
 const stepTypeIcons = { email: Mail, wait: Clock, condition: Zap };
 const stepTypeLabels = { email: "Enviar Email", wait: "Esperar", condition: "Condicion" };
+const triggerLabels = { manual: "Manual", lead_approved: "Lead aprobado", lead_scored: "Lead calificado", contact_created: "Contacto creado", form_submitted: "Formulario enviado" };
 
 export default function EmailMarketingPage() {
   const navigate = useNavigate();
@@ -33,6 +34,9 @@ export default function EmailMarketingPage() {
   const [newCampaignTemplate, setNewCampaignTemplate] = useState('');
   const [newCampaignList, setNewCampaignList] = useState('');
   const [newAutoName, setNewAutoName] = useState('');
+  const [editingAutomation, setEditingAutomation] = useState(null);
+  const [editSteps, setEditSteps] = useState([]);
+  const [editTrigger, setEditTrigger] = useState('manual');
 
   const fetchData = async () => {
     try {
@@ -86,6 +90,57 @@ export default function EmailMarketingPage() {
       setAutomations(prev => [data, ...prev]);
       setNewAutoName(''); setShowCreateAutomation(false);
       toast.success('Automatizacion creada con flujo por defecto');
+    } catch { toast.error('Error'); }
+  };
+
+  const startEditAutomation = (auto) => {
+    setEditingAutomation(auto);
+    setEditSteps([...(auto.steps || [])]);
+    setEditTrigger(auto.trigger || 'manual');
+  };
+
+  const addStep = (type) => {
+    const newStep = type === 'email'
+      ? { type: 'email', delay_days: 0, subject: 'Nuevo email', template: '' }
+      : type === 'wait'
+      ? { type: 'wait', delay_days: 2, subject: '', template: '' }
+      : { type: 'condition', delay_days: 0, subject: 'Si abrio email', template: '' };
+    setEditSteps(prev => [...prev, newStep]);
+  };
+
+  const removeStep = (idx) => setEditSteps(prev => prev.filter((_, i) => i !== idx));
+
+  const updateStep = (idx, field, value) => {
+    setEditSteps(prev => prev.map((s, i) => i === idx ? { ...s, [field]: value } : s));
+  };
+
+  const saveAutomation = async () => {
+    if (!editingAutomation) return;
+    try {
+      const { data } = await api.put(`/email-marketing/automations/${editingAutomation.id}`, {
+        steps: editSteps,
+        trigger: editTrigger
+      });
+      setAutomations(prev => prev.map(a => a.id === editingAutomation.id ? data : a));
+      setEditingAutomation(null);
+      toast.success('Automatizacion actualizada');
+    } catch { toast.error('Error al guardar'); }
+  };
+
+  const deleteAutomation = async (id) => {
+    try {
+      await api.delete(`/email-marketing/automations/${id}`);
+      setAutomations(prev => prev.filter(a => a.id !== id));
+      toast.success('Automatizacion eliminada');
+    } catch { toast.error('Error al eliminar'); }
+  };
+
+  const toggleAutomationStatus = async (auto) => {
+    const newStatus = auto.status === 'activa' ? 'borrador' : 'activa';
+    try {
+      const { data } = await api.put(`/email-marketing/automations/${auto.id}`, { status: newStatus });
+      setAutomations(prev => prev.map(a => a.id === auto.id ? data : a));
+      toast.success(`Automatizacion ${newStatus === 'activa' ? 'activada' : 'pausada'}`);
     } catch { toast.error('Error'); }
   };
 
@@ -195,7 +250,7 @@ export default function EmailMarketingPage() {
           </div>
         </TabsContent>
 
-        {/* Automations Tab */}
+        {/* Automations Tab - Editable */}
         <TabsContent value="automations">
           <div className="space-y-4">
             <div className="flex justify-end">
@@ -219,9 +274,22 @@ export default function EmailMarketingPage() {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <h3 className="font-heading font-medium text-zinc-900">{auto.name}</h3>
-                        <Badge className={auto.status === 'activa' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{auto.status}</Badge>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge className={auto.status === 'activa' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{auto.status}</Badge>
+                          <Badge variant="outline" className="text-[10px]">{triggerLabels[auto.trigger] || auto.trigger}</Badge>
+                        </div>
                       </div>
-                      <div className="text-xs text-zinc-500">{auto.steps?.length || 0} pasos</div>
+                      <div className="flex items-center gap-2">
+                        <Button size="sm" variant="outline" onClick={() => toggleAutomationStatus(auto)} data-testid={`automation-toggle-${i}`}>
+                          {auto.status === 'activa' ? 'Pausar' : 'Activar'}
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => startEditAutomation(auto)} data-testid={`automation-edit-${i}`}>
+                          <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
+                        </Button>
+                        <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-700" onClick={() => deleteAutomation(auto.id)} data-testid={`automation-delete-${i}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
                     </div>
                     {/* Visual Workflow */}
                     <div className="flex items-center gap-1 overflow-x-auto pb-2">
@@ -245,6 +313,105 @@ export default function EmailMarketingPage() {
               {!automations.length && <p className="text-sm text-zinc-400">No hay automatizaciones. Crea la primera para configurar un flujo de emails.</p>}
             </div>
           </div>
+
+          {/* Edit Automation Dialog */}
+          <Dialog open={!!editingAutomation} onOpenChange={(open) => !open && setEditingAutomation(null)}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle className="font-heading">Editar Automatizacion: {editingAutomation?.name}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-6 mt-4">
+                {/* Trigger */}
+                <div>
+                  <Label className="text-sm mb-2 block font-medium">Disparador</Label>
+                  <Select value={editTrigger} onValueChange={setEditTrigger}>
+                    <SelectTrigger data-testid="edit-trigger"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(triggerLabels).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Separator />
+
+                {/* Steps */}
+                <div>
+                  <Label className="text-sm mb-3 block font-medium">Pasos del flujo ({editSteps.length})</Label>
+                  <div className="space-y-3">
+                    {editSteps.map((step, idx) => {
+                      const Icon = stepTypeIcons[step.type] || Mail;
+                      return (
+                        <div key={idx} className={`p-4 rounded-lg border ${step.type === 'email' ? 'border-blue-200 bg-blue-50/50' : step.type === 'wait' ? 'border-amber-200 bg-amber-50/50' : 'border-purple-200 bg-purple-50/50'}`} data-testid={`edit-step-${idx}`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs"><Icon className="w-3 h-3 mr-1" /> Paso {idx + 1}</Badge>
+                            </div>
+                            <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-600 h-7 w-7 p-0" onClick={() => removeStep(idx)}>
+                              <X className="w-3.5 h-3.5" />
+                            </Button>
+                          </div>
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <Label className="text-[10px] mb-1 block text-zinc-500">Tipo</Label>
+                              <Select value={step.type} onValueChange={v => updateStep(idx, 'type', v)}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="email">Enviar Email</SelectItem>
+                                  <SelectItem value="wait">Esperar</SelectItem>
+                                  <SelectItem value="condition">Condicion</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div>
+                              <Label className="text-[10px] mb-1 block text-zinc-500">{step.type === 'wait' ? 'Dias de espera' : 'Asunto / Descripcion'}</Label>
+                              {step.type === 'wait' ? (
+                                <Input type="number" min={0} value={step.delay_days} onChange={e => updateStep(idx, 'delay_days', parseInt(e.target.value) || 0)} className="h-8 text-xs" />
+                              ) : (
+                                <Input value={step.subject} onChange={e => updateStep(idx, 'subject', e.target.value)} className="h-8 text-xs" placeholder={step.type === 'condition' ? 'Ej: Si abrio email' : 'Asunto del email'} />
+                              )}
+                            </div>
+                            {step.type === 'email' && (
+                              <div>
+                                <Label className="text-[10px] mb-1 block text-zinc-500">Plantilla</Label>
+                                <Select value={step.template || 'none'} onValueChange={v => updateStep(idx, 'template', v === 'none' ? '' : v)}>
+                                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="none">Sin plantilla</SelectItem>
+                                    {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Add Step Buttons */}
+                  <div className="flex gap-2 mt-4">
+                    <Button size="sm" variant="outline" onClick={() => addStep('email')} className="text-blue-600 border-blue-200" data-testid="add-step-email">
+                      <Mail className="w-3.5 h-3.5 mr-1" /> + Email
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => addStep('wait')} className="text-amber-600 border-amber-200" data-testid="add-step-wait">
+                      <Clock className="w-3.5 h-3.5 mr-1" /> + Espera
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => addStep('condition')} className="text-purple-600 border-purple-200" data-testid="add-step-condition">
+                      <Zap className="w-3.5 h-3.5 mr-1" /> + Condicion
+                    </Button>
+                  </div>
+                </div>
+
+                <Separator />
+                <div className="flex gap-3">
+                  <Button onClick={saveAutomation} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-automation-btn">
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Guardar Cambios
+                  </Button>
+                  <Button variant="outline" onClick={() => setEditingAutomation(null)}>Cancelar</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Lists Tab */}

@@ -165,6 +165,13 @@ class SettingsUpdate(BaseModel):
     logo_url: Optional[str] = None
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
+    industry: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    website: Optional[str] = None
+    tax_id: Optional[str] = None
+    country: Optional[str] = None
+    description: Optional[str] = None
     sender_defaults: Optional[Dict[str, str]] = None
 
 class IntegrationUpdate(BaseModel):
@@ -1044,6 +1051,20 @@ async def update_settings(request: Request, body: SettingsUpdate):
         update_data["branding.primary_color"] = body.primary_color
     if body.secondary_color is not None:
         update_data["branding.secondary_color"] = body.secondary_color
+    if body.industry is not None:
+        update_data["branding.industry"] = body.industry
+    if body.phone is not None:
+        update_data["branding.phone"] = body.phone
+    if body.address is not None:
+        update_data["branding.address"] = body.address
+    if body.website is not None:
+        update_data["branding.website"] = body.website
+    if body.tax_id is not None:
+        update_data["branding.tax_id"] = body.tax_id
+    if body.country is not None:
+        update_data["branding.country"] = body.country
+    if body.description is not None:
+        update_data["branding.description"] = body.description
     if body.sender_defaults is not None:
         update_data["sender_defaults"] = body.sender_defaults
     update_data["updated_at"] = now
@@ -1294,6 +1315,33 @@ async def create_automation(request: Request, body: AutomationCreate):
     await db.email_automations.insert_one(doc)
     return serialize_doc(doc)
 
+@api_router.put("/email-marketing/automations/{automation_id}")
+async def update_automation(request: Request, automation_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {"updated_at": now}
+    if "name" in body:
+        update_data["name"] = body["name"]
+    if "trigger" in body:
+        update_data["trigger"] = body["trigger"]
+    if "steps" in body:
+        update_data["steps"] = body["steps"]
+    if "status" in body:
+        update_data["status"] = body["status"]
+    result = await db.email_automations.update_one({"id": automation_id, "tenant_id": user["tenant_id"]}, {"$set": update_data})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Automatizacion no encontrada")
+    updated = await db.email_automations.find_one({"id": automation_id}, {"_id": 0})
+    return updated
+
+@api_router.delete("/email-marketing/automations/{automation_id}")
+async def delete_automation(request: Request, automation_id: str):
+    user = await get_current_user(request)
+    result = await db.email_automations.delete_one({"id": automation_id, "tenant_id": user["tenant_id"]})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Automatizacion no encontrada")
+    return {"message": "Automatizacion eliminada"}
+
 @api_router.get("/email-marketing/stats")
 async def email_marketing_stats(request: Request):
     user = await get_current_user(request)
@@ -1352,26 +1400,56 @@ async def ai_flow_bot(request: Request, body: Dict[str, Any] = {}):
         context_data["emails_enviados"] = em_stats[0].get("sent", 0)
         context_data["emails_abiertos"] = em_stats[0].get("opens", 0)
         context_data["emails_respondidos"] = em_stats[0].get("replies", 0)
+    # Fetch detailed data for specific queries
+    specific_data = ""
+    if question:
+        q_lower = question.lower()
+        # Search campaigns by name
+        all_campaigns = await db.campaigns.find({"tenant_id": tid}, {"_id": 0}).to_list(50)
+        for c in all_campaigns:
+            if c.get("name", "").lower() in q_lower or any(w in q_lower for w in c.get("name", "").lower().split() if len(w) > 3):
+                specific_data += f"\nCampana '{c['name']}': estado={c.get('status','')}, leads={c.get('lead_count',0)}, enviados={c.get('sent_count',0)}, aperturas={c.get('open_count',0)}, clics={c.get('click_count',0)}, respuestas={c.get('reply_count',0)}, interesados={c.get('interested_count',0)}, al CRM={c.get('crm_count',0)}"
+        # Search deals by name
+        all_deals = await db.crm_deals.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
+        for d in all_deals:
+            if d.get("name", "").lower() in q_lower or any(w in q_lower for w in d.get("name", "").lower().split() if len(w) > 3):
+                specific_data += f"\nOportunidad '{d['name']}': etapa={d.get('stage','')}, valor=${d.get('value',0)}, contacto={d.get('contact_name','')}, empresa={d.get('company','')}, probabilidad={d.get('probability',0)}%"
+        # Search contacts by name
+        all_contacts = await db.crm_contacts.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
+        for ct in all_contacts:
+            bname = ct.get("business_name", ct.get("company", "")).lower()
+            cname = ct.get("contact_name", "").lower()
+            if bname and bname in q_lower or cname and cname in q_lower or any(w in q_lower for w in bname.split() if len(w) > 3):
+                specific_data += f"\nContacto CRM '{ct.get('business_name', ct.get('company',''))}': nombre={ct.get('contact_name','')}, email={ct.get('email','')}, etapa={ct.get('stage','')}, score={ct.get('ai_score',0)}, fuente={ct.get('source','')}"
+        # Search leads by name
+        all_leads = await db.leads.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
+        for l in all_leads:
+            if l.get("business_name", "").lower() in q_lower or any(w in q_lower for w in l.get("business_name", "").lower().split() if len(w) > 3):
+                specific_data += f"\nLead '{l['business_name']}': score={l.get('ai_score',0)}, calidad={l.get('quality_level','')}, estado={l.get('status','')}, email={l.get('email','')}, ciudad={l.get('city','')}, categoria={l.get('normalized_category','')}"
+        # Search email marketing campaigns
+        all_em_campaigns = await db.email_campaigns.find({"tenant_id": tid}, {"_id": 0}).to_list(50)
+        for ec in all_em_campaigns:
+            if ec.get("name", "").lower() in q_lower or any(w in q_lower for w in ec.get("name", "").lower().split() if len(w) > 3):
+                specific_data += f"\nCampana Email '{ec['name']}': estado={ec.get('status','')}, enviados={ec.get('sent_count',0)}, aperturas={ec.get('open_count',0)}, clics={ec.get('click_count',0)}, rebotes={ec.get('bounce_count',0)}"
     import json
+    system_context = f"Eres Flow IA, el asistente de analisis inteligente de Spectra Flow. Datos globales del usuario: {json.dumps(context_data)}."
+    if specific_data:
+        system_context += f"\n\nDatos especificos encontrados:{specific_data}"
+    system_context += "\nResponde en espanol. Se conciso, usa bullets, maximo 8 lineas. Da recomendaciones accionables basadas en los datos reales. Si te preguntan algo especifico sobre una campana, oportunidad, contacto o lead, usa los datos especificos para responder con precision."
     prompt = question if question else f"El usuario esta en la seccion '{section}'. Analiza sus datos y dame recomendaciones."
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"flowbot-{user['_id']}-{section}", system_message=f"Eres Flow IA, el asistente de analisis inteligente de Spectra Flow. Datos actuales del usuario: {json.dumps(context_data)}. Responde en espanol. Se conciso, usa bullets, maximo 5-6 lineas. Da recomendaciones accionables basadas en los datos reales. Si te preguntan algo especifico, responde con datos concretos.")
+        chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"flowbot-{user['_id']}-{section}", system_message=system_context)
         response = await chat.send_message(UserMessage(text=prompt))
         return {"response": response, "context": context_data}
     except Exception as e:
         recommendations = []
+        if specific_data:
+            recommendations.append(f"Datos encontrados:{specific_data}")
         if context_data.get("scored_leads", 0) > 0:
-            recommendations.append(f"Tenes {context_data['scored_leads']} leads calificados sin revisar. Aprobá los mejores en Leads.")
-        if context_data.get("approved_leads", 0) > 0 and context_data.get("campaigns", 0) == 0:
-            recommendations.append(f"Tenes {context_data['approved_leads']} leads aprobados. Crea una campana en Email Marketing.")
-        if context_data.get("crm_contacts", 0) > 0 and context_data.get("deals", 0) == 0:
-            recommendations.append(f"Tenes {context_data['crm_contacts']} contactos en CRM sin oportunidades. Crea oportunidades.")
-        if context_data.get("emails_enviados", 0) > 0:
-            open_rate = round((context_data.get("emails_abiertos", 0) / max(context_data.get("emails_enviados", 1), 1)) * 100)
-            recommendations.append(f"Tasa de apertura: {open_rate}%. {'Buen ratio!' if open_rate > 30 else 'Considera mejorar los asuntos de tus emails.'}")
+            recommendations.append(f"Tenes {context_data['scored_leads']} leads calificados sin revisar.")
         if not recommendations:
-            recommendations.append("Comenzá buscando prospectos en el Buscador de Prospectos para alimentar tu pipeline.")
+            recommendations.append("Comenzá buscando prospectos para alimentar tu pipeline.")
         return {"response": "\n".join([f"- {r}" for r in recommendations]), "context": context_data}
 
 @api_router.post("/ai/help")

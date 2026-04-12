@@ -10,12 +10,19 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Palette, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package } from 'lucide-react';
+import { Building2, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package, Pencil, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import DomainsPage from '@/pages/DomainsPage';
+
+function maskApiKey(key) {
+  if (!key || key === '***configured***') return '***configured***';
+  if (key.length <= 8) return '*'.repeat(key.length);
+  return key.slice(0, 4) + '*'.repeat(Math.min(key.length - 8, 20)) + key.slice(-4);
+}
 
 export default function SettingsPage() {
   const { t } = useLanguage();
@@ -25,10 +32,12 @@ export default function SettingsPage() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [branding, setBranding] = useState({ company_name: '', logo_url: '', primary_color: '#1D4ED8', secondary_color: '#6366F1' });
+  const [branding, setBranding] = useState({ company_name: '', industry: '', phone: '', address: '', website: '', tax_id: '', country: '', description: '' });
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'operator' });
   const [modules, setModules] = useState({ prospeccion: true, crm: true, email_marketing: true });
+  const [editingIntegration, setEditingIntegration] = useState(null);
+  const [editValues, setEditValues] = useState({ base_url: '', api_key: '' });
 
   useEffect(() => {
     Promise.all([
@@ -38,7 +47,8 @@ export default function SettingsPage() {
       api.get('/tenant/modules').catch(() => ({ data: { prospeccion: true, crm: true, email_marketing: true } })),
     ]).then(([s, i, u, m]) => {
       setSettings(s.data);
-      setBranding(s.data?.branding || {});
+      const b = s.data?.branding || {};
+      setBranding({ company_name: b.company_name || '', industry: b.industry || '', phone: b.phone || '', address: b.address || '', website: b.website || '', tax_id: b.tax_id || '', country: b.country || '', description: b.description || '' });
       setIntegrations(i.data);
       setUsers(u.data);
       setModules(m.data);
@@ -68,29 +78,42 @@ export default function SettingsPage() {
     try {
       const { data } = await api.put(`/settings/integrations/${name}`, { enabled });
       setIntegrations(prev => prev.map(i => i.name === name ? data : i));
-      toast.success(`${name} ${enabled ? 'enabled' : 'disabled'}`);
-    } catch { toast.error('Failed to update'); }
+      toast.success(`${name} ${enabled ? 'activado' : 'desactivado'}`);
+    } catch { toast.error('Error al actualizar'); }
   };
 
-  const updateIntegration = async (name, field, value) => {
+  const startEditIntegration = (intg) => {
+    setEditingIntegration(intg.name);
+    setEditValues({ base_url: intg.base_url || '', api_key: '' });
+  };
+
+  const saveIntegration = async (name) => {
     try {
-      const { data } = await api.put(`/settings/integrations/${name}`, { [field]: value });
-      setIntegrations(prev => prev.map(i => i.name === name ? data : i));
-    } catch { console.error('Failed to update integration'); }
+      const updates = {};
+      if (editValues.base_url) updates.base_url = editValues.base_url;
+      if (editValues.api_key) updates.api_key = editValues.api_key;
+      if (Object.keys(updates).length > 0) {
+        const { data } = await api.put(`/settings/integrations/${name}`, updates);
+        setIntegrations(prev => prev.map(i => i.name === name ? data : i));
+        toast.success('Integracion actualizada');
+      }
+      setEditingIntegration(null);
+      setEditValues({ base_url: '', api_key: '' });
+    } catch { toast.error('Error al actualizar'); }
   };
 
   const createUser = async () => {
-    if (!newUser.email || !newUser.password || !newUser.name) return toast.error('Fill all fields');
+    if (!newUser.email || !newUser.password || !newUser.name) return toast.error('Completa todos los campos');
     try {
       const { data } = await api.post('/users', newUser);
       setUsers(prev => [...prev, data]);
       setUserDialogOpen(false);
       setNewUser({ email: '', password: '', name: '', role: 'operator' });
-      toast.success('User created');
-    } catch (err) { toast.error(err.response?.data?.detail || 'Failed to create user'); }
+      toast.success('Usuario creado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error al crear usuario'); }
   };
 
-  if (loading) return <div className="flex items-center gap-2 text-zinc-400 animate-fade-in"><Loader2 className="w-4 h-4 animate-spin" /> Loading...</div>;
+  if (loading) return <div className="flex items-center gap-2 text-zinc-400 animate-fade-in"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>;
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="settings-page">
@@ -98,7 +121,7 @@ export default function SettingsPage() {
 
       <Tabs defaultValue="branding">
         <TabsList className="bg-zinc-100">
-          <TabsTrigger value="branding" data-testid="settings-tab-branding"><Palette className="w-4 h-4 mr-1.5" />{t('branding')}</TabsTrigger>
+          <TabsTrigger value="branding" data-testid="settings-tab-branding"><Building2 className="w-4 h-4 mr-1.5" />Empresa</TabsTrigger>
           <TabsTrigger value="users" data-testid="settings-tab-users"><Users className="w-4 h-4 mr-1.5" />{t('user_management')}</TabsTrigger>
           <TabsTrigger value="integrations" data-testid="settings-tab-integrations"><Link className="w-4 h-4 mr-1.5" />{t('integrations')}</TabsTrigger>
           <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
@@ -106,32 +129,47 @@ export default function SettingsPage() {
           <TabsTrigger value="optimia" data-testid="settings-tab-optimia"><Bot className="w-4 h-4 mr-1.5" />OptimIA Bot</TabsTrigger>
         </TabsList>
 
-        {/* Branding */}
+        {/* Company Info */}
         <TabsContent value="branding">
           <Card className="border-zinc-200 rounded-xl">
             <CardContent className="p-6 space-y-5">
+              <h3 className="font-heading font-medium text-zinc-900 text-lg">Datos de la Empresa</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 <div className="md:col-span-2">
-                  <Label className="text-sm mb-1.5 block">{t('company_name')}</Label>
-                  <Input data-testid="branding-company-name" value={branding.company_name || ''} onChange={e => setBranding(b => ({ ...b, company_name: e.target.value }))} />
+                  <Label className="text-sm mb-1.5 block">Nombre de la Empresa *</Label>
+                  <Input data-testid="branding-company-name" value={branding.company_name || ''} onChange={e => setBranding(b => ({ ...b, company_name: e.target.value }))} placeholder="Mi Empresa SRL" />
                 </div>
                 <div>
-                  <Label className="text-sm mb-1.5 block">{t('primary_color')}</Label>
-                  <div className="flex gap-2">
-                    <Input type="color" value={branding.primary_color || '#1D4ED8'} onChange={e => setBranding(b => ({ ...b, primary_color: e.target.value }))} className="w-12 h-10 p-1" />
-                    <Input value={branding.primary_color || '#1D4ED8'} onChange={e => setBranding(b => ({ ...b, primary_color: e.target.value }))} className="flex-1" />
-                  </div>
+                  <Label className="text-sm mb-1.5 block">Industria / Rubro</Label>
+                  <Input data-testid="branding-industry" value={branding.industry || ''} onChange={e => setBranding(b => ({ ...b, industry: e.target.value }))} placeholder="Tecnologia, Inmobiliaria, etc." />
                 </div>
                 <div>
-                  <Label className="text-sm mb-1.5 block">{t('secondary_color')}</Label>
-                  <div className="flex gap-2">
-                    <Input type="color" value={branding.secondary_color || '#6366F1'} onChange={e => setBranding(b => ({ ...b, secondary_color: e.target.value }))} className="w-12 h-10 p-1" />
-                    <Input value={branding.secondary_color || '#6366F1'} onChange={e => setBranding(b => ({ ...b, secondary_color: e.target.value }))} className="flex-1" />
-                  </div>
+                  <Label className="text-sm mb-1.5 block">Pais</Label>
+                  <Input data-testid="branding-country" value={branding.country || ''} onChange={e => setBranding(b => ({ ...b, country: e.target.value }))} placeholder="Argentina" />
+                </div>
+                <div>
+                  <Label className="text-sm mb-1.5 block">Telefono</Label>
+                  <Input data-testid="branding-phone" value={branding.phone || ''} onChange={e => setBranding(b => ({ ...b, phone: e.target.value }))} placeholder="+54 381 000-0000" />
+                </div>
+                <div>
+                  <Label className="text-sm mb-1.5 block">CUIT / NIF / Tax ID</Label>
+                  <Input data-testid="branding-tax-id" value={branding.tax_id || ''} onChange={e => setBranding(b => ({ ...b, tax_id: e.target.value }))} placeholder="30-12345678-9" />
+                </div>
+                <div>
+                  <Label className="text-sm mb-1.5 block">Sitio Web</Label>
+                  <Input data-testid="branding-website" value={branding.website || ''} onChange={e => setBranding(b => ({ ...b, website: e.target.value }))} placeholder="https://miempresa.com" />
+                </div>
+                <div>
+                  <Label className="text-sm mb-1.5 block">Direccion</Label>
+                  <Input data-testid="branding-address" value={branding.address || ''} onChange={e => setBranding(b => ({ ...b, address: e.target.value }))} placeholder="Av. Belgrano 1234, Tucuman" />
+                </div>
+                <div className="md:col-span-2">
+                  <Label className="text-sm mb-1.5 block">Descripcion de la Empresa</Label>
+                  <Textarea data-testid="branding-description" value={branding.description || ''} onChange={e => setBranding(b => ({ ...b, description: e.target.value }))} placeholder="Breve descripcion de tu empresa y servicios..." rows={3} />
                 </div>
               </div>
               <Button onClick={saveBranding} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-branding-button">
-                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />}{t('save')}
+                {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />} Guardar
               </Button>
             </CardContent>
           </Card>
@@ -142,10 +180,10 @@ export default function SettingsPage() {
           <Card className="border-zinc-200 rounded-xl">
             <CardContent className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-heading font-medium text-zinc-900">Team Members</h3>
+                <h3 className="font-heading font-medium text-zinc-900">Miembros del Equipo</h3>
                 {(user?.role === 'super_admin' || user?.role === 'tenant_admin') && (
                   <Button size="sm" onClick={() => setUserDialogOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="add-user-button">
-                    <Plus className="w-4 h-4 mr-1" /> Add User
+                    <Plus className="w-4 h-4 mr-1" /> Agregar Usuario
                   </Button>
                 )}
               </div>
@@ -154,7 +192,7 @@ export default function SettingsPage() {
                   <TableRow className="bg-zinc-50 hover:bg-zinc-50">
                     <TableHead className="text-xs font-semibold text-zinc-500 uppercase">{t('name')}</TableHead>
                     <TableHead className="text-xs font-semibold text-zinc-500 uppercase">{t('email')}</TableHead>
-                    <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Role</TableHead>
+                    <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Rol</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -172,29 +210,29 @@ export default function SettingsPage() {
 
           <Dialog open={userDialogOpen} onOpenChange={setUserDialogOpen}>
             <DialogContent>
-              <DialogHeader><DialogTitle className="font-heading">Add Team Member</DialogTitle></DialogHeader>
+              <DialogHeader><DialogTitle className="font-heading">Agregar Miembro</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
                 <div><Label className="text-sm mb-1.5 block">{t('name')}</Label><Input data-testid="new-user-name" value={newUser.name} onChange={e => setNewUser(u => ({ ...u, name: e.target.value }))} /></div>
                 <div><Label className="text-sm mb-1.5 block">{t('email')}</Label><Input data-testid="new-user-email" value={newUser.email} onChange={e => setNewUser(u => ({ ...u, email: e.target.value }))} type="email" /></div>
-                <div><Label className="text-sm mb-1.5 block">{t('password')}</Label><Input data-testid="new-user-password" value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))} type="password" /></div>
+                <div><Label className="text-sm mb-1.5 block">Contrasena</Label><Input data-testid="new-user-password" value={newUser.password} onChange={e => setNewUser(u => ({ ...u, password: e.target.value }))} type="password" /></div>
                 <div>
-                  <Label className="text-sm mb-1.5 block">Role</Label>
+                  <Label className="text-sm mb-1.5 block">Rol</Label>
                   <Select value={newUser.role} onValueChange={v => setNewUser(u => ({ ...u, role: v }))}>
                     <SelectTrigger data-testid="new-user-role"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="tenant_admin">Tenant Admin</SelectItem>
-                      <SelectItem value="operator">Operator</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
+                      <SelectItem value="tenant_admin">Admin del Tenant</SelectItem>
+                      <SelectItem value="operator">Operador</SelectItem>
+                      <SelectItem value="viewer">Visor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={createUser} className="w-full bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-user-button">{t('create')}</Button>
+                <Button onClick={createUser} className="w-full bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-user-button">Crear Usuario</Button>
               </div>
             </DialogContent>
           </Dialog>
         </TabsContent>
 
-        {/* Integrations */}
+        {/* Integrations - Masked API Keys */}
         <TabsContent value="integrations">
           <div className="space-y-4">
             {integrations.map((intg, i) => (
@@ -208,29 +246,54 @@ export default function SettingsPage() {
                     <Switch checked={intg.enabled} onCheckedChange={v => toggleIntegration(intg.name, v)} data-testid={`integration-toggle-${i}`} />
                   </div>
                   {intg.enabled && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
-                      <div>
-                        <Label className="text-xs mb-1 block">Base URL</Label>
-                        <Input value={intg.base_url || ''} onChange={e => updateIntegration(intg.name, 'base_url', e.target.value)} placeholder="https://..." className="text-sm" />
-                      </div>
-                      <div>
-                        <Label className="text-xs mb-1 block">API Key</Label>
-                        <Input value={intg.api_key || ''} onChange={e => updateIntegration(intg.name, 'api_key', e.target.value)} placeholder="sk-..." type="password" className="text-sm" />
-                      </div>
-                    </div>
+                    <>
+                      {editingIntegration === intg.name ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4 p-4 bg-zinc-50 rounded-lg border border-zinc-200">
+                          <div>
+                            <Label className="text-xs mb-1 block">Base URL</Label>
+                            <Input value={editValues.base_url} onChange={e => setEditValues(v => ({ ...v, base_url: e.target.value }))} placeholder="https://..." className="text-sm" data-testid={`integration-url-edit-${i}`} />
+                          </div>
+                          <div>
+                            <Label className="text-xs mb-1 block">API Key (nueva)</Label>
+                            <Input value={editValues.api_key} onChange={e => setEditValues(v => ({ ...v, api_key: e.target.value }))} placeholder="Ingresa la API key completa..." className="text-sm" data-testid={`integration-key-edit-${i}`} />
+                          </div>
+                          <div className="md:col-span-2 flex gap-2">
+                            <Button size="sm" onClick={() => saveIntegration(intg.name)} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid={`integration-save-${i}`}>
+                              <Check className="w-3.5 h-3.5 mr-1" /> Guardar
+                            </Button>
+                            <Button size="sm" variant="outline" onClick={() => setEditingIntegration(null)}>Cancelar</Button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
+                          <div>
+                            <Label className="text-xs mb-1 block text-zinc-400">Base URL</Label>
+                            <p className="text-sm text-zinc-700 font-mono bg-zinc-50 px-3 py-2 rounded-lg border border-zinc-200 truncate">{intg.base_url || '-'}</p>
+                          </div>
+                          <div>
+                            <Label className="text-xs mb-1 block text-zinc-400">API Key</Label>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm text-zinc-700 font-mono bg-zinc-50 px-3 py-2 rounded-lg border border-zinc-200 flex-1 truncate" data-testid={`integration-key-masked-${i}`}>{maskApiKey(intg.api_key)}</p>
+                              <Button size="sm" variant="outline" onClick={() => startEditIntegration(intg)} className="flex-shrink-0" data-testid={`integration-edit-${i}`}>
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                   <div className="flex items-center gap-3 mt-3">
-                    <Badge className={intg.status === 'connected' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{intg.status?.replace(/_/g, ' ')}</Badge>
-                    {intg.last_sync && <span className="text-xs text-zinc-400">Last sync: {new Date(intg.last_sync).toLocaleString()}</span>}
+                    <Badge className={intg.status === 'connected' || intg.status === 'configured' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{intg.status === 'connected' ? 'Conectado' : intg.status === 'configured' ? 'Configurado' : intg.status === 'not_configured' ? 'Sin configurar' : intg.status?.replace(/_/g, ' ')}</Badge>
+                    {intg.last_sync && <span className="text-xs text-zinc-400">Ultima sync: {new Date(intg.last_sync).toLocaleString()}</span>}
                   </div>
                 </CardContent>
               </Card>
             ))}
-            {!integrations.length && <p className="text-sm text-zinc-400">No integrations configured.</p>}
+            {!integrations.length && <p className="text-sm text-zinc-400">No hay integraciones configuradas.</p>}
           </div>
         </TabsContent>
 
-        {/* OptimIA Bot */}
         <TabsContent value="domains">
           <DomainsPage />
         </TabsContent>
@@ -271,14 +334,9 @@ export default function SettingsPage() {
                   Accede al panel de OptimIA Bot para gestionar conversaciones, automatizaciones y soporte omnicanal de tus clientes.
                 </p>
               </div>
-              <Button
-                asChild
-                className="bg-blue-600 hover:bg-blue-700 text-white h-12 px-8 text-base"
-                data-testid="optimia-bot-button"
-              >
+              <Button asChild className="bg-blue-600 hover:bg-blue-700 text-white h-12 px-8 text-base" data-testid="optimia-bot-button">
                 <a href="https://inbox.optimia.disruptive-sw.com/app/login" target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="w-4 h-4 mr-2" />
-                  Abrir OptimIA Bot
+                  <ExternalLink className="w-4 h-4 mr-2" /> Abrir OptimIA Bot
                 </a>
               </Button>
               <p className="text-xs text-zinc-400">Se abre en una nueva ventana</p>
