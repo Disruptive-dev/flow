@@ -83,17 +83,16 @@ export default function JobsPage() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: 'Encontrados', value: selectedJob.raw_count },
-            { label: 'Limpiados', value: selectedJob.cleaned_count },
-            { label: 'Calificados', value: selectedJob.qualified_count },
-            { label: 'Rechazados', value: selectedJob.rejected_count },
-            { label: 'Aprobados', value: selectedJob.approved_count },
-          ].map(({ label, value }) => (
-            <Card key={label} className="border-zinc-200 rounded-xl">
+            { label: 'Encontrados', value: selectedJob.raw_count, color: 'text-zinc-900', bg: '' },
+            { label: 'Limpiados', value: selectedJob.cleaned_count, color: 'text-blue-600', bg: 'bg-blue-50/50' },
+            { label: 'Calificados', value: selectedJob.qualified_count, color: 'text-emerald-600', bg: 'bg-emerald-50/50' },
+            { label: 'Rechazados', value: selectedJob.rejected_count, color: 'text-red-600', bg: 'bg-red-50/50' },
+          ].map(({ label, value, color, bg }) => (
+            <Card key={label} className={`border-zinc-200 rounded-xl ${bg}`}>
               <CardContent className="p-4 text-center">
-                <p className="text-2xl font-heading font-semibold text-zinc-900">{value}</p>
+                <p className={`text-2xl font-heading font-semibold ${color}`}>{value}</p>
                 <p className="text-xs text-zinc-500 mt-1">{label}</p>
               </CardContent>
             </Card>
@@ -163,7 +162,7 @@ export default function JobsPage() {
                   </div>
                   <div>
                     <p className="font-medium text-zinc-900 text-sm">{job.category} - {job.city}, {job.province}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{job.quantity} solicitados &middot; {job.qualified_count} calificados &middot; {job.approved_count} aprobados</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">{job.quantity} solicitados &middot; {job.qualified_count} calificados</p>
                   </div>
                 </div>
                 <Badge className={statusColors[job.status] || statusColors.pending}>{job.status}</Badge>

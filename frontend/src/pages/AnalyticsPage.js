@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Loader2, TrendingUp, Users, Mail, MousePointerClick, MessageSquare, Send, ThumbsUp, Briefcase, CheckCircle2, XCircle, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, FunnelChart, Funnel, LabelList } from 'recharts';
 
-const COLORS = ['#1D4ED8', '#16A34A', '#F59E0B', '#DC2626', '#6366F1', '#06B6D4', '#EC4899'];
+const COLORS = ['#1D4ED8', '#DC2626', '#F59E0B', '#6366F1', '#06B6D4', '#EC4899'];
 const FUNNEL_COLORS = ['#94a3b8', '#3b82f6', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444'];
 
 export default function AnalyticsPage() {

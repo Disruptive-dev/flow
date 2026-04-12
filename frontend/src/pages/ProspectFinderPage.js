@@ -112,7 +112,7 @@ export default function ProspectFinderPage() {
                   </div>
                   <div>
                     <p className="font-medium text-zinc-900 text-sm">{job.category} - {job.city}, {job.province}</p>
-                    <p className="text-xs text-zinc-500">{job.quantity} solicitados &middot; {job.raw_count} encontrados &middot; {job.qualified_count} calificados</p>
+                    <p className="text-xs text-zinc-500">{job.quantity} solicitados &middot; {job.raw_count} encontrados &middot; <span className="text-emerald-600 font-medium">{job.qualified_count} calificados</span></p>
                   </div>
                 </div>
                 <Badge className={statusColors[job.status] || statusColors.pending}>{job.status}</Badge>
