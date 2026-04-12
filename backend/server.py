@@ -1481,6 +1481,30 @@ async def add_leads_to_list(request: Request, list_id: str, body: Dict[str, Any]
     await db.email_lists.update_one({"id": list_id}, {"$set": {"lead_ids": all_ids, "subscriber_count": len(all_ids), "updated_at": now}})
     return {"message": f"{len(new_ids)} leads agregados a la lista", "total": len(all_ids)}
 
+@api_router.get("/email-marketing/lists/{list_id}/leads")
+async def get_list_leads(request: Request, list_id: str):
+    user = await get_current_user(request)
+    lst = await db.email_lists.find_one({"id": list_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not lst:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    lead_ids = lst.get("lead_ids", [])
+    leads = []
+    if lead_ids:
+        leads = await db.leads.find({"id": {"$in": lead_ids}}, {"_id": 0}).to_list(5000)
+    return {"list": lst, "leads": leads}
+
+@api_router.post("/email-marketing/lists/{list_id}/remove-leads")
+async def remove_leads_from_list(request: Request, list_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    remove_ids = body.get("lead_ids", [])
+    now = datetime.now(timezone.utc).isoformat()
+    lst = await db.email_lists.find_one({"id": list_id, "tenant_id": user["tenant_id"]})
+    if not lst:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    new_ids = [lid for lid in lst.get("lead_ids", []) if lid not in remove_ids]
+    await db.email_lists.update_one({"id": list_id}, {"$set": {"lead_ids": new_ids, "subscriber_count": len(new_ids), "updated_at": now}})
+    return {"message": f"{len(remove_ids)} leads removidos", "total": len(new_ids)}
+
 @api_router.post("/email-marketing/auto-list-from-leads")
 async def auto_create_list_from_leads(request: Request, body: Dict[str, Any] = {}):
     """Auto-create an email list from scored/approved leads"""

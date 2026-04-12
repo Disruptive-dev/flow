@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clock, CheckCircle2, X, FileText, Pencil, Trash2, Rocket } from 'lucide-react';
+import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clock, CheckCircle2, X, FileText, Pencil, Trash2, Rocket, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import FlowBotButton from '@/components/FlowBotButton';
@@ -41,6 +41,8 @@ export default function EmailMarketingPage() {
   const [editingCampaign, setEditingCampaign] = useState(null);
   const [editingList, setEditingList] = useState(null);
   const [sendingReal, setSendingReal] = useState(null);
+  const [viewingList, setViewingList] = useState(null);
+  const [listLeads, setListLeads] = useState([]);
 
   const fetchData = async () => {
     try {
@@ -85,6 +87,22 @@ export default function EmailMarketingPage() {
       const { data } = await api.post(`/email-marketing/lists/${listId}/add-leads`, {});
       setLists(prev => prev.map(l => l.id === listId ? { ...l, subscriber_count: data.total } : l));
       toast.success(`${data.message}`);
+    } catch { toast.error('Error'); }
+  };
+  const viewListLeads = async (list) => {
+    setViewingList(list);
+    try {
+      const { data } = await api.get(`/email-marketing/lists/${list.id}/leads`);
+      setListLeads(data.leads || []);
+    } catch { setListLeads([]); }
+  };
+  const removeLeadFromList = async (leadId) => {
+    if (!viewingList) return;
+    try {
+      const { data } = await api.post(`/email-marketing/lists/${viewingList.id}/remove-leads`, { lead_ids: [leadId] });
+      setListLeads(prev => prev.filter(l => l.id !== leadId));
+      setLists(prev => prev.map(l => l.id === viewingList.id ? { ...l, subscriber_count: data.total } : l));
+      toast.success('Lead removido de la lista');
     } catch { toast.error('Error'); }
   };
 
@@ -258,7 +276,10 @@ export default function EmailMarketingPage() {
                       </div>
                       <Button size="sm" variant="ghost" className="text-red-500" onClick={() => deleteList(list.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
                     </div>
-                    <Button size="sm" variant="outline" className="w-full mt-2 text-xs" onClick={() => addLeadsToList(list.id)} data-testid={`add-leads-list-${i}`}><Plus className="w-3 h-3 mr-1" /> Agregar Leads Calificados</Button>
+                    <div className="flex gap-2 mt-2">
+                      <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => viewListLeads(list)} data-testid={`view-list-${i}`}><Eye className="w-3 h-3 mr-1" /> Ver Leads</Button>
+                      <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => addLeadsToList(list.id)} data-testid={`add-leads-list-${i}`}><Plus className="w-3 h-3 mr-1" /> Agregar</Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))}
@@ -267,6 +288,27 @@ export default function EmailMarketingPage() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* View List Leads Dialog */}
+      <Dialog open={!!viewingList} onOpenChange={(o) => !o && setViewingList(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-heading">Lista: {viewingList?.name} ({listLeads.length} leads)</DialogTitle></DialogHeader>
+          <div className="space-y-2 mt-4">
+            {listLeads.map((lead, i) => (
+              <div key={lead.id} className="flex items-center justify-between p-3 bg-zinc-50 rounded-lg" data-testid={`list-lead-${i}`}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-900 truncate">{lead.business_name}</p>
+                  <p className="text-xs text-zinc-500">{lead.email || 'Sin email'} · {lead.city} · Score: {lead.ai_score}</p>
+                </div>
+                <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-600 flex-shrink-0" onClick={() => removeLeadFromList(lead.id)}>
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
+            {!listLeads.length && <p className="text-sm text-zinc-400 text-center py-4">Lista vacia</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
