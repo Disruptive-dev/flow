@@ -13,7 +13,7 @@ import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Palette, User, Link, Users, Plus, Loader2, Check, ExternalLink } from 'lucide-react';
+import { Palette, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function SettingsPage() {
@@ -88,6 +88,7 @@ export default function SettingsPage() {
           <TabsTrigger value="branding" data-testid="settings-tab-branding"><Palette className="w-4 h-4 mr-1.5" />{t('branding')}</TabsTrigger>
           <TabsTrigger value="users" data-testid="settings-tab-users"><Users className="w-4 h-4 mr-1.5" />{t('user_management')}</TabsTrigger>
           <TabsTrigger value="integrations" data-testid="settings-tab-integrations"><Link className="w-4 h-4 mr-1.5" />{t('integrations')}</TabsTrigger>
+          <TabsTrigger value="optimia" data-testid="settings-tab-optimia"><Bot className="w-4 h-4 mr-1.5" />OptimIA Bot</TabsTrigger>
         </TabsList>
 
         {/* Branding */}
@@ -216,6 +217,34 @@ export default function SettingsPage() {
             ))}
             {!integrations.length && <p className="text-sm text-zinc-400">No integrations configured.</p>}
           </div>
+        </TabsContent>
+
+        {/* OptimIA Bot */}
+        <TabsContent value="optimia">
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-8 text-center space-y-6">
+              <div className="w-16 h-16 rounded-2xl bg-blue-50 border border-blue-100 flex items-center justify-center mx-auto">
+                <Bot className="w-8 h-8 text-blue-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-heading font-semibold text-zinc-900 mb-2">OptimIA Bot</h3>
+                <p className="text-sm text-zinc-500 max-w-md mx-auto">
+                  Accede al panel de OptimIA Bot para gestionar conversaciones, automatizaciones y soporte omnicanal de tus clientes.
+                </p>
+              </div>
+              <Button
+                asChild
+                className="bg-blue-600 hover:bg-blue-700 text-white h-12 px-8 text-base"
+                data-testid="optimia-bot-button"
+              >
+                <a href="https://inbox.optimia.disruptive-sw.com/app/login" target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="w-4 h-4 mr-2" />
+                  Abrir OptimIA Bot
+                </a>
+              </Button>
+              <p className="text-xs text-zinc-400">Se abre en una nueva ventana</p>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
     </div>

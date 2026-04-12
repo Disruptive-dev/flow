@@ -729,8 +729,8 @@ async def seed_data():
         {"name": "n8n", "display_name": "n8n Orchestration", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Workflow orchestration and job execution"},
         {"name": "dify", "display_name": "Dify AI", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "AI cleaning and lead scoring"},
         {"name": "resend", "display_name": "Resend Email", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Email sending and domain verification"},
-        {"name": "espo_crm", "display_name": "Espo CRM", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Qualified lead handoff and CRM sync"},
-        {"name": "chatwoot", "display_name": "Chatwoot", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Future omnichannel and bot support"}
+        {"name": "espo_crm", "display_name": "Spectra CRM", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Qualified lead handoff and CRM sync"},
+        {"name": "optimia_bot", "display_name": "OptimIA Bot", "enabled": False, "base_url": "https://inbox.optimia.disruptive-sw.com", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Omnichannel bot and live chat support"}
     ]
     for intg in integrations:
         await db.integration_configs.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, **intg, "created_at": now, "updated_at": now})

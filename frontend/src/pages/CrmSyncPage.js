@@ -33,7 +33,7 @@ export default function CrmSyncPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('crm_sync')}</h1>
-          <p className="text-sm text-zinc-500 mt-1">Manage lead handoff to Espo CRM</p>
+          <p className="text-sm text-zinc-500 mt-1">Manage lead handoff to Spectra CRM</p>
         </div>
       </div>
 
@@ -64,7 +64,7 @@ export default function CrmSyncPage() {
         <CardContent className="p-5 flex items-center gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-500" />
           <div>
-            <p className="text-sm font-medium text-zinc-700">Espo CRM Integration</p>
+            <p className="text-sm font-medium text-zinc-700">Spectra CRM Integration</p>
             <p className="text-xs text-zinc-500">Integration placeholder - configure in Settings &gt; Integrations to enable live sync</p>
           </div>
           <Badge className="bg-amber-50 text-amber-700 ml-auto">Not Configured</Badge>
