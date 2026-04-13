@@ -486,6 +486,17 @@ async def start_prospect_job(request: Request, job_id: str):
 
 # ==================== LEADS ====================
 
+@api_router.get("/leads/stats")
+async def leads_stats(request: Request, job_id: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"tenant_id": user["tenant_id"]}
+    if job_id:
+        query["job_id"] = job_id
+    pipeline = [{"$match": query}, {"$group": {"_id": "$status", "count": {"$sum": 1}}}]
+    results = await db.leads.aggregate(pipeline).to_list(20)
+    stats = {r["_id"]: r["count"] for r in results}
+    return {"total": sum(stats.values()), "scored": stats.get("scored", 0), "approved": stats.get("approved", 0), "rejected": stats.get("rejected", 0), "contacted": stats.get("contacted", 0), "sent_to_crm": stats.get("sent_to_crm", 0), "cleaned": stats.get("cleaned", 0)}
+
 @api_router.get("/leads")
 async def list_leads(request: Request, status: Optional[str] = None, job_id: Optional[str] = None, search: Optional[str] = None, page: int = 1, limit: int = 50):
     user = await get_current_user(request)
@@ -1972,13 +1983,13 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
             "email": email,
             "phone": phone,
             "ai_score": int(ld.get("ai_score", ld.get("score", 0))),
-            "quality_level": ld.get("quality_level", "scored"),
+            "quality_level": ld.get("quality_level", "average"),
             "recommendation": ld.get("recommendation", ""),
             "recommended_first_line": ld.get("recommended_first_line", ld.get("first_line", "")),
             "address": ld.get("address", ld.get("full_address", "")),
             "rating": ld.get("rating", 0),
             "reviews_count": ld.get("reviews_count", ld.get("reviews", 0)),
-            "status": "scored" if int(ld.get("ai_score", 0)) >= 50 else "cleaned",
+            "status": "scored" if int(ld.get("ai_score", 0)) >= 50 else "rejected",
             "created_at": now, "updated_at": now
         }
         await db.leads.insert_one(lead)

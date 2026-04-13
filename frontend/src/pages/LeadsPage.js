@@ -68,6 +68,7 @@ export default function LeadsPage() {
   const jobIdFromUrl = searchParams.get('job_id') || '';
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ scored: 0, rejected: 0, approved: 0, contacted: 0 });
   const [page, setPage] = useState(1);
   const [pages, setPages] = useState(1);
   const [loading, setLoading] = useState(true);
@@ -106,6 +107,11 @@ export default function LeadsPage() {
       setLeads(data.leads);
       setTotal(data.total);
       setPages(data.pages);
+      // Fetch stats
+      const statsParams = {};
+      if (jobFilter) statsParams.job_id = jobFilter;
+      const { data: s } = await api.get('/leads/stats', { params: statsParams });
+      setStats({ scored: s.scored || 0, rejected: s.rejected || 0, approved: s.approved || 0, contacted: s.contacted || 0 });
     } catch (err) { console.error(err); }
     setLoading(false);
   };
@@ -148,6 +154,28 @@ export default function LeadsPage() {
       </div>
 
       <GuideBanner section="leads" />
+
+      {/* Stats Summary */}
+      {total > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3" data-testid="leads-stats">
+          <button onClick={() => { setStatusFilter('scored'); setPage(1); }} className={`p-3 rounded-lg border text-left transition-colors ${statusFilter === 'scored' ? 'bg-indigo-100 border-indigo-300' : 'bg-indigo-50/50 border-indigo-100 hover:bg-indigo-50'}`}>
+            <p className="text-xl font-semibold text-indigo-700">{stats.scored}</p>
+            <p className="text-xs text-indigo-600">Calificados</p>
+          </button>
+          <button onClick={() => { setStatusFilter('rejected'); setPage(1); }} className={`p-3 rounded-lg border text-left transition-colors ${statusFilter === 'rejected' ? 'bg-red-100 border-red-300' : 'bg-red-50/50 border-red-100 hover:bg-red-50'}`}>
+            <p className="text-xl font-semibold text-red-600">{stats.rejected}</p>
+            <p className="text-xs text-red-500">Rechazados</p>
+          </button>
+          <button onClick={() => { setStatusFilter('approved'); setPage(1); }} className={`p-3 rounded-lg border text-left transition-colors ${statusFilter === 'approved' ? 'bg-emerald-100 border-emerald-300' : 'bg-emerald-50/50 border-emerald-100 hover:bg-emerald-50'}`}>
+            <p className="text-xl font-semibold text-emerald-700">{stats.approved}</p>
+            <p className="text-xs text-emerald-600">Aprobados</p>
+          </button>
+          <button onClick={() => { setStatusFilter(''); setPage(1); }} className={`p-3 rounded-lg border text-left transition-colors ${!statusFilter ? 'bg-zinc-100 border-zinc-300' : 'bg-zinc-50/50 border-zinc-200 hover:bg-zinc-50'}`}>
+            <p className="text-xl font-semibold text-zinc-800">{total}</p>
+            <p className="text-xs text-zinc-500">Total</p>
+          </button>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

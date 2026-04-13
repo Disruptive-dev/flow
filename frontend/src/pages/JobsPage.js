@@ -81,7 +81,7 @@ export default function JobsPage() {
           clearInterval(interval);
           setJobs(prev => prev.map(j => j.id === jobId ? data : j));
           if (data.status === 'completed') {
-            toast.success(`${data.qualified_count} leads calificados! Lista: ${data.auto_list_name || ''}`);
+            toast.success(`${data.qualified_count} calificados + ${data.rejected_count} rechazados. Lista: ${data.auto_list_name || ''}`);
           }
         }
       } catch { clearInterval(interval); }
