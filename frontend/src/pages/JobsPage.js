@@ -117,6 +117,7 @@ export default function JobsPage() {
             { label: 'Limpiados', value: selectedJob.cleaned_count, color: 'text-blue-600', bg: 'bg-blue-50/50' },
             { label: 'Calificados', value: selectedJob.qualified_count, color: 'text-emerald-600', bg: 'bg-emerald-50/50' },
             { label: 'Rechazados', value: selectedJob.rejected_count, color: 'text-red-600', bg: 'bg-red-50/50' },
+            ...(selectedJob.duplicates_skipped > 0 ? [{ label: 'Duplicados', value: selectedJob.duplicates_skipped, color: 'text-amber-600', bg: 'bg-amber-50/50' }] : []),
           ].map(({ label, value, color, bg }) => (
             <Card key={label} className={`border-zinc-200 rounded-xl ${bg}`}>
               <CardContent className="p-4 text-center">

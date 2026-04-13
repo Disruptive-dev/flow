@@ -431,11 +431,16 @@ async def start_prospect_job(request: Request, job_id: str):
     statuses_pool = ["scored"] * 5 + ["cleaned"] * 2 + ["approved"] + ["rejected"]
     leads_to_insert = []
     used_names = set()
+    # Pre-fetch existing lead names for this tenant to avoid duplicates
+    existing_names_cursor = db.leads.find({"tenant_id": user["tenant_id"]}, {"_id": 0, "business_name": 1})
+    existing_names = set()
+    async for edoc in existing_names_cursor:
+        existing_names.add(edoc.get("business_name", "").lower().strip())
     for i in range(min(qualified_count, 25)):
         bname = random.choice(businesses)
         suffix = random.choice(["SA", "SRL", "SAS", ""])
         full_name = f"{bname} {suffix}".strip()
-        while full_name in used_names and len(used_names) < len(businesses) * 3:
+        while (full_name in used_names or full_name.lower() in existing_names) and len(used_names) < len(businesses) * 3:
             bname = random.choice(businesses)
             suffix = random.choice(["SA", "SRL", "SAS", ""])
             full_name = f"{bname} {suffix}".strip()
@@ -1940,17 +1945,32 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
     leads_data = body.get("leads", [])
     raw_count = body.get("raw_count", len(leads_data))
     inserted = 0
+    duplicates_skipped = 0
     for ld in leads_data:
+        bname = ld.get("business_name", ld.get("name", "")).strip()
+        phone = ld.get("phone", ld.get("phone_number", "")).strip()
+        email = ld.get("email", "").strip()
+        # Deduplication: check by business_name OR phone OR email within same tenant
+        dedup_conditions = [{"business_name": {"$regex": f"^{bname}$", "$options": "i"}}]
+        if phone:
+            dedup_conditions.append({"phone": phone})
+        if email:
+            dedup_conditions.append({"email": {"$regex": f"^{email}$", "$options": "i"}})
+        existing = await db.leads.find_one({"tenant_id": job["tenant_id"], "$or": dedup_conditions}, {"_id": 0, "id": 1})
+        if existing:
+            duplicates_skipped += 1
+            logger.info(f"Lead duplicado omitido: {bname} (tenant {job['tenant_id']})")
+            continue
         lead = {
             "id": str(uuid.uuid4()), "tenant_id": job["tenant_id"], "job_id": job_id,
-            "business_name": ld.get("business_name", ld.get("name", "")),
+            "business_name": bname,
             "raw_category": ld.get("raw_category", ld.get("category", "")),
             "normalized_category": ld.get("normalized_category", ld.get("category", "")),
             "province": ld.get("province", ld.get("state", job.get("province", ""))),
             "city": ld.get("city", job.get("city", "")),
             "website": ld.get("website", ld.get("site", "")),
-            "email": ld.get("email", ""),
-            "phone": ld.get("phone", ld.get("phone_number", "")),
+            "email": email,
+            "phone": phone,
             "ai_score": int(ld.get("ai_score", ld.get("score", 0))),
             "quality_level": ld.get("quality_level", "scored"),
             "recommendation": ld.get("recommendation", ""),
@@ -1963,6 +1983,8 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
         }
         await db.leads.insert_one(lead)
         inserted += 1
+    if duplicates_skipped > 0:
+        logger.info(f"n8n callback: {inserted} insertados, {duplicates_skipped} duplicados omitidos para job {job_id}")
     qualified = sum(1 for ld in leads_data if int(ld.get("ai_score", 0)) >= 50)
     rejected = inserted - qualified
     stages = [
@@ -1975,7 +1997,7 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
     ]
     await db.prospect_jobs.update_one({"id": job_id}, {"$set": {
         "status": "completed", "raw_count": raw_count, "cleaned_count": inserted,
-        "qualified_count": qualified, "rejected_count": rejected, "stages": stages, "updated_at": now
+        "qualified_count": qualified, "rejected_count": rejected, "duplicates_skipped": duplicates_skipped, "stages": stages, "updated_at": now
     }})
     # Auto-create/update email list with scored leads from n8n
     scored_lead_ids = []
@@ -2000,7 +2022,7 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
             auto_list_id = str(uuid.uuid4())
             await db.email_lists.insert_one({"id": auto_list_id, "tenant_id": job["tenant_id"], "name": auto_list_name, "description": f"Auto: {len(scored_lead_ids)} leads calificados via n8n", "subscriber_count": len(scored_lead_ids), "lead_ids": scored_lead_ids, "created_at": now, "updated_at": now})
     await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"auto_list_name": auto_list_name, "auto_list_id": auto_list_id}})
-    return {"message": f"{inserted} leads imported, {qualified} qualified", "job_id": job_id, "auto_list": auto_list_name}
+    return {"message": f"{inserted} leads importados, {qualified} calificados, {duplicates_skipped} duplicados omitidos", "job_id": job_id, "auto_list": auto_list_name, "duplicates_skipped": duplicates_skipped}
 
 @api_router.post("/webhooks/n8n/job-progress/{job_id}")
 async def n8n_job_progress(request: Request, job_id: str, body: Dict[str, Any] = {}):
