@@ -1097,9 +1097,28 @@ async def list_crm_deals(request: Request, stage: Optional[str] = None):
 @api_router.post("/crm/deals")
 async def create_crm_deal(request: Request, body: CrmDealCreate):
     user = await get_current_user(request)
-    deal_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     contact = await db.crm_contacts.find_one({"id": body.contact_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    # Check if deal already exists for this contact — update instead of creating duplicate
+    existing_deal = await db.crm_deals.find_one({"contact_id": body.contact_id, "tenant_id": user["tenant_id"]})
+    if existing_deal:
+        update_fields = {"updated_at": now}
+        if body.title:
+            update_fields["title"] = body.title
+            update_fields["name"] = body.title
+        if body.value is not None:
+            update_fields["value"] = body.value
+        if body.stage:
+            update_fields["stage"] = body.stage
+        if body.assigned_to:
+            update_fields["assigned_to"] = body.assigned_to
+        await db.crm_deals.update_one({"id": existing_deal["id"]}, {"$set": update_fields})
+        if body.value and body.value != existing_deal.get("value", 0):
+            diff = (body.value or 0) - existing_deal.get("value", 0)
+            await db.crm_contacts.update_one({"id": body.contact_id}, {"$inc": {"total_value": diff}})
+        updated = await db.crm_deals.find_one({"id": existing_deal["id"]}, {"_id": 0})
+        return serialize_doc(updated)
+    deal_id = str(uuid.uuid4())
     deal = {"id": deal_id, "tenant_id": user["tenant_id"], "contact_id": body.contact_id, "contact_name": contact.get("business_name", "") if contact else "", "title": body.title, "value": body.value or 0, "stage": body.stage or "nuevo", "assigned_to": body.assigned_to or user.get("name", ""), "created_at": now, "updated_at": now}
     await db.crm_deals.insert_one(deal)
     await db.crm_contacts.update_one({"id": body.contact_id}, {"$inc": {"deal_count": 1, "total_value": body.value or 0}})
@@ -1127,34 +1146,50 @@ async def create_crm_note(request: Request, body: CrmNoteCreate):
     return serialize_doc(note)
 
 @api_router.get("/crm/stats")
-async def get_crm_stats(request: Request):
+async def get_crm_stats(request: Request, period: Optional[str] = None):
     user = await get_current_user(request)
     tid = user["tenant_id"]
-    total_contacts = await db.crm_contacts.count_documents({"tenant_id": tid})
-    total_deals = await db.crm_deals.count_documents({"tenant_id": tid})
+    deal_filter = {"tenant_id": tid}
+    contact_filter = {"tenant_id": tid}
+    if period and period != "all":
+        days = {"week": 7, "month": 30, "quarter": 90}.get(period, 0)
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            deal_filter["created_at"] = {"$gte": cutoff}
+            contact_filter["created_at"] = {"$gte": cutoff}
+    total_contacts = await db.crm_contacts.count_documents(contact_filter)
+    total_deals = await db.crm_deals.count_documents(deal_filter)
     stages = ["nuevo", "contactado", "propuesta", "negociacion", "ganado", "perdido"]
     stage_counts = {}
     for s in stages:
-        stage_counts[s] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": s})
-    pipeline = [{"$match": {"tenant_id": tid, "stage": "ganado"}}, {"$group": {"_id": None, "total": {"$sum": "$value"}}}]
+        stage_counts[s] = await db.crm_deals.count_documents({**deal_filter, "stage": s})
+    pipeline = [{"$match": {**deal_filter, "stage": "ganado"}}, {"$group": {"_id": None, "total": {"$sum": "$value"}}}]
     won_value = await db.crm_deals.aggregate(pipeline).to_list(1)
-    return {"total_contacts": total_contacts, "total_deals": total_deals, "stage_counts": stage_counts, "won_value": won_value[0]["total"] if won_value else 0}
+    lost_pipeline = [{"$match": {**deal_filter, "stage": "perdido"}}, {"$group": {"_id": None, "total": {"$sum": "$value"}}}]
+    lost_value = await db.crm_deals.aggregate(lost_pipeline).to_list(1)
+    return {"total_contacts": total_contacts, "total_deals": total_deals, "stage_counts": stage_counts, "won_value": won_value[0]["total"] if won_value else 0, "lost_value": lost_value[0]["total"] if lost_value else 0}
 
 # ==================== ANALYTICS ====================
 
 @api_router.get("/analytics")
-async def get_analytics(request: Request):
+async def get_analytics(request: Request, period: Optional[str] = None):
     user = await get_current_user(request)
     tid = user["tenant_id"]
+    lead_filter = {"tenant_id": tid}
+    if period and period != "all":
+        days = {"week": 7, "month": 30, "quarter": 90}.get(period, 0)
+        if days:
+            cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+            lead_filter["created_at"] = {"$gte": cutoff}
     stats = {
         "jobs_created": await db.prospect_jobs.count_documents({"tenant_id": tid}),
-        "raw_leads": await db.leads.count_documents({"tenant_id": tid, "status": "raw"}),
-        "cleaned_leads": await db.leads.count_documents({"tenant_id": tid, "status": "cleaned"}),
-        "scored_leads": await db.leads.count_documents({"tenant_id": tid, "status": "scored"}),
-        "qualified_leads": await db.leads.count_documents({"tenant_id": tid, "status": {"$in": ["scored", "approved"]}}),
-        "rejected_leads": await db.leads.count_documents({"tenant_id": tid, "status": "rejected"}),
-        "approved_leads": await db.leads.count_documents({"tenant_id": tid, "status": "approved"}),
-        "total_leads": await db.leads.count_documents({"tenant_id": tid}),
+        "raw_leads": await db.leads.count_documents({**lead_filter, "status": "raw"}),
+        "cleaned_leads": await db.leads.count_documents({**lead_filter, "status": "cleaned"}),
+        "scored_leads": await db.leads.count_documents({**lead_filter, "status": "scored"}),
+        "qualified_leads": await db.leads.count_documents({**lead_filter, "status": {"$in": ["scored", "approved"]}}),
+        "rejected_leads": await db.leads.count_documents({**lead_filter, "status": "rejected"}),
+        "approved_leads": await db.leads.count_documents({**lead_filter, "status": "approved"}),
+        "total_leads": await db.leads.count_documents(lead_filter),
     }
     pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": None, "sent": {"$sum": "$sent_count"}, "opens": {"$sum": "$open_count"}, "clicks": {"$sum": "$click_count"}, "replies": {"$sum": "$reply_count"}, "interested": {"$sum": "$interested_count"}, "crm": {"$sum": "$crm_count"}}}]
     cs = (await db.campaigns.aggregate(pipeline).to_list(1))
@@ -1863,7 +1898,7 @@ async def ai_help(request: Request, body: Dict[str, Any] = {}):
 async def get_tenant_modules(request: Request):
     user = await get_current_user(request)
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
-    return tenant.get("modules", {"prospeccion": True, "crm": True, "email_marketing": True}) if tenant else {"prospeccion": True, "crm": True, "email_marketing": True}
+    return tenant.get("modules", {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True}) if tenant else {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True}
 
 @api_router.put("/tenant/modules")
 async def update_tenant_modules(request: Request, body: Dict[str, bool] = {}):
@@ -1872,6 +1907,111 @@ async def update_tenant_modules(request: Request, body: Dict[str, bool] = {}):
         raise HTTPException(status_code=403, detail="Sin permisos")
     await db.tenants.update_one({"id": user["tenant_id"]}, {"$set": {"modules": body}})
     return body
+
+# ==================== SUPER ADMIN - TENANT MANAGEMENT ====================
+
+class TenantCreate(BaseModel):
+    name: str
+    admin_email: str
+    admin_password: str
+    admin_name: Optional[str] = ""
+    plan: Optional[str] = "starter"
+    price: Optional[float] = 0
+    modules: Optional[Dict[str, bool]] = None
+
+class TenantUpdate(BaseModel):
+    name: Optional[str] = None
+    plan: Optional[str] = None
+    price: Optional[float] = None
+    modules: Optional[Dict[str, bool]] = None
+    active: Optional[bool] = None
+
+@api_router.get("/admin/tenants")
+async def list_tenants(request: Request):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    tenants = await db.tenants.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+    result = []
+    for t in tenants:
+        user_count = await db.users.count_documents({"tenant_id": t["id"]})
+        lead_count = await db.leads.count_documents({"tenant_id": t["id"]})
+        contact_count = await db.crm_contacts.count_documents({"tenant_id": t["id"]})
+        result.append({**t, "user_count": user_count, "lead_count": lead_count, "contact_count": contact_count})
+    return result
+
+@api_router.post("/admin/tenants")
+async def create_tenant(request: Request, body: TenantCreate):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    now = datetime.now(timezone.utc).isoformat()
+    tenant_id = str(uuid.uuid4())
+    default_modules = {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True}
+    tenant = {
+        "id": tenant_id, "name": body.name,
+        "branding": {"company_name": body.name, "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"},
+        "sender_defaults": {"name": body.name, "email": f"noreply@{body.name.lower().replace(' ', '')}.com"},
+        "modules": body.modules or default_modules,
+        "plan": body.plan or "starter",
+        "price": body.price or 0,
+        "active": True,
+        "created_at": now, "updated_at": now
+    }
+    await db.tenants.insert_one(tenant)
+    # Create admin user for this tenant
+    hashed = bcrypt.hashpw(body.admin_password.encode(), bcrypt.gensalt()).decode()
+    admin_user = {
+        "id": str(uuid.uuid4()), "tenant_id": tenant_id,
+        "name": body.admin_name or body.name, "email": body.admin_email,
+        "password_hash": hashed, "role": "tenant_admin",
+        "created_at": now, "updated_at": now
+    }
+    await db.users.insert_one(admin_user)
+    # Seed integration configs for new tenant
+    for ic in [
+        {"name": "n8n", "display_name": "n8n Orchestration", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Workflow orchestration"},
+        {"name": "dify", "display_name": "Dify AI", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "AI scoring"},
+        {"name": "resend", "display_name": "Resend Email", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Email sending"},
+    ]:
+        await db.integration_configs.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, **ic, "last_sync": None, "created_at": now, "updated_at": now})
+    return {**{k: v for k, v in tenant.items() if k != "_id"}, "admin_email": body.admin_email}
+
+@api_router.put("/admin/tenants/{tenant_id}")
+async def update_tenant(request: Request, tenant_id: str, body: TenantUpdate):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now}
+    if body.name is not None:
+        update["name"] = body.name
+    if body.plan is not None:
+        update["plan"] = body.plan
+    if body.price is not None:
+        update["price"] = body.price
+    if body.modules is not None:
+        update["modules"] = body.modules
+    if body.active is not None:
+        update["active"] = body.active
+    await db.tenants.update_one({"id": tenant_id}, {"$set": update})
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    return tenant
+
+@api_router.get("/admin/tenants/{tenant_id}")
+async def get_tenant_detail(request: Request, tenant_id: str):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(status_code=404, detail="Tenant no encontrado")
+    users = await db.users.find({"tenant_id": tenant_id}, {"_id": 0, "password_hash": 0}).to_list(50)
+    lead_count = await db.leads.count_documents({"tenant_id": tenant_id})
+    contact_count = await db.crm_contacts.count_documents({"tenant_id": tenant_id})
+    deal_count = await db.crm_deals.count_documents({"tenant_id": tenant_id})
+    campaign_count = await db.campaigns.count_documents({"tenant_id": tenant_id})
+    return {**tenant, "users": users, "stats": {"leads": lead_count, "contacts": contact_count, "deals": deal_count, "campaigns": campaign_count}}
 
 # ==================== BULK DEAL ACTIONS ====================
 
@@ -2058,7 +2198,7 @@ async def n8n_job_progress(request: Request, job_id: str, body: Dict[str, Any] =
 
 @api_router.post("/webhooks/chatwoot/lead")
 async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
-    """Receives new leads from Chatwoot/OptimIA Bot via n8n - upserts contact with BOT tag"""
+    """Receives new leads from Chatwoot/OptimIA Bot — creates in LEADS collection with BOT tag"""
     tenant_id = body.get("tenant_id", "")
     if not tenant_id:
         tenant = await db.tenants.find_one({}, {"_id": 0, "id": 1})
@@ -2070,49 +2210,43 @@ async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
     phone = body.get("phone", body.get("phone_number", ""))
     contact_name = body.get("contact_name", body.get("name", ""))
     business_name = body.get("business_name", body.get("name", "Lead de Bot"))
-    # Try to find existing contact by email or phone
+    # Check for existing lead by email or phone
     existing = None
     if email:
-        existing = await db.crm_contacts.find_one({"email": email, "tenant_id": tenant_id})
+        existing = await db.leads.find_one({"email": {"$regex": f"^{email}$", "$options": "i"}, "tenant_id": tenant_id})
     if not existing and phone:
-        existing = await db.crm_contacts.find_one({"phone": phone, "tenant_id": tenant_id})
+        existing = await db.leads.find_one({"phone": phone, "tenant_id": tenant_id})
+    if not existing and business_name:
+        existing = await db.leads.find_one({"business_name": {"$regex": f"^{business_name}$", "$options": "i"}, "tenant_id": tenant_id})
     if existing:
-        # Update existing contact
         update_fields = {"updated_at": now, "source": "bot"}
-        if contact_name and not existing.get("contact_name"):
-            update_fields["contact_name"] = contact_name
-        if phone and not existing.get("phone"):
-            update_fields["phone"] = phone
-        if email and not existing.get("email"):
-            update_fields["email"] = email
         if body.get("message"):
-            update_fields["notes"] = (existing.get("notes", "") + f"\n[BOT {now[:10]}] {body['message']}").strip()
-        # Add bot tag
+            update_fields["recommendation"] = (existing.get("recommendation", "") + f"\n[BOT {now[:10]}] {body['message']}").strip()
         tags = existing.get("tags", [])
         if "bot" not in tags:
             tags.append("bot")
         update_fields["tags"] = tags
-        await db.crm_contacts.update_one({"_id": existing["_id"]}, {"$set": update_fields})
-        return {"message": "Contacto actualizado desde Bot", "contact_id": existing["id"], "action": "updated"}
+        await db.leads.update_one({"id": existing["id"]}, {"$set": update_fields})
+        return {"message": "Lead actualizado desde Bot", "lead_id": existing["id"], "action": "updated"}
     else:
-        # Create new contact with bot tag
-        contact = {
-            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "lead_id": "",
+        lead = {
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "job_id": "",
             "business_name": business_name,
-            "contact_name": contact_name,
-            "email": email,
-            "phone": phone,
-            "city": body.get("city", ""),
+            "raw_category": body.get("category", ""),
+            "normalized_category": body.get("category", "Bot"),
             "province": body.get("province", ""),
-            "category": body.get("category", ""),
-            "source": "bot",
-            "tags": ["bot"],
-            "notes": body.get("message", body.get("notes", "")),
-            "stage": "nuevo", "ai_score": 0, "deal_count": 0, "total_value": 0,
+            "city": body.get("city", ""),
+            "website": body.get("website", ""),
+            "email": email, "phone": phone,
+            "ai_score": 0, "quality_level": "unscored",
+            "recommendation": body.get("message", body.get("notes", "")),
+            "recommended_first_line": "",
+            "source": "bot", "tags": ["bot"],
+            "status": "raw",
             "created_at": now, "updated_at": now
         }
-        await db.crm_contacts.insert_one(contact)
-        return {"message": "Contacto creado desde Bot", "contact_id": contact["id"], "action": "created"}
+        await db.leads.insert_one(lead)
+        return {"message": "Lead creado desde Bot", "lead_id": lead["id"], "action": "created"}
 
 @api_router.post("/webhooks/resend/events")
 async def resend_events_webhook(request: Request, body: Dict[str, Any] = {}):
@@ -2141,7 +2275,7 @@ async def seed_data():
     tenant_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
 
-    await db.tenants.insert_one({"id": tenant_id, "name": "Spectra Demo", "branding": {"company_name": "Spectra Demo", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "sender_defaults": {"name": "Spectra Flow", "email": "noreply@spectraflow.com"}, "modules": {"prospeccion": True, "crm": True, "email_marketing": True}, "created_at": now})
+    await db.tenants.insert_one({"id": tenant_id, "name": "Spectra Demo", "branding": {"company_name": "Spectra Demo", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "sender_defaults": {"name": "Spectra Flow", "email": "noreply@spectraflow.com"}, "modules": {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True}, "plan": "enterprise", "price": 0, "active": True, "created_at": now})
     await db.users.insert_one({"email": admin_email, "password_hash": hash_password(admin_password), "name": "Admin", "role": "super_admin", "tenant_id": tenant_id, "created_at": now})
     await db.users.insert_one({"email": "demo@spectraflow.com", "password_hash": hash_password("Demo123!"), "name": "Maria Garcia", "role": "operator", "tenant_id": tenant_id, "created_at": now})
 

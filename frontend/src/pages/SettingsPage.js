@@ -316,9 +316,10 @@ export default function SettingsPage() {
                 <p className="text-sm text-zinc-500 mb-6">Activa o desactiva los modulos disponibles para este tenant. Esto controla que secciones ve el cliente.</p>
               </div>
               {[
-                { key: 'prospeccion', label: 'Prospeccion', desc: 'Buscador de Prospectos, Flow IA, Leads, Campanas, Plantillas', color: 'bg-blue-50 text-blue-700' },
-                { key: 'crm', label: 'Spectra CRM', desc: 'Contactos, Pipeline de Oportunidades, Notas, Seguimiento', color: 'bg-emerald-50 text-emerald-700' },
-                { key: 'email_marketing', label: 'Email Marketing', desc: 'Listas, Campanas de Email, Automatizaciones', color: 'bg-purple-50 text-purple-700' },
+                { key: 'prospeccion', label: 'Spectra Prospeccion', desc: 'Buscador de Prospectos y Flow IA', color: 'bg-blue-50 text-blue-700' },
+                { key: 'leads', label: 'Leads', desc: 'Centro de leads (prospeccion, bot, LinkedIn)', color: 'bg-indigo-50 text-indigo-700' },
+                { key: 'email_marketing', label: 'Spectra Email Marketing', desc: 'Listas, Campanas de Email, Plantillas', color: 'bg-purple-50 text-purple-700' },
+                { key: 'crm', label: 'Spectra CRM', desc: 'Contactos, Pipeline de Oportunidades, Notas', color: 'bg-emerald-50 text-emerald-700' },
               ].map(({ key, label, desc, color }) => (
                 <div key={key} className="flex items-center justify-between p-4 border border-zinc-200 rounded-xl" data-testid={`module-${key}`}>
                   <div className="flex items-center gap-4">

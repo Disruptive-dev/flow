@@ -18,13 +18,21 @@ export default function AnalyticsPage() {
   const [timeSeries, setTimeSeries] = useState(null);
   const [loading, setLoading] = useState(true);
   const [tsPeriod, setTsPeriod] = useState('week');
+  const [leadsPeriod, setLeadsPeriod] = useState('all');
+  const [crmPeriod, setCrmPeriod] = useState('all');
 
-  useEffect(() => {
+  const fetchStats = (lp, cp) => {
+    const params = {};
+    if (lp && lp !== 'all') params.period = lp;
+    const crmParams = {};
+    if (cp && cp !== 'all') crmParams.period = cp;
     Promise.all([
-      api.get('/analytics'),
-      api.get('/crm/stats').catch(() => ({ data: null })),
+      api.get('/analytics', { params }),
+      api.get('/crm/stats', { params: crmParams }).catch(() => ({ data: null })),
     ]).then(([a, c]) => { setStats(a.data); setCrmStats(c.data); }).catch(console.error).finally(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { fetchStats(leadsPeriod, crmPeriod); }, [leadsPeriod, crmPeriod]);
 
   useEffect(() => {
     api.get('/analytics/time-series', { params: { period: tsPeriod } }).then(r => setTimeSeries(r.data)).catch(console.error);
@@ -73,6 +81,17 @@ export default function AnalyticsPage() {
 
         {/* LEADS TAB */}
         <TabsContent value="leads" className="space-y-6">
+          <div className="flex items-center gap-3">
+            <Select value={leadsPeriod} onValueChange={setLeadsPeriod}>
+              <SelectTrigger className="w-[180px] h-9" data-testid="leads-period-select"><Calendar className="w-3.5 h-3.5 mr-1.5" /><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todo el tiempo</SelectItem>
+                <SelectItem value="week">Ultima semana</SelectItem>
+                <SelectItem value="month">Ultimo mes</SelectItem>
+                <SelectItem value="quarter">Ultimo trimestre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
             {[
               { key: 'total_leads', label: 'Total Leads', icon: Users, color: 'text-emerald-600', bg: 'bg-emerald-50' },
@@ -182,11 +201,23 @@ export default function AnalyticsPage() {
 
         {/* CRM TAB */}
         <TabsContent value="crm" className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="flex items-center gap-3">
+            <Select value={crmPeriod} onValueChange={setCrmPeriod}>
+              <SelectTrigger className="w-[180px] h-9" data-testid="crm-period-select"><Calendar className="w-3.5 h-3.5 mr-1.5" /><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todo el tiempo</SelectItem>
+                <SelectItem value="week">Ultima semana</SelectItem>
+                <SelectItem value="month">Ultimo mes</SelectItem>
+                <SelectItem value="quarter">Ultimo trimestre</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[
               { label: 'Contactos CRM', value: crmStats?.total_contacts || 0, color: 'text-blue-600' },
               { label: 'Oportunidades', value: crmStats?.total_deals || 0, color: 'text-purple-600' },
               { label: 'Ganadas', value: sc.ganado || 0, color: 'text-emerald-600' },
+              { label: 'Perdidas', value: sc.perdido || 0, color: 'text-red-600' },
               { label: 'Valor Ganado', value: `$${(crmStats?.won_value || 0).toLocaleString()}`, color: 'text-amber-600' },
             ].map(({ label, value, color }) => (
               <Card key={label} className="border-zinc-200 rounded-xl"><CardContent className="p-5 text-center">

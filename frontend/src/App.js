@@ -17,6 +17,7 @@ import CrmPage from '@/pages/CrmSyncPage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import SettingsPage from '@/pages/SettingsPage';
 import EmailMarketingPage from '@/pages/EmailMarketingPage';
+import TenantAdminPage from '@/pages/TenantAdminPage';
 import { Loader2 } from 'lucide-react';
 
 function ProtectedRoute({ children }) {
@@ -54,6 +55,7 @@ function AppRoutes() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/email-marketing" element={<EmailMarketingPage />} />
+          <Route path="/admin/tenants" element={<TenantAdminPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
