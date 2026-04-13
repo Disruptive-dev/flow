@@ -521,6 +521,35 @@ async def get_lead(request: Request, lead_id: str):
     events = await db.lead_events.find({"lead_id": lead_id}, {"_id": 0}).sort("created_at", -1).to_list(50)
     return {**lead, "events": events}
 
+@api_router.post("/leads")
+async def create_lead_manual(request: Request, body: Dict[str, Any] = {}):
+    """Create a lead manually from the Leads page"""
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    bname = body.get("business_name", "").strip()
+    if not bname:
+        raise HTTPException(status_code=400, detail="business_name es requerido")
+    lead = {
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "job_id": "",
+        "business_name": bname,
+        "raw_category": body.get("category", ""),
+        "normalized_category": body.get("category", "Manual"),
+        "province": body.get("province", ""),
+        "city": body.get("city", ""),
+        "website": body.get("website", ""),
+        "email": body.get("email", ""),
+        "phone": body.get("phone", ""),
+        "ai_score": 0, "quality_level": "unscored",
+        "recommendation": body.get("notes", ""),
+        "recommended_first_line": "",
+        "source": body.get("source", "manual"),
+        "tags": body.get("tags", []),
+        "status": "raw",
+        "created_at": now, "updated_at": now
+    }
+    await db.leads.insert_one(lead)
+    return {k: v for k, v in lead.items() if k != "_id"}
+
 @api_router.put("/leads/{lead_id}/status")
 async def update_lead_status(request: Request, lead_id: str, body: LeadStatusUpdate):
     user = await get_current_user(request)
@@ -536,6 +565,16 @@ async def update_lead_status(request: Request, lead_id: str, body: LeadStatusUpd
         existing = await db.crm_contacts.find_one({"lead_id": lead_id, "tenant_id": user["tenant_id"]})
         if not existing:
             await db.crm_contacts.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "lead_id": lead_id, "business_name": lead.get("business_name", ""), "contact_name": "", "email": lead.get("email", ""), "phone": lead.get("phone", ""), "city": lead.get("city", ""), "province": lead.get("province", ""), "category": lead.get("normalized_category", ""), "source": "spectra_flow", "notes": lead.get("recommendation", ""), "stage": "nuevo", "ai_score": lead.get("ai_score", 0), "deal_count": 0, "total_value": 0, "created_at": now, "updated_at": now})
+    # Auto-add to "Secuencia" email list when queued
+    if lead and body.status == "queued_for_sequence":
+        seq_list_name = "Secuencia - Leads en cola"
+        seq_list = await db.email_lists.find_one({"tenant_id": user["tenant_id"], "name": seq_list_name})
+        if seq_list:
+            old_ids = seq_list.get("lead_ids", [])
+            if lead_id not in old_ids:
+                await db.email_lists.update_one({"id": seq_list["id"]}, {"$set": {"lead_ids": old_ids + [lead_id], "subscriber_count": len(old_ids) + 1, "updated_at": now}})
+        else:
+            await db.email_lists.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": seq_list_name, "description": "Leads enviados a secuencia de email", "subscriber_count": 1, "lead_ids": [lead_id], "created_at": now, "updated_at": now})
     return {"message": "Status updated", "status": body.status}
 
 @api_router.post("/leads/bulk-action")
@@ -2038,7 +2077,9 @@ async def bulk_deal_action(request: Request, body: BulkDealAction):
 async def export_n8n_workflow():
     """Download the n8n workflow JSON file"""
     from fastapi.responses import FileResponse
-    filepath = ROOT_DIR.parent / "n8n-workflow-spectra-prospeccion.json"
+    filepath = ROOT_DIR.parent / "n8n-workflow-spectra-prospeccion-v2.json"
+    if not filepath.exists():
+        filepath = ROOT_DIR.parent / "n8n-workflow-spectra-prospeccion.json"
     if not filepath.exists():
         raise HTTPException(status_code=404, detail="Workflow file not found")
     return FileResponse(path=str(filepath), media_type="application/octet-stream", filename="spectra-flow-n8n-workflow.json")

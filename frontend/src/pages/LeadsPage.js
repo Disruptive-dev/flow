@@ -12,11 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import { Search, MoreHorizontal, CheckCircle2, XCircle, Send, ExternalLink, Loader2, ChevronLeft, ChevronRight, Download, Upload, Globe, Mail, Phone, Star, TrendingUp, TrendingDown } from 'lucide-react';
+import { Search, MoreHorizontal, CheckCircle2, XCircle, Send, ExternalLink, Loader2, ChevronLeft, ChevronRight, Download, Upload, Globe, Mail, Phone, Star, TrendingUp, TrendingDown, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
 import GuideBanner from '@/components/GuideBanner';
 import LeadStatusGuide from '@/components/LeadStatusGuide';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
 
 const leadStatusLabels = {
   raw: "Sin procesar", cleaned: "Limpiado", scored: "Calificado",
@@ -80,6 +82,8 @@ export default function LeadsPage() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [newLead, setNewLead] = useState({ business_name: '', email: '', phone: '', city: '', category: '', website: '', notes: '' });
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -94,6 +98,17 @@ export default function LeadsPage() {
     } catch (err) { toast.error(err.response?.data?.detail || 'Error al importar'); }
     setImporting(false);
     e.target.value = '';
+  };
+
+  const handleCreateLead = async () => {
+    if (!newLead.business_name.trim()) { toast.error('Nombre de empresa es requerido'); return; }
+    try {
+      await api.post('/leads', newLead);
+      toast.success('Lead creado');
+      setCreateOpen(false);
+      setNewLead({ business_name: '', email: '', phone: '', city: '', category: '', website: '', notes: '' });
+      fetchLeads();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error al crear lead'); }
   };
 
   const fetchLeads = async () => {
@@ -142,6 +157,9 @@ export default function LeadsPage() {
         <div className="flex items-center gap-3">
           <LeadStatusGuide />
           <FlowBotButton section="leads" />
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5" data-testid="create-lead-btn">
+            <Plus className="w-4 h-4" /> Crear Lead
+          </Button>
           <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleImport} className="hidden" />
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-leads-btn">
             {importing ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : <Upload className="w-4 h-4 mr-1.5" />} Importar Excel
@@ -345,6 +363,30 @@ export default function LeadsPage() {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Create Lead Dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Crear Lead Manual</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div><Label>Empresa *</Label><Input value={newLead.business_name} onChange={e => setNewLead(p => ({ ...p, business_name: e.target.value }))} placeholder="Nombre de la empresa" data-testid="new-lead-name" /></div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Email</Label><Input value={newLead.email} onChange={e => setNewLead(p => ({ ...p, email: e.target.value }))} placeholder="email@empresa.com" /></div>
+              <div><Label>Telefono</Label><Input value={newLead.phone} onChange={e => setNewLead(p => ({ ...p, phone: e.target.value }))} placeholder="+54 11 1234-5678" /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><Label>Ciudad</Label><Input value={newLead.city} onChange={e => setNewLead(p => ({ ...p, city: e.target.value }))} placeholder="Buenos Aires" /></div>
+              <div><Label>Categoria</Label><Input value={newLead.category} onChange={e => setNewLead(p => ({ ...p, category: e.target.value }))} placeholder="Restaurantes" /></div>
+            </div>
+            <div><Label>Website</Label><Input value={newLead.website} onChange={e => setNewLead(p => ({ ...p, website: e.target.value }))} placeholder="www.empresa.com" /></div>
+            <div><Label>Notas</Label><Input value={newLead.notes} onChange={e => setNewLead(p => ({ ...p, notes: e.target.value }))} placeholder="Informacion adicional" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
+            <Button onClick={handleCreateLead} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="confirm-create-lead">Crear Lead</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
