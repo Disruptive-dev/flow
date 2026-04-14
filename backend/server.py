@@ -101,12 +101,14 @@ class RegisterRequest(BaseModel):
 
 class ProspectJobCreate(BaseModel):
     country: Optional[str] = "Argentina"
-    province: str
-    city: str
+    province: Optional[str] = ""
+    city: Optional[str] = ""
     category: str
     quantity: int = 100
     postal_code: Optional[str] = ""
     filters: Optional[Dict[str, Any]] = None
+    source: Optional[str] = "google_maps"
+    linkedin_params: Optional[Dict[str, Any]] = None
 
 class LeadStatusUpdate(BaseModel):
     status: str
@@ -301,10 +303,12 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
     job = {
         "id": job_id, "tenant_id": user["tenant_id"],
         "country": body.country or "Argentina",
-        "province": body.province, "city": body.city,
+        "province": body.province or "", "city": body.city or "",
         "category": body.category, "quantity": body.quantity,
         "postal_code": body.postal_code or "",
         "filters": body.filters or {}, "status": "pending",
+        "source": body.source or "google_maps",
+        "linkedin_params": body.linkedin_params or {},
         "raw_count": 0, "cleaned_count": 0, "qualified_count": 0,
         "rejected_count": 0, "approved_count": 0,
         "stages": [
@@ -330,9 +334,11 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
             async with httpx.AsyncClient(timeout=10) as client:
                 await client.post(webhook_url, json={
                     "job_id": job_id, "tenant_id": user["tenant_id"],
-                    "country": body.country or "Argentina", "province": body.province,
-                    "city": body.city, "category": body.category, "quantity": body.quantity,
+                    "country": body.country or "Argentina", "province": body.province or "",
+                    "city": body.city or "", "category": body.category, "quantity": body.quantity,
                     "postal_code": body.postal_code or "",
+                    "source": body.source or "google_maps",
+                    "linkedin_params": body.linkedin_params or {},
                     "callback_url": callback_url, "progress_url": progress_url,
                     "api_key": n8n_config.get("api_key", "")
                 })
@@ -2012,6 +2018,7 @@ async def create_tenant(request: Request, body: TenantCreate):
         {"name": "n8n", "display_name": "n8n Orchestration", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Workflow orchestration"},
         {"name": "dify", "display_name": "Dify AI", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "AI scoring"},
         {"name": "resend", "display_name": "Resend Email", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Email sending"},
+        {"name": "apify", "display_name": "Apify (LinkedIn)", "enabled": False, "base_url": "https://api.apify.com/v2", "api_key": "", "status": "not_configured", "description": "LinkedIn scraping"},
     ]:
         await db.integration_configs.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, **ic, "last_sync": None, "created_at": now, "updated_at": now})
     return {**{k: v for k, v in tenant.items() if k != "_id"}, "admin_email": body.admin_email}
@@ -2379,7 +2386,8 @@ async def seed_data():
         {"name": "dify", "display_name": "Dify AI", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "AI cleaning and lead scoring"},
         {"name": "resend", "display_name": "Resend Email", "enabled": True, "base_url": "https://api.resend.com", "api_key": "***configured***", "status": "configured", "last_sync": None, "description": "Email sending and domain verification"},
         {"name": "espo_crm", "display_name": "Spectra CRM", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Qualified lead handoff and CRM sync"},
-        {"name": "optimia_bot", "display_name": "OptimIA Bot", "enabled": False, "base_url": "https://inbox.optimia.disruptive-sw.com", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Omnichannel bot and live chat support"}
+        {"name": "optimia_bot", "display_name": "OptimIA Bot", "enabled": False, "base_url": "https://inbox.optimia.disruptive-sw.com", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Omnichannel bot and live chat support"},
+        {"name": "apify", "display_name": "Apify (LinkedIn)", "enabled": False, "base_url": "https://api.apify.com/v2", "api_key": "", "status": "not_configured", "last_sync": None, "description": "LinkedIn scraping via Apify actors"}
     ]
     for intg in integrations:
         await db.integration_configs.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, **intg, "created_at": now, "updated_at": now})
