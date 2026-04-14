@@ -1,37 +1,36 @@
 # Spectra Flow - PRD
 
 ## Architecture
-React 19 + FastAPI + MongoDB + Resend + Emergent LLM + Dify + n8n (PWA)
+React 19 + FastAPI + MongoDB + Resend + Emergent LLM + Dify + n8n + Apify (PWA)
 Deploy: Docker Compose / EasyPanel on DigitalOcean
 
-## Navigation (4 Sections + Super Admin + Productos)
-1. **Spectra Prospeccion**: Buscador (B2B + LinkedIn), Flow IA
-2. **Leads**: Central hub (prospeccion, bot, LinkedIn, manual, importado)
-3. **Spectra Email Marketing**: Email Marketing, Campanas, Plantillas
-4. **Spectra CRM**: Pipeline Kanban, Contactos, Oportunidades
-+ **Super Admin**: Admin Tenants
-+ **Productos**: OptimIA Bot, Spectra Content IA, Spectra Brain
+## Navigation
+1. Spectra Prospeccion: Buscador (B2B + LinkedIn), Flow IA
+2. Leads: Central hub (all sources) with filters, sorting, editable fields
+3. Spectra Email Marketing: Campaigns, Lists (manual lead picking), Templates (AI custom prompt)
+4. Spectra CRM: Pipeline Kanban, Contacts, Deals (no duplicates)
++ Super Admin: Tenants | Productos: OptimIA, Content IA, Brain
 
-## Implemented Features
-- Full pipeline: Prospect Finder → Flow IA → Leads → Email Marketing → CRM
-- Prospect Finder: B2B (Outscraper) + LinkedIn (Apify) tabs
-- Lead source tracking (Fuente column): B2B, LinkedIn, OptimIA Bot, Creado, Importado
-- Channel tracking: web, whatsapp, facebook, instagram, email, telefono, referido
-- Editable notes and channel per lead
-- Manual lead creation, Excel import/export
-- Pick leads from Leads collection for email lists
-- Chatwoot → Leads with BOT tag + channel
-- CRM deals deduplication, auto-deal on stage change
-- Module toggle controls sidebar (hidden for clients)
-- Technical details hidden from non-super_admin users
-- Super Admin: Tenant CRUD (plans, pricing, modules)
-- Flow IA Neuro: custom prompt for template generation
-- Sequence → auto email list
+## Key Features
+- Lead source tracking: B2B Google Maps, LinkedIn, OptimIA Bot, Manual, Imported
+- Lead channel tracking: web, whatsapp, facebook, instagram, email, telefono, referido
+- Advanced filters: date range, source, category, city, status, search
+- Sortable columns: empresa, categoria, ciudad, score, fecha
+- Editable lead fields: email, phone, website, category, channel, notes
+- Manual lead picking for email lists
+- Custom AI prompt for template generation
+- Chatwoot webhook → Leads with BOT tag + channel
 - n8n deduplication, all leads pass (scored + rejected)
-- Analytics: date filters + Perdidas
-- PWA, Docker, EasyPanel deployment
+- Module toggle, tech details hidden from clients
+- Tenant management with plans/pricing/modules
+
+## Outscraper Config
+Using Google Maps Search API v3 endpoint:
+- API: https://api.outscraper.com/maps/search-v3
+- Auth: X-API-KEY header
+- Key params: query, limit, language, async
+- Alternative scrapers at outscraper.com: Google Search, Amazon, Yelp, TripAdvisor
 
 ## Backlog
-- Apify LinkedIn real scraping
-- Chatwoot e2e testing
+- Apify LinkedIn real scraping activation
 - Refactor server.py into route modules

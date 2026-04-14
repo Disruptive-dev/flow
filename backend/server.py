@@ -504,18 +504,33 @@ async def leads_stats(request: Request, job_id: Optional[str] = None):
     return {"total": sum(stats.values()), "scored": stats.get("scored", 0), "approved": stats.get("approved", 0), "rejected": stats.get("rejected", 0), "contacted": stats.get("contacted", 0), "sent_to_crm": stats.get("sent_to_crm", 0), "cleaned": stats.get("cleaned", 0)}
 
 @api_router.get("/leads")
-async def list_leads(request: Request, status: Optional[str] = None, job_id: Optional[str] = None, search: Optional[str] = None, page: int = 1, limit: int = 50):
+async def list_leads(request: Request, status: Optional[str] = None, job_id: Optional[str] = None, search: Optional[str] = None, source: Optional[str] = None, category: Optional[str] = None, city: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, sort_by: Optional[str] = "created_at", sort_dir: Optional[str] = "desc", page: int = 1, limit: int = 50):
     user = await get_current_user(request)
     query = {"tenant_id": user["tenant_id"]}
     if status:
         query["status"] = status
     if job_id:
         query["job_id"] = job_id
+    if source:
+        query["source"] = source
+    if category:
+        query["normalized_category"] = {"$regex": category, "$options": "i"}
+    if city:
+        query["city"] = {"$regex": city, "$options": "i"}
+    if date_from or date_to:
+        date_filter = {}
+        if date_from:
+            date_filter["$gte"] = date_from
+        if date_to:
+            date_filter["$lte"] = date_to + "T23:59:59"
+        query["created_at"] = date_filter
     if search:
         query["$or"] = [{"business_name": {"$regex": search, "$options": "i"}}, {"email": {"$regex": search, "$options": "i"}}, {"city": {"$regex": search, "$options": "i"}}]
     total = await db.leads.count_documents(query)
     skip = (page - 1) * limit
-    leads = await db.leads.find(query, {"_id": 0}).sort("ai_score", -1).skip(skip).limit(limit).to_list(limit)
+    sort_field = sort_by if sort_by in ["ai_score", "created_at", "business_name", "city", "normalized_category"] else "created_at"
+    sort_direction = 1 if sort_dir == "asc" else -1
+    leads = await db.leads.find(query, {"_id": 0}).sort(sort_field, sort_direction).skip(skip).limit(limit).to_list(limit)
     return {"leads": leads, "total": total, "page": page, "limit": limit, "pages": max(1, (total + limit - 1) // limit)}
 
 @api_router.get("/leads/{lead_id}")
