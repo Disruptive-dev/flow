@@ -14,6 +14,8 @@ import { useNavigate } from 'react-router-dom';
 import FlowBotButton from '@/components/FlowBotButton';
 import GuideBanner from '@/components/GuideBanner';
 
+import { useAuth } from '@/contexts/AuthContext';
+
 const defaultCountries = [
   { code: "AR", name: "Argentina" }, { code: "CL", name: "Chile" }, { code: "UY", name: "Uruguay" },
   { code: "PY", name: "Paraguay" }, { code: "BR", name: "Brasil" }, { code: "CO", name: "Colombia" },
@@ -47,7 +49,9 @@ const statusColors = {
 
 export default function ProspectFinderPage() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const navigate = useNavigate();
+  const isSuperAdmin = user?.role === 'super_admin';
   const [activeTab, setActiveTab] = useState('b2b');
 
   // B2B form
@@ -157,7 +161,7 @@ export default function ProspectFinderPage() {
                 </div>
                 <div>
                   <h3 className="font-heading font-medium text-zinc-900">Prospeccion B2B - Google Maps</h3>
-                  <p className="text-xs text-zinc-500">Busca negocios reales por ubicacion, categoria e industria via Outscraper</p>
+                  <p className="text-xs text-zinc-500">{isSuperAdmin ? 'Busca negocios reales por ubicacion, categoria e industria via Outscraper' : 'Busca negocios reales por ubicacion, categoria e industria'}</p>
                 </div>
               </div>
               <form onSubmit={handleCreateB2B}>
@@ -230,9 +234,9 @@ export default function ProspectFinderPage() {
                 </div>
                 <div>
                   <h3 className="font-heading font-medium text-zinc-900">Prospeccion LinkedIn</h3>
-                  <p className="text-xs text-zinc-500">Busca empresas y profesionales en LinkedIn via Apify</p>
+                  <p className="text-xs text-zinc-500">{isSuperAdmin ? 'Busca empresas y profesionales en LinkedIn via Apify' : 'Busca empresas y profesionales en LinkedIn'}</p>
                 </div>
-                <Badge className="bg-amber-50 text-amber-700 ml-auto text-[10px]">Requiere API Key de Apify</Badge>
+                {isSuperAdmin && <Badge className="bg-amber-50 text-amber-700 ml-auto text-[10px]">Requiere API Key de Apify</Badge>}
               </div>
               <form onSubmit={handleCreateLinkedIn}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
