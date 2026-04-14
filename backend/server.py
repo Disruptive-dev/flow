@@ -1616,6 +1616,23 @@ async def remove_leads_from_list(request: Request, list_id: str, body: Dict[str,
     await db.email_lists.update_one({"id": list_id}, {"$set": {"lead_ids": new_ids, "subscriber_count": len(new_ids), "updated_at": now}})
     return {"message": f"{len(remove_ids)} leads removidos", "total": len(new_ids)}
 
+@api_router.post("/email-marketing/lists/{list_id}/add-manual-leads")
+async def add_manual_leads_to_list(request: Request, list_id: str, body: Dict[str, Any] = {}):
+    """Add specific leads by ID to a list (manual pick from Leads page)"""
+    user = await get_current_user(request)
+    lead_ids = body.get("lead_ids", [])
+    if not lead_ids:
+        raise HTTPException(status_code=400, detail="lead_ids requeridos")
+    now = datetime.now(timezone.utc).isoformat()
+    lst = await db.email_lists.find_one({"id": list_id, "tenant_id": user["tenant_id"]})
+    if not lst:
+        raise HTTPException(status_code=404, detail="Lista no encontrada")
+    existing_ids = lst.get("lead_ids", [])
+    new_ids = [lid for lid in lead_ids if lid not in existing_ids]
+    all_ids = existing_ids + new_ids
+    await db.email_lists.update_one({"id": list_id}, {"$set": {"lead_ids": all_ids, "subscriber_count": len(all_ids), "updated_at": now}})
+    return {"message": f"{len(new_ids)} leads agregados", "total": len(all_ids)}
+
 @api_router.post("/email-marketing/auto-list-from-leads")
 async def auto_create_list_from_leads(request: Request, body: Dict[str, Any] = {}):
     """Auto-create an email list from scored/approved leads"""

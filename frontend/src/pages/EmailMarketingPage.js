@@ -43,6 +43,10 @@ export default function EmailMarketingPage() {
   const [sendingReal, setSendingReal] = useState(null);
   const [viewingList, setViewingList] = useState(null);
   const [listLeads, setListLeads] = useState([]);
+  const [pickLeadsOpen, setPickLeadsOpen] = useState(null);
+  const [availableLeads, setAvailableLeads] = useState([]);
+  const [leadSearch, setLeadSearch] = useState('');
+  const [pickedLeads, setPickedLeads] = useState([]);
 
   const fetchData = async () => {
     try {
@@ -104,6 +108,26 @@ export default function EmailMarketingPage() {
       setLists(prev => prev.map(l => l.id === viewingList.id ? { ...l, subscriber_count: data.total } : l));
       toast.success('Lead removido de la lista');
     } catch { toast.error('Error'); }
+  };
+
+  const openPickLeads = async (listId) => {
+    setPickLeadsOpen(listId);
+    setPickedLeads([]);
+    setLeadSearch('');
+    try {
+      const { data } = await api.get('/leads', { params: { limit: 200 } });
+      setAvailableLeads(data.leads || []);
+    } catch { setAvailableLeads([]); }
+  };
+  const confirmPickLeads = async () => {
+    if (!pickLeadsOpen || !pickedLeads.length) return;
+    try {
+      const { data } = await api.post(`/email-marketing/lists/${pickLeadsOpen}/add-manual-leads`, { lead_ids: pickedLeads });
+      setLists(prev => prev.map(l => l.id === pickLeadsOpen ? { ...l, subscriber_count: data.total } : l));
+      toast.success(`${pickedLeads.length} leads agregados a la lista`);
+      setPickLeadsOpen(null);
+      setPickedLeads([]);
+    } catch { toast.error('Error al agregar leads'); }
   };
 
   const startEditAutomation = (auto) => { setEditingAutomation(auto); setEditSteps([...(auto.steps || [])]); setEditTrigger(auto.trigger || 'manual'); };
@@ -278,7 +302,7 @@ export default function EmailMarketingPage() {
                     </div>
                     <div className="flex gap-2 mt-2">
                       <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => viewListLeads(list)} data-testid={`view-list-${i}`}><Eye className="w-3 h-3 mr-1" /> Ver Leads</Button>
-                      <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => addLeadsToList(list.id)} data-testid={`add-leads-list-${i}`}><Plus className="w-3 h-3 mr-1" /> Agregar</Button>
+                      <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => openPickLeads(list.id)} data-testid={`pick-leads-list-${i}`}><Plus className="w-3 h-3 mr-1" /> Agregar Leads</Button>
                     </div>
                   </CardContent>
                 </Card>
@@ -306,6 +330,36 @@ export default function EmailMarketingPage() {
               </div>
             ))}
             {!listLeads.length && <p className="text-sm text-zinc-400 text-center py-4">Lista vacia</p>}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pick Leads Dialog */}
+      <Dialog open={!!pickLeadsOpen} onOpenChange={(o) => !o && setPickLeadsOpen(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="font-heading">Agregar Leads a la Lista</DialogTitle></DialogHeader>
+          <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)} placeholder="Buscar por nombre, email..." className="mb-3" data-testid="pick-leads-search" />
+          <div className="space-y-1 max-h-[50vh] overflow-y-auto">
+            {availableLeads.filter(l => {
+              if (!leadSearch) return true;
+              const q = leadSearch.toLowerCase();
+              return (l.business_name||'').toLowerCase().includes(q) || (l.email||'').toLowerCase().includes(q) || (l.city||'').toLowerCase().includes(q);
+            }).map((lead, i) => (
+              <label key={lead.id} className={`flex items-center gap-3 p-2.5 rounded-lg cursor-pointer transition-colors ${pickedLeads.includes(lead.id) ? 'bg-blue-50 border border-blue-200' : 'hover:bg-zinc-50 border border-transparent'}`} data-testid={`pick-lead-${i}`}>
+                <input type="checkbox" checked={pickedLeads.includes(lead.id)} onChange={e => { if (e.target.checked) setPickedLeads(p => [...p, lead.id]); else setPickedLeads(p => p.filter(id => id !== lead.id)); }} className="rounded" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-zinc-900 truncate">{lead.business_name}</p>
+                  <p className="text-xs text-zinc-500">{lead.email || 'Sin email'} · {lead.city} · Score: {lead.ai_score}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+          <div className="flex items-center justify-between mt-4 pt-3 border-t">
+            <p className="text-sm text-zinc-500">{pickedLeads.length} leads seleccionados</p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setPickLeadsOpen(null)}>Cancelar</Button>
+              <Button onClick={confirmPickLeads} disabled={!pickedLeads.length} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="confirm-pick-leads">Agregar a Lista</Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
