@@ -112,6 +112,8 @@ export default function Sidebar() {
                 <ShieldCheck className="w-[18px] h-[18px]" />
                 <span>{superAdminSection.label}</span>
               </NavLink>
+              <Separator className="my-2 bg-zinc-800" />
+              <p className="px-3 pt-3 pb-1.5 text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Productos</p>
               <a href="https://inbox.optimia.disruptive-sw.com" target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800/60 transition-all duration-200"
                 data-testid="sidebar-nav-optimia">
