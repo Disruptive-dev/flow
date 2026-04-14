@@ -131,7 +131,6 @@ export default function SettingsPage() {
           <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
           {user?.role === 'super_admin' && <TabsTrigger value="modules" data-testid="settings-tab-modules"><Package className="w-4 h-4 mr-1.5" />Modulos</TabsTrigger>}
           <TabsTrigger value="scoring" data-testid="settings-tab-scoring"><Sliders className="w-4 h-4 mr-1.5" />Scoring</TabsTrigger>
-          {user?.role === 'super_admin' && <TabsTrigger value="optimia" data-testid="settings-tab-optimia"><Bot className="w-4 h-4 mr-1.5" />OptimIA Bot</TabsTrigger>}
         </TabsList>
 
         {/* Company Info */}

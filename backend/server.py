@@ -2091,6 +2091,15 @@ async def export_n8n_workflow():
         raise HTTPException(status_code=404, detail="Workflow file not found")
     return FileResponse(path=str(filepath), media_type="application/octet-stream", filename="spectra-flow-n8n-workflow.json")
 
+@api_router.get("/export/n8n-optimia-workflow")
+async def export_n8n_optimia_workflow():
+    """Download the OptimIA/Spectra n8n workflow JSON file"""
+    from fastapi.responses import FileResponse
+    filepath = ROOT_DIR.parent / "n8n-optimia-spectra-2026.json"
+    if not filepath.exists():
+        raise HTTPException(status_code=404, detail="Workflow file not found")
+    return FileResponse(path=str(filepath), media_type="application/octet-stream", filename="OPTIMIA_SPECTRA_2026.json")
+
 @api_router.get("/export/leads")
 async def export_leads(request: Request):
     from fastapi.responses import StreamingResponse

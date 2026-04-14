@@ -43,6 +43,21 @@ const leadStatusColors = {
 const qualityLabels = { excellent: "Excelente", good: "Bueno", average: "Promedio", poor: "Bajo" };
 const qualityColors = { excellent: "text-emerald-600", good: "text-blue-600", average: "text-amber-600", poor: "text-red-600" };
 
+const sourceConfig = {
+  google_maps: { label: "B2B Google Maps", color: "bg-blue-50 text-blue-700" },
+  linkedin: { label: "LinkedIn", color: "bg-sky-50 text-sky-700" },
+  bot: { label: "OptimIA Bot", color: "bg-emerald-50 text-emerald-700" },
+  manual: { label: "Creado", color: "bg-zinc-100 text-zinc-700" },
+  imported: { label: "Importado", color: "bg-purple-50 text-purple-700" },
+  spectra_flow: { label: "B2B Google Maps", color: "bg-blue-50 text-blue-700" },
+};
+const getSourceLabel = (lead) => {
+  if (lead.source && sourceConfig[lead.source]) return sourceConfig[lead.source];
+  if (lead.tags?.includes('bot')) return sourceConfig.bot;
+  if (lead.job_id) return sourceConfig.google_maps;
+  return { label: "Otro", color: "bg-zinc-100 text-zinc-600" };
+};
+
 function getScoreBreakdown(lead) {
   const params = [];
   // Presencia Digital (max 35)
@@ -236,6 +251,7 @@ export default function LeadsPage() {
               <TableRow className="bg-zinc-50 hover:bg-zinc-50">
                 <TableHead className="w-10"><Checkbox checked={selected.length === leads.length && leads.length > 0} onCheckedChange={toggleAll} data-testid="leads-select-all" /></TableHead>
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Empresa</TableHead>
+                <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Fuente</TableHead>
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Categoria</TableHead>
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Ciudad</TableHead>
                 <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Score</TableHead>
@@ -246,13 +262,14 @@ export default function LeadsPage() {
             </TableHeader>
             <TableBody>
               {loading ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-12"><Loader2 className="w-5 h-5 animate-spin mx-auto text-zinc-400" /></TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-12"><Loader2 className="w-5 h-5 animate-spin mx-auto text-zinc-400" /></TableCell></TableRow>
               ) : leads.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-12 text-zinc-400">No se encontraron leads</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-12 text-zinc-400">No se encontraron leads</TableCell></TableRow>
               ) : leads.map((lead, i) => (
                 <TableRow key={lead.id} className="hover:bg-zinc-50/80 cursor-pointer" data-testid={`lead-row-${i}`}>
                   <TableCell><Checkbox checked={selected.includes(lead.id)} onCheckedChange={() => toggleSelect(lead.id)} /></TableCell>
                   <TableCell className="font-medium text-zinc-900 text-sm" onClick={() => openDetail(lead)}>{lead.business_name}</TableCell>
+                  <TableCell><Badge className={`${getSourceLabel(lead).color} text-[10px]`}>{getSourceLabel(lead).label}</Badge></TableCell>
                   <TableCell className="text-sm text-zinc-600">{lead.normalized_category}</TableCell>
                   <TableCell className="text-sm text-zinc-600">{lead.city}</TableCell>
                   <TableCell>

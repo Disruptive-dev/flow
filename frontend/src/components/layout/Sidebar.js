@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import {
   LayoutDashboard, Search, Zap, Users, Mail, FileText,
-  RefreshCw, BarChart3, Settings, LogOut, AtSign, ShieldCheck
+  RefreshCw, BarChart3, Settings, LogOut, AtSign, ShieldCheck,
+  MessageCircle, Palette, Brain
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -111,6 +112,24 @@ export default function Sidebar() {
                 <ShieldCheck className="w-[18px] h-[18px]" />
                 <span>{superAdminSection.label}</span>
               </NavLink>
+              <a href="https://inbox.optimia.disruptive-sw.com" target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800/60 transition-all duration-200"
+                data-testid="sidebar-nav-optimia">
+                <MessageCircle className="w-[18px] h-[18px] text-emerald-400" />
+                <span>OptimIA Bot</span>
+              </a>
+              <a href="https://content-ia.spectra-metrics.com" target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-purple-400 hover:bg-zinc-800/60 transition-all duration-200"
+                data-testid="sidebar-nav-content-ia">
+                <Palette className="w-[18px] h-[18px] text-purple-400" />
+                <span>Spectra Content IA</span>
+              </a>
+              <a href="https://brain.spectra-metrics.com" target="_blank" rel="noopener noreferrer"
+                className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-pink-400 hover:bg-zinc-800/60 transition-all duration-200"
+                data-testid="sidebar-nav-brain">
+                <Brain className="w-[18px] h-[18px] text-pink-400" />
+                <span>Spectra Brain</span>
+              </a>
             </>
           )}
         </nav>
