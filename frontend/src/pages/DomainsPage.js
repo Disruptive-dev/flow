@@ -47,7 +47,7 @@ export default function DomainsPage() {
       setDomains(prev => [data, ...prev]);
       setDialogOpen(false);
       setForm({ domain: '', subdomain: '', sender_name: '', sender_email: '', reply_to: '', signature: '' });
-      toast.success('Dominio agregado en Resend. Configura los registros DNS.');
+      toast.success('Dominio agregado. Configura los registros DNS.');
     } catch (err) { toast.error('Error al agregar dominio'); }
     setCreating(false);
   };
@@ -68,8 +68,8 @@ export default function DomainsPage() {
     try {
       const { data } = await api.post('/domains/sync-resend');
       setDomains(data.domains || []);
-      toast.success(`${data.synced} dominio(s) sincronizado(s) con Resend`);
-    } catch (err) { toast.error('Error al sincronizar con Resend'); }
+      toast.success(`${data.synced} dominio(s) sincronizado(s)`);
+    } catch (err) { toast.error('Error al sincronizar dominios'); }
     setSyncing(false);
   };
 
@@ -80,12 +80,12 @@ export default function DomainsPage() {
       const { data } = await api.post('/email/send', {
         to_email: testEmail,
         subject: `Prueba de envio - ${domain.subdomain || domain.domain}`,
-        html_body: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2 style="color:#1D4ED8;">Spectra Flow</h2><p>Este es un email de prueba enviado desde <strong>${domain.subdomain || domain.domain}</strong>.</p><p>Si recibes este email, tu dominio esta correctamente configurado para envio.</p><hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" /><p style="color:#6b7280;font-size:12px;">Enviado via Resend desde Spectra Flow</p></div>`,
+        html_body: `<div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px;"><h2 style="color:#1D4ED8;">Spectra Flow</h2><p>Este es un email de prueba enviado desde <strong>${domain.subdomain || domain.domain}</strong>.</p><p>Si recibes este email, tu dominio esta correctamente configurado para envio.</p><hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;" /><p style="color:#6b7280;font-size:12px;">Enviado para email outreach desde Spectra Flow</p></div>`,
         from_email: domain.sender_email,
         from_name: domain.sender_name || 'Spectra Flow'
       });
       if (data.simulated) {
-        toast.info('Email simulado (Resend no configurado)');
+        toast.info('Email simulado (Email no configurado)');
       } else {
         toast.success(`Email enviado a ${testEmail}`);
       }
@@ -107,11 +107,11 @@ export default function DomainsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('domains')}</h1>
-          <p className="text-sm text-zinc-500 mt-1">Configura tus dominios de envio para email outreach via Resend</p>
+          <p className="text-sm text-zinc-500 mt-1">Configura tus dominios de envio para email outreach para email outreach</p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={handleSync} disabled={syncing} data-testid="sync-resend-button">
-            <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar Resend
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar Dominios
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
@@ -121,7 +121,7 @@ export default function DomainsPage() {
               <DialogHeader><DialogTitle className="font-heading">Configurar Dominio de Envio</DialogTitle></DialogHeader>
               <div className="space-y-4 mt-4">
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-100">
-                  <p className="text-xs text-blue-700">Recomendamos usar un subdominio (ej: mail.tuempresa.com) para proteger la reputacion de tu dominio principal. El dominio se creara automaticamente en Resend.</p>
+                  <p className="text-xs text-blue-700">Recomendamos usar un subdominio (ej: mail.tuempresa.com) para proteger la reputacion de tu dominio principal. El dominio se configurara automaticamente.</p>
                 </div>
                 <div>
                   <Label className="text-sm mb-1.5 block">Dominio Principal</Label>
@@ -168,7 +168,6 @@ export default function DomainsPage() {
                       <div>
                         <h3 className="font-heading font-medium text-zinc-900">{domain.subdomain || domain.domain}</h3>
                         <p className="text-xs text-zinc-500">{domain.sender_email || 'Sin remitente configurado'}</p>
-                        {domain.resend_domain_id && <p className="text-[10px] text-zinc-400 mt-0.5">Resend ID: {domain.resend_domain_id.slice(0, 8)}...</p>}
                       </div>
                     </div>
                     <Badge className={sc.color}>{sc.label}</Badge>
@@ -220,7 +219,7 @@ export default function DomainsPage() {
                           <DialogContent className="max-w-md">
                             <DialogHeader><DialogTitle>Enviar Email de Prueba</DialogTitle></DialogHeader>
                             <div className="space-y-4 mt-2">
-                              <p className="text-sm text-zinc-500">Se enviara un email de prueba desde <strong>{domain.sender_email}</strong> via Resend.</p>
+                              <p className="text-sm text-zinc-500">Se enviara un email de prueba desde <strong>{domain.sender_email}</strong> para email outreach.</p>
                               <div>
                                 <Label className="text-sm mb-1.5 block">Email destino</Label>
                                 <Input value={testEmail} onChange={e => setTestEmail(e.target.value)} placeholder="tu@email.com" data-testid="test-email-input" />
@@ -242,9 +241,9 @@ export default function DomainsPage() {
             <Card className="border-zinc-200 rounded-xl border-dashed">
               <CardContent className="p-12 text-center">
                 <Globe className="w-10 h-10 text-zinc-300 mx-auto mb-3" />
-                <p className="text-sm text-zinc-500 mb-3">No hay dominios configurados. Agrega tu primer dominio o sincroniza con Resend.</p>
+                <p className="text-sm text-zinc-500 mb-3">No hay dominios configurados. Agrega tu primer dominio o sincroniza tus dominios.</p>
                 <Button variant="outline" onClick={handleSync} disabled={syncing}>
-                  <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar desde Resend
+                  <RefreshCw className={`w-4 h-4 mr-2 ${syncing ? 'animate-spin' : ''}`} /> Sincronizar Dominios
                 </Button>
               </CardContent>
             </Card>

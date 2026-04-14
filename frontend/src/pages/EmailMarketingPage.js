@@ -70,7 +70,7 @@ export default function EmailMarketingPage() {
     try {
       const { data } = await api.post(`/email-marketing/campaigns/${id}/send-real`);
       setCampaigns(prev => prev.map(c => c.id === id ? { ...c, status: 'enviada', sent_count: data.sent } : c));
-      toast.success(`${data.sent} emails REALES enviados via Resend!`);
+      toast.success(`${data.sent} emails enviados exitosamente!`);
       if (data.errors?.length) toast.error(`${data.errors.length} errores: ${data.errors[0]}`);
       fetchData();
     } catch (err) { toast.error(err?.response?.data?.detail || 'Error al enviar'); }

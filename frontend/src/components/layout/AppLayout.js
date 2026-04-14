@@ -4,10 +4,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDemo } from '@/contexts/DemoContext';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Globe, User, Zap, Loader2 } from 'lucide-react';
+import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Separator } from '@/components/ui/separator';
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
@@ -18,6 +22,27 @@ export default function AppLayout() {
   const { demoActive, setDemoActive } = useDemo();
   const navigate = useNavigate();
   const [demoRunning, setDemoRunning] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: user?.name || '', phone: user?.phone || '', job_title: user?.job_title || '' });
+  const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm: '' });
+
+  const saveProfile = async () => {
+    try {
+      await api.put('/auth/profile', profileForm);
+      toast.success('Perfil actualizado');
+      setProfileOpen(false);
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
+  };
+  const changePassword = async () => {
+    if (pwForm.new_password !== pwForm.confirm) { toast.error('Las passwords no coinciden'); return; }
+    try {
+      await api.put('/auth/change-password', { current_password: pwForm.current_password, new_password: pwForm.new_password });
+      toast.success('Password cambiada exitosamente');
+      setPasswordOpen(false);
+      setPwForm({ current_password: '', new_password: '', confirm: '' });
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
+  };
 
   const runDemo = async () => {
     setDemoRunning(true);
@@ -106,11 +131,22 @@ export default function AppLayout() {
                   <span className="text-sm font-medium text-zinc-700">{user?.name}</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuItem className="text-xs text-zinc-500">{user?.email}</DropdownMenuItem>
-                <DropdownMenuItem className="text-xs text-zinc-500 capitalize">{user?.role?.replace('_', ' ')}</DropdownMenuItem>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-3 py-2">
+                  <p className="text-sm font-medium text-zinc-900">{user?.name}</p>
+                  <p className="text-xs text-zinc-500">{user?.email}</p>
+                  <p className="text-[10px] text-zinc-400 capitalize mt-0.5">{user?.role?.replace('_', ' ')}</p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => { setProfileForm({ name: user?.name || '', phone: user?.phone || '', job_title: user?.job_title || '' }); setProfileOpen(true); }} data-testid="user-menu-profile">
+                  <UserCircle className="w-4 h-4 mr-2" /> Mi Perfil
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setPasswordOpen(true)} data-testid="user-menu-password">
+                  <KeyRound className="w-4 h-4 mr-2" /> Cambiar Password
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={logout} data-testid="user-menu-logout" className="text-red-600">
-                  Cerrar sesion
+                  <LogOut className="w-4 h-4 mr-2" /> Cerrar sesion
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -134,6 +170,45 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* Profile Dialog */}
+      <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Mi Perfil</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
+                {profileForm.name?.charAt(0)?.toUpperCase() || 'U'}
+              </div>
+            </div>
+            <div><Label>Nombre</Label><Input value={profileForm.name} onChange={e => setProfileForm(p => ({...p, name: e.target.value}))} data-testid="profile-name" /></div>
+            <div><Label>Cargo</Label><Input value={profileForm.job_title} onChange={e => setProfileForm(p => ({...p, job_title: e.target.value}))} placeholder="Director Comercial" /></div>
+            <div><Label>Telefono</Label><Input value={profileForm.phone} onChange={e => setProfileForm(p => ({...p, phone: e.target.value}))} placeholder="+54 11 1234-5678" /></div>
+            <div><Label>Email</Label><Input value={user?.email || ''} disabled className="bg-zinc-50" /></div>
+            <div><Label>Rol</Label><Input value={user?.role?.replace('_', ' ') || ''} disabled className="bg-zinc-50 capitalize" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProfileOpen(false)}>Cancelar</Button>
+            <Button onClick={saveProfile} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-profile">Guardar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Change Password Dialog */}
+      <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Cambiar Password</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div><Label>Password actual</Label><Input type="password" value={pwForm.current_password} onChange={e => setPwForm(p => ({...p, current_password: e.target.value}))} data-testid="current-password" /></div>
+            <div><Label>Nueva password</Label><Input type="password" value={pwForm.new_password} onChange={e => setPwForm(p => ({...p, new_password: e.target.value}))} data-testid="new-password" /></div>
+            <div><Label>Confirmar nueva password</Label><Input type="password" value={pwForm.confirm} onChange={e => setPwForm(p => ({...p, confirm: e.target.value}))} data-testid="confirm-password" /></div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPasswordOpen(false)}>Cancelar</Button>
+            <Button onClick={changePassword} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-password">Cambiar Password</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

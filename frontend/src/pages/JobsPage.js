@@ -44,7 +44,7 @@ export default function JobsPage() {
       if (data.status === 'processing') {
         // n8n mode - start polling
         setSelectedJob(data);
-        toast.success('Trabajo enviado a n8n. Esperando resultados...');
+        toast.success('Busqueda de prospectos iniciada. Esperando resultados...');
         startPolling(jobId);
       } else {
         // Demo mode - animate stages
@@ -173,8 +173,8 @@ export default function JobsPage() {
               <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
                 <Loader2 className="w-5 h-5 text-amber-600 animate-spin" />
                 <div>
-                  <p className="text-sm font-medium text-amber-800">Procesando via n8n...</p>
-                  <p className="text-xs text-amber-600">Outscraper busca negocios → Dify los clasifica → Los resultados llegaran automaticamente</p>
+                  <p className="text-sm font-medium text-amber-800">Buscando prospectos con IA... aguarde un instante</p>
+                  <p className="text-xs text-amber-600">Buscando negocios → Clasificando con IA → Los resultados llegaran automaticamente</p>
                 </div>
               </div>
             )}

@@ -211,7 +211,7 @@ async def register(response: Response, body: RegisterRequest):
         raise HTTPException(status_code=400, detail="Email already registered")
     tenant_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    tenant = {"id": tenant_id, "name": body.tenant_name or f"{body.name}'s Organization", "branding": {"company_name": body.tenant_name or f"{body.name}'s Organization", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "created_at": now}
+    tenant = {"id": tenant_id, "name": body.tenant_name or f"{body.name}'s Organization", "branding": {"company_name": body.tenant_name or f"{body.name}'s Organization", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "modules": {"prospeccion": False, "leads": True, "crm": False, "email_marketing": False}, "plan": "starter", "price": 0, "active": True, "created_at": now}
     await db.tenants.insert_one(tenant)
     user_doc = {"email": email, "password_hash": hash_password(body.password), "name": body.name, "role": "tenant_admin", "tenant_id": tenant_id, "created_at": now}
     result = await db.users.insert_one(user_doc)
@@ -231,6 +231,39 @@ async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     return {"message": "Logged out"}
+
+@api_router.put("/auth/profile")
+async def update_profile(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now}
+    if body.get("name"):
+        update["name"] = body["name"]
+    if body.get("phone"):
+        update["phone"] = body["phone"]
+    if body.get("avatar_url"):
+        update["avatar_url"] = body["avatar_url"]
+    if body.get("job_title"):
+        update["job_title"] = body["job_title"]
+    await db.users.update_one({"_id": ObjectId(user["_id"])}, {"$set": update})
+    updated = await db.users.find_one({"_id": ObjectId(user["_id"])}, {"_id": 0, "password_hash": 0})
+    return serialize_doc(updated)
+
+@api_router.put("/auth/change-password")
+async def change_password(request: Request, body: Dict[str, Any] = {}):
+    user_raw = await get_current_user(request)
+    current = body.get("current_password", "")
+    new_pw = body.get("new_password", "")
+    if not current or not new_pw:
+        raise HTTPException(status_code=400, detail="Se requiere password actual y nueva")
+    if len(new_pw) < 6:
+        raise HTTPException(status_code=400, detail="La nueva password debe tener al menos 6 caracteres")
+    full_user = await db.users.find_one({"_id": ObjectId(user_raw["_id"])})
+    if not bcrypt.checkpw(current.encode(), full_user["password_hash"].encode()):
+        raise HTTPException(status_code=400, detail="Password actual incorrecta")
+    new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+    await db.users.update_one({"_id": ObjectId(user_raw["_id"])}, {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"message": "Password actualizada exitosamente"}
 
 @api_router.post("/auth/refresh")
 async def refresh_token_endpoint(request: Request, response: Response):

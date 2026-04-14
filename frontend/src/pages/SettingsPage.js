@@ -75,6 +75,7 @@ export default function SettingsPage() {
     try {
       await api.put('/tenant/modules', updated);
       toast.success(`Modulo ${mod} ${value ? 'activado' : 'desactivado'}`);
+      window.dispatchEvent(new Event('modules-updated'));
     } catch { toast.error('Error al actualizar modulos'); }
   };
 
