@@ -315,14 +315,15 @@ export default function LeadsPage() {
           </SheetHeader>
           {detailLead && (
             <div className="mt-6 space-y-5">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Badge className={`${leadStatusColors[detailLead.status] || ''} text-xs`}>{leadStatusLabels[detailLead.status] || detailLead.status}</Badge>
+                <Badge className={`${getSourceLabel(detailLead).color} text-[10px]`}>{getSourceLabel(detailLead).label}</Badge>
+                {detailLead.channel && detailLead.channel !== 'web' && (
+                  <Badge className="bg-teal-50 text-teal-700 text-[10px]">{detailLead.channel}</Badge>
+                )}
                 <span className={`text-lg font-semibold ${detailLead.ai_score >= 80 ? 'text-emerald-600' : detailLead.ai_score >= 60 ? 'text-blue-600' : 'text-amber-600'}`}>
                   Score: {detailLead.ai_score}
                 </span>
-                <Badge className={`ml-auto ${qualityColors[detailLead.quality_level]?.replace('text-', 'bg-').replace('600', '50')} ${qualityColors[detailLead.quality_level]} text-xs`}>
-                  {qualityLabels[detailLead.quality_level] || detailLead.quality_level}
-                </Badge>
               </div>
 
               {/* Score Breakdown */}
@@ -368,6 +369,28 @@ export default function LeadsPage() {
               <div>
                 <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1">Primera linea sugerida</p>
                 <p className="text-sm text-zinc-700 italic">{detailLead.recommended_first_line}</p>
+              </div>
+              {/* Editable Notes & Channel */}
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Canal de origen</Label>
+                  <Select value={detailLead.channel || 'web'} onValueChange={async v => { try { await api.put(`/leads/${detailLead.id}/fields`, { channel: v }); setDetailLead(p => ({...p, channel: v})); toast.success('Canal actualizado'); } catch { toast.error('Error'); } }}>
+                    <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="web">Web</SelectItem>
+                      <SelectItem value="whatsapp">WhatsApp</SelectItem>
+                      <SelectItem value="facebook">Facebook</SelectItem>
+                      <SelectItem value="instagram">Instagram</SelectItem>
+                      <SelectItem value="email_inbound">Email</SelectItem>
+                      <SelectItem value="telefono">Telefono</SelectItem>
+                      <SelectItem value="referido">Referido</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Notas</Label>
+                  <textarea className="w-full mt-1 border border-zinc-200 rounded-lg p-2 text-sm text-zinc-700 resize-none h-20 focus:outline-none focus:ring-2 focus:ring-blue-500/20" defaultValue={detailLead.recommendation || ''} onBlur={async e => { try { await api.put(`/leads/${detailLead.id}/fields`, { recommendation: e.target.value }); toast.success('Notas guardadas'); } catch { toast.error('Error'); } }} placeholder="Agregar notas..." />
+                </div>
               </div>
               <Separator />
               <div className="flex gap-2 flex-wrap">

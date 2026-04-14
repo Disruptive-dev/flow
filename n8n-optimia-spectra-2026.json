@@ -239,8 +239,15 @@
           { "name": "Content-Type", "value": "application/json" }
         ]},
         "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={\n  \"business_name\": \"{{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}\",\n  \"contact_name\": \"{{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}\",\n  \"email\": \"{{ $node[\"Cerebro Dify\"].json.metadata.usage.email_chatwoot }}\",\n  \"phone\": \"{{ $node[\"Webhook Entrante\"].json.body.sender.phone_number }}\",\n  \"message\": \"{{ $node[\"Cerebro Dify\"].json.answer.substring(0, 500) }}\",\n  \"category\": \"Bot - OptimIA\"\n}",
+        "bodyParameters": { "parameters": [
+          { "name": "business_name", "value": "={{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}" },
+          { "name": "contact_name", "value": "={{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}" },
+          { "name": "email", "value": "={{ $node[\"Cerebro Dify\"].json.metadata.usage.email_chatwoot }}" },
+          { "name": "phone", "value": "={{ $node[\"Webhook Entrante\"].json.body.sender.phone_number }}" },
+          { "name": "message", "value": "={{ $node[\"Cerebro Dify\"].json.answer.replace(/\\n/g, ' ').substring(0, 500) }}" },
+          { "name": "category", "value": "Bot - OptimIA" },
+          { "name": "channel", "value": "={{ $node[\"Webhook Entrante\"].json.body.conversation.channel || $node[\"Webhook Entrante\"].json.body.channel || 'web' }}" }
+        ]},
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",

@@ -583,6 +583,21 @@ async def update_lead_status(request: Request, lead_id: str, body: LeadStatusUpd
             await db.email_lists.insert_one({"id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "name": seq_list_name, "description": "Leads enviados a secuencia de email", "subscriber_count": 1, "lead_ids": [lead_id], "created_at": now, "updated_at": now})
     return {"message": "Status updated", "status": body.status}
 
+@api_router.put("/leads/{lead_id}/fields")
+async def update_lead_fields(request: Request, lead_id: str, body: Dict[str, Any] = {}):
+    """Update editable fields on a lead (notes, channel, etc)"""
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    allowed = {"recommendation", "channel", "normalized_category", "city", "province", "website", "email", "phone", "business_name"}
+    update = {k: v for k, v in body.items() if k in allowed}
+    if not update:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    update["updated_at"] = now
+    result = await db.leads.update_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"$set": update})
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Lead not found")
+    return {"message": "Lead actualizado"}
+
 @api_router.post("/leads/bulk-action")
 async def bulk_lead_action(request: Request, body: BulkActionRequest):
     user = await get_current_user(request)
@@ -1831,11 +1846,15 @@ async def ai_generate_template(request: Request, body: Dict[str, Any] = {}):
     industry = body.get("industry", "general")
     objective = body.get("objective", "generar interes")
     tone = body.get("tone", "profesional")
+    custom_prompt = body.get("custom_prompt", "")
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"template-{uuid.uuid4()}", system_message="Eres un experto en copywriting y neuromarketing. Generas emails comerciales persuasivos en español usando tecnicas de neuropersuasion (urgencia, reciprocidad, prueba social, escasez, autoridad). Responde SOLO en formato JSON con las keys: subject, html_body, plain_text, variables (array de strings), first_line.")
-        prompt = f"Genera un email de {objective} para la industria de {industry} con tono {tone}. Usa tecnicas de neuropersuasion. El email debe tener variables como {{{{business_name}}}}, {{{{city}}}}, {{{{sender_name}}}}. Responde en JSON."
-        response = await chat.send_message(UserMessage(text=prompt))
+        base_prompt = f"Genera un email de {objective} para la industria de {industry} con tono {tone}. Usa tecnicas de neuropersuasion. El email debe tener variables como {{{{business_name}}}}, {{{{city}}}}, {{{{sender_name}}}}."
+        if custom_prompt:
+            base_prompt += f"\n\nInstrucciones adicionales del usuario: {custom_prompt}"
+        base_prompt += " Responde en JSON."
+        response = await chat.send_message(UserMessage(text=base_prompt))
         import json
         try:
             clean = response.strip()
@@ -2267,6 +2286,7 @@ async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
     phone = body.get("phone", body.get("phone_number", ""))
     contact_name = body.get("contact_name", body.get("name", ""))
     business_name = body.get("business_name", body.get("name", "Lead de Bot"))
+    channel = body.get("channel", "web")
     # Check for existing lead by email or phone
     existing = None
     if email:
@@ -2299,6 +2319,7 @@ async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
             "recommendation": body.get("message", body.get("notes", "")),
             "recommended_first_line": "",
             "source": "bot", "tags": ["bot"],
+            "channel": channel,
             "status": "raw",
             "created_at": now, "updated_at": now
         }

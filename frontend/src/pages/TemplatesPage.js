@@ -27,6 +27,7 @@ export default function TemplatesPage() {
   const [generatingAI, setGeneratingAI] = useState(false);
   const [aiIndustry, setAiIndustry] = useState('');
   const [aiTone, setAiTone] = useState('profesional');
+  const [aiCustomPrompt, setAiCustomPrompt] = useState('');
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [abTests, setAbTests] = useState([]);
   const [showAbPanel, setShowAbPanel] = useState(false);
@@ -38,7 +39,7 @@ export default function TemplatesPage() {
     if (!aiIndustry) return toast.error('Selecciona una industria');
     setGeneratingAI(true);
     try {
-      const { data } = await api.post('/ai/generate-template', { industry: aiIndustry, objective: 'generar interes y agendar reunion', tone: aiTone });
+      const { data } = await api.post('/ai/generate-template', { industry: aiIndustry, objective: 'generar interes y agendar reunion', tone: aiTone, custom_prompt: aiCustomPrompt });
       setForm(f => ({ ...f, name: `Neuro - ${aiIndustry}`, subject: data.subject || f.subject, html_body: data.html_body || f.html_body, variables: data.variables || f.variables }));
       setDialogOpen(true);
       setShowAiPanel(false);
@@ -159,6 +160,10 @@ export default function TemplatesPage() {
                   Generar
                 </Button>
               </div>
+            </div>
+            <div className="mt-3">
+              <Label className="text-sm mb-1.5 block">Instrucciones personalizadas (opcional)</Label>
+              <textarea className="w-full border border-purple-200 bg-white rounded-lg p-2.5 text-sm text-zinc-700 resize-none h-16 focus:outline-none focus:ring-2 focus:ring-purple-500/20" value={aiCustomPrompt} onChange={e => setAiCustomPrompt(e.target.value)} placeholder="Ej: Enfocate en servicios de reforma integral, menciona garantia de 10 anos, usa datos estadisticos del sector..." data-testid="ai-custom-prompt" />
             </div>
           </CardContent>
         </Card>
