@@ -365,7 +365,20 @@ export default function LeadsPage() {
                       {lead.ai_score}
                     </span>
                   </TableCell>
-                  <TableCell><Badge className={`${leadStatusColors[lead.status] || 'bg-slate-100 text-slate-700'} text-[11px]`}>{leadStatusLabels[lead.status] || lead.status}</Badge></TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="cursor-pointer"><Badge className={`${leadStatusColors[lead.status] || 'bg-slate-100 text-slate-700'} text-[11px] hover:ring-2 hover:ring-blue-300 transition-all`}>{leadStatusLabels[lead.status] || lead.status}</Badge></button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="max-h-[300px] overflow-y-auto">
+                        {Object.entries(leadStatusLabels).map(([key, label]) => (
+                          <DropdownMenuItem key={key} onClick={() => updateStatus(lead.id, key)} className={lead.status === key ? 'bg-blue-50 font-medium' : ''}>
+                            <Badge className={`${leadStatusColors[key] || ''} text-[10px] mr-2`}>{label}</Badge>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
                   <TableCell className="text-xs text-zinc-400">{lead.created_at ? lead.created_at.slice(0, 10) : '-'}</TableCell>
                   <TableCell>
                     <DropdownMenu>

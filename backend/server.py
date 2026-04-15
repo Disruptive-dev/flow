@@ -2057,74 +2057,118 @@ async def ai_flow_bot(request: Request, body: Dict[str, Any] = {}):
     section = body.get("section", "general")
     question = body.get("question", "")
     tid = user["tenant_id"]
-    context_data = {}
-    context_data["total_leads"] = await db.leads.count_documents({"tenant_id": tid})
-    context_data["scored_leads"] = await db.leads.count_documents({"tenant_id": tid, "status": "scored"})
-    context_data["approved_leads"] = await db.leads.count_documents({"tenant_id": tid, "status": "approved"})
-    context_data["crm_contacts"] = await db.crm_contacts.count_documents({"tenant_id": tid})
-    context_data["campaigns"] = await db.campaigns.count_documents({"tenant_id": tid})
-    context_data["deals"] = await db.crm_deals.count_documents({"tenant_id": tid})
-    context_data["deals_ganados"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": "ganado"})
+    # ---- RICH CONTEXT ----
+    ctx = {}
+    ctx["total_leads"] = await db.leads.count_documents({"tenant_id": tid})
+    ctx["scored"] = await db.leads.count_documents({"tenant_id": tid, "status": "scored"})
+    ctx["approved"] = await db.leads.count_documents({"tenant_id": tid, "status": "approved"})
+    ctx["rejected"] = await db.leads.count_documents({"tenant_id": tid, "status": "rejected"})
+    ctx["contacted"] = await db.leads.count_documents({"tenant_id": tid, "status": "contacted"})
+    ctx["sent_to_crm"] = await db.leads.count_documents({"tenant_id": tid, "status": "sent_to_crm"})
+    ctx["in_sequence"] = await db.leads.count_documents({"tenant_id": tid, "status": "queued_for_sequence"})
+    # Sources breakdown
+    for src in ["google_maps", "linkedin", "bot", "manual", "imported"]:
+        ctx[f"source_{src}"] = await db.leads.count_documents({"tenant_id": tid, "source": src})
+    ctx["source_bot"] += await db.leads.count_documents({"tenant_id": tid, "tags": "bot", "source": {"$ne": "bot"}})
+    # Top cities
+    city_pipeline = [{"$match": {"tenant_id": tid, "city": {"$ne": ""}}}, {"$group": {"_id": "$city", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}, {"$limit": 5}]
+    top_cities = await db.leads.aggregate(city_pipeline).to_list(5)
+    ctx["top_ciudades"] = [{c["_id"]: c["count"]} for c in top_cities]
+    # Top categories
+    cat_pipeline = [{"$match": {"tenant_id": tid, "normalized_category": {"$ne": ""}}}, {"$group": {"_id": "$normalized_category", "count": {"$sum": 1}}}, {"$sort": {"count": -1}}, {"$limit": 5}]
+    top_cats = await db.leads.aggregate(cat_pipeline).to_list(5)
+    ctx["top_categorias"] = [{c["_id"]: c["count"]} for c in top_cats]
+    # Top scored leads
+    top_leads = await db.leads.find({"tenant_id": tid, "ai_score": {"$gte": 70}}, {"_id": 0, "business_name": 1, "ai_score": 1, "city": 1, "email": 1, "source": 1, "status": 1, "normalized_category": 1, "channel": 1}).sort("ai_score", -1).limit(10).to_list(10)
+    ctx["top_leads"] = [{"nombre": l["business_name"], "score": l["ai_score"], "ciudad": l.get("city", ""), "fuente": l.get("source", ""), "estado": l.get("status", ""), "categoria": l.get("normalized_category", ""), "canal": l.get("channel", "")} for l in top_leads]
+    # CRM
+    ctx["crm_contacts"] = await db.crm_contacts.count_documents({"tenant_id": tid})
+    ctx["deals_total"] = await db.crm_deals.count_documents({"tenant_id": tid})
+    ctx["deals_ganados"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": "ganado"})
+    ctx["deals_perdidos"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": "perdido"})
+    # Campaigns
+    ctx["campaigns"] = await db.campaigns.count_documents({"tenant_id": tid})
     em_pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": None, "sent": {"$sum": "$sent_count"}, "opens": {"$sum": "$open_count"}, "clicks": {"$sum": "$click_count"}, "replies": {"$sum": "$reply_count"}}}]
     em_stats = await db.campaigns.aggregate(em_pipeline).to_list(1)
     if em_stats:
-        context_data["emails_enviados"] = em_stats[0].get("sent", 0)
-        context_data["emails_abiertos"] = em_stats[0].get("opens", 0)
-        context_data["emails_respondidos"] = em_stats[0].get("replies", 0)
-    # Fetch detailed data for specific queries
+        ctx["emails_enviados"] = em_stats[0].get("sent", 0)
+        ctx["emails_abiertos"] = em_stats[0].get("opens", 0)
+        ctx["emails_respondidos"] = em_stats[0].get("replies", 0)
+    # ---- SPECIFIC SEARCH when user asks a question ----
     specific_data = ""
     if question:
         q_lower = question.lower()
-        # Search campaigns by name
-        all_campaigns = await db.campaigns.find({"tenant_id": tid}, {"_id": 0}).to_list(50)
-        for c in all_campaigns:
-            cname = c.get("name", "")
-            if cname and (cname.lower() in q_lower or any(w in q_lower for w in cname.lower().split() if len(w) > 3)):
-                specific_data += f"\nCampana '{cname}': estado={c.get('status','')}, leads={c.get('lead_count',0)}, enviados={c.get('sent_count',0)}, aperturas={c.get('open_count',0)}, clics={c.get('click_count',0)}, respuestas={c.get('reply_count',0)}, interesados={c.get('interested_count',0)}, al CRM={c.get('crm_count',0)}"
-        # Search deals by name
+        # Search by source keywords
+        if any(w in q_lower for w in ["bot", "optimia", "chatwoot", "whatsapp"]):
+            bot_leads = await db.leads.find({"tenant_id": tid, "$or": [{"source": "bot"}, {"tags": "bot"}]}, {"_id": 0, "business_name": 1, "email": 1, "phone": 1, "city": 1, "channel": 1, "ai_score": 1, "status": 1, "created_at": 1}).sort("created_at", -1).limit(20).to_list(20)
+            specific_data += f"\n\nLeads del Bot ({len(bot_leads)}):"
+            for l in bot_leads:
+                specific_data += f"\n- {l['business_name']}: email={l.get('email','')}, tel={l.get('phone','')}, canal={l.get('channel','web')}, score={l.get('ai_score',0)}, estado={l.get('status','')}, fecha={l.get('created_at','')[:10]}"
+        if any(w in q_lower for w in ["linkedin"]):
+            li_leads = await db.leads.find({"tenant_id": tid, "source": "linkedin"}, {"_id": 0, "business_name": 1, "city": 1, "ai_score": 1, "status": 1}).sort("ai_score", -1).limit(20).to_list(20)
+            specific_data += f"\n\nLeads de LinkedIn ({len(li_leads)}):"
+            for l in li_leads:
+                specific_data += f"\n- {l['business_name']}: ciudad={l.get('city','')}, score={l.get('ai_score',0)}, estado={l.get('status','')}"
+        # Search by city
+        for city_doc in top_cities:
+            city_name = city_doc["_id"]
+            if city_name.lower() in q_lower:
+                city_leads = await db.leads.find({"tenant_id": tid, "city": {"$regex": city_name, "$options": "i"}}, {"_id": 0, "business_name": 1, "ai_score": 1, "status": 1, "email": 1, "source": 1}).sort("ai_score", -1).limit(15).to_list(15)
+                specific_data += f"\n\nLeads en {city_name} ({len(city_leads)}):"
+                for l in city_leads:
+                    specific_data += f"\n- {l['business_name']}: score={l.get('ai_score',0)}, estado={l.get('status','')}, fuente={l.get('source','')}"
+        # Search leads/contacts/deals by name
+        all_leads_sample = await db.leads.find({"tenant_id": tid}, {"_id": 0, "business_name": 1, "ai_score": 1, "status": 1, "email": 1, "city": 1, "source": 1, "normalized_category": 1}).limit(200).to_list(200)
+        for l in all_leads_sample:
+            lname = l.get("business_name", "")
+            if lname and (lname.lower() in q_lower or any(w in q_lower for w in lname.lower().split() if len(w) > 3)):
+                specific_data += f"\nLead '{lname}': score={l.get('ai_score',0)}, estado={l.get('status','')}, email={l.get('email','')}, ciudad={l.get('city','')}, categoria={l.get('normalized_category','')}, fuente={l.get('source','')}"
+        # Search CRM deals
         all_deals = await db.crm_deals.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
         for d in all_deals:
             dname = d.get("name", d.get("title", ""))
             if dname and (dname.lower() in q_lower or any(w in q_lower for w in dname.lower().split() if len(w) > 3)):
-                specific_data += f"\nOportunidad '{dname}': etapa={d.get('stage','')}, valor=${d.get('value',0)}, contacto={d.get('contact_name','')}, empresa={d.get('company','')}, probabilidad={d.get('probability',0)}%"
-        # Search contacts by name
-        all_contacts = await db.crm_contacts.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
-        for ct in all_contacts:
-            bname = ct.get("business_name", ct.get("company", "")).lower()
-            cname_ct = ct.get("contact_name", "").lower()
-            if (bname and bname in q_lower) or (cname_ct and cname_ct in q_lower) or (bname and any(w in q_lower for w in bname.split() if len(w) > 3)):
-                specific_data += f"\nContacto CRM '{ct.get('business_name', ct.get('company',''))}': nombre={ct.get('contact_name','')}, email={ct.get('email','')}, etapa={ct.get('stage','')}, score={ct.get('ai_score',0)}, fuente={ct.get('source','')}"
-        # Search leads by name
-        all_leads = await db.leads.find({"tenant_id": tid}, {"_id": 0}).to_list(100)
-        for l in all_leads:
-            lname = l.get("business_name", "")
-            if lname and (lname.lower() in q_lower or any(w in q_lower for w in lname.lower().split() if len(w) > 3)):
-                specific_data += f"\nLead '{lname}': score={l.get('ai_score',0)}, calidad={l.get('quality_level','')}, estado={l.get('status','')}, email={l.get('email','')}, ciudad={l.get('city','')}, categoria={l.get('normalized_category','')}"
-        # Search email marketing campaigns
-        all_em_campaigns = await db.email_campaigns.find({"tenant_id": tid}, {"_id": 0}).to_list(50)
-        for ec in all_em_campaigns:
-            if ec.get("name", "").lower() in q_lower or any(w in q_lower for w in ec.get("name", "").lower().split() if len(w) > 3):
-                specific_data += f"\nCampana Email '{ec['name']}': estado={ec.get('status','')}, enviados={ec.get('sent_count',0)}, aperturas={ec.get('open_count',0)}, clics={ec.get('click_count',0)}, rebotes={ec.get('bounce_count',0)}"
+                specific_data += f"\nOportunidad '{dname}': etapa={d.get('stage','')}, valor=${d.get('value',0)}, contacto={d.get('contact_name','')}"
+        # Recommendations keywords
+        if any(w in q_lower for w in ["recomiend", "mejor", "top", "suger"]):
+            specific_data += f"\n\nTop 10 leads recomendados (mayor score):"
+            for l in ctx["top_leads"]:
+                specific_data += f"\n- {l['nombre']}: score={l['score']}, ciudad={l['ciudad']}, fuente={l['fuente']}, categoria={l['categoria']}"
     import json
-    system_context = f"Eres Flow IA, el asistente de analisis inteligente de Spectra Flow. Datos globales del usuario: {json.dumps(context_data)}."
+    system_context = f"""Eres Flow IA, el copiloto de inteligencia comercial de Spectra Flow. Tu trabajo es analizar datos del negocio y dar recomendaciones accionables.
+
+DATOS DEL DASHBOARD:
+{json.dumps(ctx, ensure_ascii=False, default=str)}"""
     if specific_data:
-        system_context += f"\n\nDatos especificos encontrados:{specific_data}"
-    system_context += "\nResponde en espanol. Se conciso, usa bullets, maximo 8 lineas. Da recomendaciones accionables basadas en los datos reales. Si te preguntan algo especifico sobre una campana, oportunidad, contacto o lead, usa los datos especificos para responder con precision."
-    prompt = question if question else f"El usuario esta en la seccion '{section}'. Analiza sus datos y dame recomendaciones."
+        system_context += f"\n\nDATOS ESPECIFICOS DE LA CONSULTA:{specific_data}"
+    system_context += """
+
+REGLAS:
+- Responde SIEMPRE en espanol
+- Se conciso, usa bullets, maximo 10 lineas
+- Da recomendaciones accionables basadas en datos reales
+- Si preguntan por leads de una fuente (bot, linkedin, b2b), lista los que encontraste
+- Si preguntan recomendaciones, ordena por score y explica por que
+- Si preguntan pasos a seguir, da un plan claro paso a paso
+- Menciona numeros concretos siempre que puedas
+- Nunca menciones tecnologias internas (n8n, Outscraper, Dify, Apify, Resend)"""
+    prompt = question if question else f"El usuario esta en la seccion '{section}'. Analiza sus datos y dame un resumen ejecutivo con recomendaciones."
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"flowbot-{user['_id']}-{section}", system_message=system_context)
         response = await chat.send_message(UserMessage(text=prompt))
-        return {"response": response, "context": context_data}
+        return {"response": response, "context": ctx}
     except Exception as e:
         recommendations = []
         if specific_data:
-            recommendations.append(f"Datos encontrados:{specific_data}")
-        if context_data.get("scored_leads", 0) > 0:
-            recommendations.append(f"Tenes {context_data['scored_leads']} leads calificados sin revisar.")
+            recommendations.append(f"Datos encontrados:{specific_data[:500]}")
+        if ctx.get("scored", 0) > 0:
+            recommendations.append(f"Tenes {ctx['scored']} leads calificados sin revisar.")
+        if ctx.get("source_bot", 0) > 0:
+            recommendations.append(f"{ctx['source_bot']} leads llegaron desde el Bot.")
         if not recommendations:
-            recommendations.append("Comenzá buscando prospectos para alimentar tu pipeline.")
-        return {"response": "\n".join([f"- {r}" for r in recommendations]), "context": context_data}
+            recommendations.append("Comenza buscando prospectos para alimentar tu pipeline.")
+        return {"response": "\n".join([f"- {r}" for r in recommendations]), "context": ctx}
 
 @api_router.post("/ai/help")
 async def ai_help(request: Request, body: Dict[str, Any] = {}):
