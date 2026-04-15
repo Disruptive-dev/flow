@@ -2514,6 +2514,21 @@ async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
     contact_name = body.get("contact_name", body.get("name", ""))
     business_name = body.get("business_name", body.get("name", "Lead de Bot"))
     channel = body.get("channel", "web")
+    message = body.get("message", body.get("notes", ""))
+    # Try to extract email from message if not provided
+    if not email and message:
+        import re
+        email_match = re.search(r'[\w.+-]+@[\w-]+\.[\w.]+', message)
+        if email_match:
+            email = email_match.group(0)
+    # Try to extract phone from message if not provided
+    if not phone and message:
+        import re
+        phone_match = re.search(r'[\+]?[\d\s\-\(\)]{8,15}', message)
+        if phone_match:
+            candidate = phone_match.group(0).strip()
+            if len(candidate.replace(" ", "").replace("-", "")) >= 8:
+                phone = candidate
     # Check for existing lead by email or phone
     existing = None
     if email:

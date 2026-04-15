@@ -240,13 +240,13 @@
         ]},
         "sendBody": true,
         "bodyParameters": { "parameters": [
-          { "name": "business_name", "value": "={{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}" },
-          { "name": "contact_name", "value": "={{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}" },
-          { "name": "email", "value": "={{ $node[\"Cerebro Dify\"].json.metadata.usage.email_chatwoot }}" },
-          { "name": "phone", "value": "={{ $node[\"Webhook Entrante\"].json.body.sender.phone_number }}" },
-          { "name": "message", "value": "={{ $node[\"Cerebro Dify\"].json.answer.replace(/\\n/g, ' ').substring(0, 500) }}" },
+          { "name": "business_name", "value": "={{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name || $node[\"Webhook Entrante\"].json.body.sender.name || 'Lead Bot' }}" },
+          { "name": "contact_name", "value": "={{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name || $node[\"Webhook Entrante\"].json.body.sender.name || '' }}" },
+          { "name": "email", "value": "={{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.email || $node[\"Webhook Entrante\"].json.body.sender.email || (() => { const m = ($node[\"Cerebro Dify\"].json.answer || '').match(/[\\w.+-]+@[\\w-]+\\.[\\w.]+/); return m ? m[0] : ''; })() }}" },
+          { "name": "phone", "value": "={{ $node[\"Webhook Entrante\"].json.body.sender.phone_number || $node[\"Datos del Cliente - Chatwoot\"].json.payload.phone_number || '' }}" },
+          { "name": "message", "value": "={{ ($node[\"Cerebro Dify\"].json.answer || '').replace(/\\n/g, ' ').substring(0, 500) }}" },
           { "name": "category", "value": "Bot - OptimIA" },
-          { "name": "channel", "value": "={{ $node[\"Webhook Entrante\"].json.body.conversation.channel || $node[\"Webhook Entrante\"].json.body.channel || 'web' }}" }
+          { "name": "channel", "value": "={{ ($node[\"Webhook Entrante\"].json.body.conversation.channel || $node[\"Webhook Entrante\"].json.body.channel || 'web').replace('Channel::', '').toLowerCase() }}" }
         ]},
         "options": {}
       },
