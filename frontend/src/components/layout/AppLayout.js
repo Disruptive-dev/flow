@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDemo } from '@/contexts/DemoContext';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle } from 'lucide-react';
+import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -25,6 +25,7 @@ export default function AppLayout() {
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [profileForm, setProfileForm] = useState({ name: user?.name || '', phone: user?.phone || '', job_title: user?.job_title || '' });
+  const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm: '' });
 
   const saveProfile = async () => {
@@ -33,6 +34,17 @@ export default function AppLayout() {
       toast.success('Perfil actualizado');
       setProfileOpen(false);
     } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
+  };
+  const uploadAvatar = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formData = new FormData();
+    formData.append('file', file);
+    try {
+      const { data } = await api.post('/auth/avatar', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setAvatarUrl(data.avatar_url);
+      toast.success('Foto de perfil actualizada');
+    } catch { toast.error('Error al subir foto'); }
   };
   const changePassword = async () => {
     if (pwForm.new_password !== pwForm.confirm) { toast.error('Las passwords no coinciden'); return; }
@@ -125,9 +137,13 @@ export default function AppLayout() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" data-testid="user-menu-trigger" className="gap-2">
-                  <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
-                    <User className="w-3.5 h-3.5 text-white" />
-                  </div>
+                  {avatarUrl ? (
+                    <img src={`${process.env.REACT_APP_BACKEND_URL}${avatarUrl}`} alt="" className="w-7 h-7 rounded-full object-cover" />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-blue-600 flex items-center justify-center">
+                      <User className="w-3.5 h-3.5 text-white" />
+                    </div>
+                  )}
                   <span className="text-sm font-medium text-zinc-700">{user?.name}</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -176,10 +192,21 @@ export default function AppLayout() {
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Mi Perfil</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="flex justify-center">
-              <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-white text-2xl font-bold">
-                {profileForm.name?.charAt(0)?.toUpperCase() || 'U'}
-              </div>
+            <div className="flex flex-col items-center gap-2">
+              <label className="cursor-pointer group relative">
+                {avatarUrl ? (
+                  <img src={`${process.env.REACT_APP_BACKEND_URL}${avatarUrl}`} alt="" className="w-20 h-20 rounded-full object-cover ring-2 ring-zinc-200 group-hover:ring-blue-400 transition-all" />
+                ) : (
+                  <div className="w-20 h-20 rounded-full bg-blue-600 flex items-center justify-center text-white text-3xl font-bold ring-2 ring-zinc-200 group-hover:ring-blue-400 transition-all">
+                    {profileForm.name?.charAt(0)?.toUpperCase() || 'U'}
+                  </div>
+                )}
+                <div className="absolute bottom-0 right-0 w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-sm">
+                  <Pencil className="w-3 h-3" />
+                </div>
+                <input type="file" accept="image/*" onChange={uploadAvatar} className="hidden" />
+              </label>
+              <p className="text-[10px] text-zinc-400">Click para cambiar foto</p>
             </div>
             <div><Label>Nombre</Label><Input value={profileForm.name} onChange={e => setProfileForm(p => ({...p, name: e.target.value}))} data-testid="profile-name" /></div>
             <div><Label>Cargo</Label><Input value={profileForm.job_title} onChange={e => setProfileForm(p => ({...p, job_title: e.target.value}))} placeholder="Director Comercial" /></div>

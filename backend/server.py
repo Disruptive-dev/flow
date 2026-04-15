@@ -265,6 +265,24 @@ async def change_password(request: Request, body: Dict[str, Any] = {}):
     await db.users.update_one({"_id": ObjectId(user_raw["_id"])}, {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"message": "Password actualizada exitosamente"}
 
+from fastapi import UploadFile, File
+from fastapi.staticfiles import StaticFiles
+
+@api_router.post("/auth/avatar")
+async def upload_avatar(request: Request, file: UploadFile = File(...)):
+    user = await get_current_user(request)
+    import shutil
+    uploads_dir = ROOT_DIR / "uploads" / "avatars"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    ext = file.filename.split(".")[-1] if "." in file.filename else "jpg"
+    filename = f"{user['_id']}.{ext}"
+    filepath = uploads_dir / filename
+    with open(filepath, "wb") as f:
+        shutil.copyfileobj(file.file, f)
+    avatar_url = f"/api/uploads/avatars/{filename}"
+    await db.users.update_one({"_id": ObjectId(user["_id"])}, {"$set": {"avatar_url": avatar_url, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"avatar_url": avatar_url}
+
 @api_router.post("/auth/refresh")
 async def refresh_token_endpoint(request: Request, response: Response):
     token = request.cookies.get("refresh_token")
@@ -388,6 +406,88 @@ async def get_prospect_job(request: Request, job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return job
 
+
+async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: str):
+    """Background task: Run Apify LinkedIn scraper and store results"""
+    import asyncio
+    try:
+        li_params = job.get("linkedin_params", {})
+        keyword = li_params.get("keyword", job.get("category", ""))
+        location = li_params.get("location", job.get("city", ""))
+        industry = li_params.get("industry", "")
+        company_size = li_params.get("company_size", "")
+        quantity = job.get("quantity", 50)
+        # Start Apify actor run
+        actor_input = {"searchUrl": f"https://www.linkedin.com/search/results/companies/?keywords={keyword}", "maxResults": min(quantity, 100)}
+        if location:
+            actor_input["searchUrl"] += f"&geoUrn={location}"
+        async with httpx.AsyncClient(timeout=120) as client:
+            run_resp = await client.post(
+                f"https://api.apify.com/v2/acts/apimaestro~linkedin-companies-search-scraper/runs?token={api_key}",
+                json=actor_input
+            )
+            run_data = run_resp.json().get("data", {})
+            run_id = run_data.get("id", "")
+            if not run_id:
+                raise Exception("No run ID from Apify")
+            # Poll for completion (max 90 seconds)
+            now_ts = datetime.now(timezone.utc).isoformat()
+            await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"stages.1.status": "completed", "stages.2.status": "processing", "updated_at": now_ts}})
+            for _ in range(18):
+                await asyncio.sleep(5)
+                status_resp = await client.get(f"https://api.apify.com/v2/actor-runs/{run_id}?token={api_key}")
+                status = status_resp.json().get("data", {}).get("status", "")
+                if status in ("SUCCEEDED", "FAILED", "ABORTED", "TIMED-OUT"):
+                    break
+            if status != "SUCCEEDED":
+                await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+                return
+            # Fetch results
+            dataset_id = run_data.get("defaultDatasetId", "")
+            results_resp = await client.get(f"https://api.apify.com/v2/datasets/{dataset_id}/items?token={api_key}")
+            items = results_resp.json() if isinstance(results_resp.json(), list) else []
+            now = datetime.now(timezone.utc).isoformat()
+            inserted = 0
+            for item in items:
+                bname = item.get("name", item.get("title", "")).strip()
+                if not bname:
+                    continue
+                existing = await db.leads.find_one({"business_name": {"$regex": f"^{bname}$", "$options": "i"}, "tenant_id": tenant_id})
+                if existing:
+                    continue
+                lead = {
+                    "id": str(uuid.uuid4()), "tenant_id": tenant_id, "job_id": job_id,
+                    "business_name": bname,
+                    "raw_category": industry or keyword,
+                    "normalized_category": item.get("industry", industry or keyword),
+                    "province": "", "city": item.get("location", location),
+                    "website": item.get("url", item.get("linkedinUrl", "")),
+                    "email": "", "phone": "",
+                    "ai_score": 50, "quality_level": "average",
+                    "recommendation": item.get("description", "")[:300],
+                    "recommended_first_line": "",
+                    "address": item.get("location", ""),
+                    "source": "linkedin",
+                    "status": "scored",
+                    "created_at": now, "updated_at": now
+                }
+                await db.leads.insert_one(lead)
+                inserted += 1
+            stages = [
+                {"name": "job_created", "status": "completed", "timestamp": job.get("created_at")},
+                {"name": "scraping", "status": "completed", "timestamp": now},
+                {"name": "prospects_found", "status": "completed", "timestamp": now},
+                {"name": "scoring_completed", "status": "completed", "timestamp": now},
+                {"name": "ready_for_review", "status": "completed", "timestamp": now}
+            ]
+            await db.prospect_jobs.update_one({"id": job_id}, {"$set": {
+                "status": "completed", "raw_count": len(items), "cleaned_count": inserted,
+                "qualified_count": inserted, "rejected_count": 0, "stages": stages, "updated_at": now
+            }})
+    except Exception as e:
+        logger.error(f"Apify LinkedIn error for job {job_id}: {e}")
+        await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+
 @api_router.post("/prospect-jobs/{job_id}/start")
 async def start_prospect_job(request: Request, job_id: str):
     user = await get_current_user(request)
@@ -397,6 +497,7 @@ async def start_prospect_job(request: Request, job_id: str):
     now = datetime.now(timezone.utc).isoformat()
     # Check if n8n is configured - if so, just mark as processing and wait for callback
     n8n_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "n8n", "enabled": True}, {"_id": 0})
+    source = job.get("source", "google_maps")
     if n8n_config and n8n_config.get("base_url"):
         stages = [
             {"name": "job_created", "status": "completed", "timestamp": job["created_at"]},
@@ -409,6 +510,23 @@ async def start_prospect_job(request: Request, job_id: str):
         await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "processing", "stages": stages, "updated_at": now}})
         updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
         return updated_job
+    # Check for Apify direct mode (LinkedIn without n8n)
+    if source == "linkedin":
+        apify_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "apify", "enabled": True}, {"_id": 0})
+        if apify_config and apify_config.get("api_key"):
+            stages = [
+                {"name": "job_created", "status": "completed", "timestamp": job["created_at"]},
+                {"name": "scraping", "status": "processing", "timestamp": now},
+                {"name": "prospects_found", "status": "pending", "timestamp": None},
+                {"name": "scoring_completed", "status": "pending", "timestamp": None},
+                {"name": "ready_for_review", "status": "pending", "timestamp": None}
+            ]
+            await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "processing", "stages": stages, "updated_at": now}})
+            # Launch Apify actor in background
+            import asyncio
+            asyncio.create_task(_run_apify_linkedin(job_id, job, apify_config["api_key"], user["tenant_id"]))
+            updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
+            return updated_job
     # Demo mode - generate simulated data
     quantity = job.get("quantity", 100)
     raw_count = random.randint(int(quantity * 0.8), int(quantity * 1.2))
@@ -2522,6 +2640,7 @@ async def shutdown():
     client.close()
 
 app.include_router(api_router)
+app.mount("/api/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name="uploads")
 
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 app.add_middleware(
