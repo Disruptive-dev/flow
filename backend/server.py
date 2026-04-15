@@ -2533,6 +2533,11 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
     city = job.get("city", "")
     auto_list_name = f"{cat} - {city} - Calificados"
     auto_list_id = ""
+    # Check if any leads have default score 50 — auto-rescore them in background
+    leads_with_50 = sum(1 for ld in leads_data if int(ld.get("ai_score", ld.get("score", 0))) == 50)
+    if leads_with_50 > 0:
+        import asyncio
+        asyncio.create_task(_auto_rescore_job_leads(job_id, job["tenant_id"]))
     if scored_lead_ids:
         existing_list = await db.email_lists.find_one({"tenant_id": job["tenant_id"], "name": auto_list_name})
         if existing_list:
@@ -2545,6 +2550,62 @@ async def n8n_job_result(request: Request, job_id: str, body: Dict[str, Any] = {
             await db.email_lists.insert_one({"id": auto_list_id, "tenant_id": job["tenant_id"], "name": auto_list_name, "description": f"Auto: {len(scored_lead_ids)} leads calificados via n8n", "subscriber_count": len(scored_lead_ids), "lead_ids": scored_lead_ids, "created_at": now, "updated_at": now})
     await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"auto_list_name": auto_list_name, "auto_list_id": auto_list_id}})
     return {"message": f"{inserted} leads importados, {qualified} calificados, {duplicates_skipped} duplicados omitidos", "job_id": job_id, "auto_list": auto_list_name, "duplicates_skipped": duplicates_skipped}
+
+async def _auto_rescore_job_leads(job_id: str, tenant_id: str):
+    """Auto-rescore leads that arrived with default score 50 (Dify failed in n8n)"""
+    import asyncio
+    await asyncio.sleep(2)  # Brief delay to let inserts complete
+    leads_50 = await db.leads.find({"job_id": job_id, "tenant_id": tenant_id, "ai_score": 50}, {"_id": 0}).to_list(100)
+    if not leads_50:
+        return
+    logger.info(f"Auto-rescoring {len(leads_50)} leads with score 50 for job {job_id}")
+    dify_base = os.environ.get("DIFY_BASE_URL", "")
+    dify_key = os.environ.get("DIFY_APP_KEY", "")
+    if not dify_base or not dify_key:
+        dify_config = await db.integration_configs.find_one({"tenant_id": tenant_id, "name": "dify"}, {"_id": 0})
+        if dify_config:
+            dify_base = dify_config.get("base_url", dify_base)
+            dify_key = dify_config.get("api_key", dify_key)
+    now = datetime.now(timezone.utc).isoformat()
+    rescored = 0
+    for lead in leads_50:
+        business_data = f"Nombre: {lead.get('business_name','')}\nDireccion: {lead.get('address','')}, {lead.get('city','')}, {lead.get('province','')}\nTelefono: {lead.get('phone','')}\nWebsite: {lead.get('website','')}\nEmail: {lead.get('email','')}\nRating: {lead.get('rating',0)}\nReviews: {lead.get('reviews_count',0)}\nCategoria: {lead.get('normalized_category','')}"
+        scored = None
+        if dify_base and dify_key:
+            try:
+                dify_url = dify_base.rstrip("/")
+                if dify_url.startswith("http://"):
+                    dify_url = "https://" + dify_url[7:]
+                async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+                    resp = await client.post(f"{dify_url}/workflows/run", headers={"Authorization": f"Bearer {dify_key}", "Content-Type": "application/json"}, json={"inputs": {"business_data": business_data}, "response_mode": "blocking", "user": "spectra-auto"})
+                    result = resp.json()
+                    output = result.get("data", {}).get("outputs", {}).get("result", "")
+                    if output:
+                        import json as jm
+                        json_match = re.search(r'\{[\s\S]*\}', output) if isinstance(output, str) else None
+                        parsed = jm.loads(json_match.group(0)) if json_match else (output if isinstance(output, dict) else None)
+                        if parsed and parsed.get("ai_score"):
+                            scored = parsed
+            except:
+                pass
+        if not scored:
+            try:
+                from emergentintegrations.llm.chat import LlmChat, UserMessage
+                chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"autoscore-{lead['id']}", system_message="Eres un clasificador de leads B2B. Califica del 0 al 100. Responde SOLO JSON: {\"ai_score\": N, \"quality_level\": \"excellent/good/average/poor\", \"recommendation\": \"texto corto\", \"recommended_first_line\": \"texto\"}")
+                resp_text = await chat.send_message(UserMessage(text=f"Clasifica este lead:\n{business_data}"))
+                import json as jm
+                json_match = re.search(r'\{[\s\S]*\}', resp_text)
+                if json_match:
+                    scored = jm.loads(json_match.group(0))
+            except:
+                pass
+        if scored and scored.get("ai_score"):
+            score_val = int(scored["ai_score"])
+            status = "scored" if score_val >= 50 else "rejected"
+            await db.leads.update_one({"id": lead["id"]}, {"$set": {"ai_score": score_val, "quality_level": scored.get("quality_level", "average"), "recommendation": scored.get("recommendation", ""), "recommended_first_line": scored.get("recommended_first_line", ""), "status": status, "updated_at": now}})
+            rescored += 1
+        await asyncio.sleep(0.5)
+    logger.info(f"Auto-rescore complete: {rescored}/{len(leads_50)} leads for job {job_id}")
 
 @api_router.post("/webhooks/n8n/job-progress/{job_id}")
 async def n8n_job_progress(request: Request, job_id: str, body: Dict[str, Any] = {}):

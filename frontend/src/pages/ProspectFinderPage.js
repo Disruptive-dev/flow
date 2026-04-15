@@ -234,9 +234,8 @@ export default function ProspectFinderPage() {
                 </div>
                 <div>
                   <h3 className="font-heading font-medium text-zinc-900">Prospeccion LinkedIn</h3>
-                  <p className="text-xs text-zinc-500">{isSuperAdmin ? 'Busca empresas y profesionales en LinkedIn via Apify' : 'Busca empresas y profesionales en LinkedIn'}</p>
+                  <p className="text-xs text-zinc-500">Busca empresas y profesionales en LinkedIn</p>
                 </div>
-                {isSuperAdmin && <Badge className="bg-amber-50 text-amber-700 ml-auto text-[10px]">Config. pendiente</Badge>}
               </div>
               <form onSubmit={handleCreateLinkedIn}>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
