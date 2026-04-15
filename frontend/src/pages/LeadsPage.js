@@ -141,6 +141,7 @@ export default function LeadsPage() {
   const fileInputRef = useRef(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [newLead, setNewLead] = useState({ business_name: '', email: '', phone: '', city: '', category: '', website: '', notes: '' });
+  const [rescoring, setRescoring] = useState(false);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -166,6 +167,18 @@ export default function LeadsPage() {
       setNewLead({ business_name: '', email: '', phone: '', city: '', category: '', website: '', notes: '' });
       fetchLeads();
     } catch (err) { toast.error(err.response?.data?.detail || 'Error al crear lead'); }
+  };
+
+  const handleRescore = async () => {
+    setRescoring(true);
+    try {
+      const payload = selected.length > 0 ? { lead_ids: selected } : {};
+      const { data } = await api.post('/ai/rescore-leads', payload);
+      toast.success(data.message);
+      setSelected([]);
+      fetchLeads();
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error al re-clasificar'); }
+    setRescoring(false);
   };
 
   const fetchLeads = async () => {
@@ -230,6 +243,10 @@ export default function LeadsPage() {
           <FlowBotButton section="leads" />
           <Button size="sm" onClick={() => setCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-1.5" data-testid="create-lead-btn">
             <Plus className="w-4 h-4" /> Crear Lead
+          </Button>
+          <Button size="sm" variant="outline" onClick={handleRescore} disabled={rescoring} className="gap-1.5" data-testid="rescore-leads-btn">
+            {rescoring ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingUp className="w-4 h-4" />}
+            {selected.length > 0 ? `Re-clasificar (${selected.length})` : 'Re-clasificar'}
           </Button>
           <input type="file" accept=".xlsx,.xls" ref={fileInputRef} onChange={handleImport} className="hidden" />
           <Button variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={importing} data-testid="import-leads-btn">

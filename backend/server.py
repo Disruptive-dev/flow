@@ -15,6 +15,7 @@ import jwt
 import random
 import asyncio
 import resend
+import re
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone, timedelta
@@ -1945,6 +1946,73 @@ async def dify_score_lead(request: Request, body: Dict[str, Any] = {}):
     except Exception as e:
         logger.error(f"Dify scoring error: {e}")
         raise HTTPException(status_code=500, detail=f"Error llamando a Dify: {str(e)}")
+
+@api_router.post("/ai/rescore-leads")
+async def rescore_leads_batch(request: Request, body: Dict[str, Any] = {}):
+    """Re-score leads that have default score (50) using Emergent LLM as fallback"""
+    user = await get_current_user(request)
+    lead_ids = body.get("lead_ids", [])
+    query = {"tenant_id": user["tenant_id"]}
+    if lead_ids:
+        query["id"] = {"$in": lead_ids}
+    else:
+        query["ai_score"] = 50
+    leads = await db.leads.find(query, {"_id": 0}).limit(50).to_list(50)
+    if not leads:
+        return {"message": "No hay leads para re-clasificar", "rescored": 0}
+    # Try Dify first
+    dify_base = os.environ.get("DIFY_BASE_URL", "")
+    dify_key = os.environ.get("DIFY_APP_KEY", "")
+    if not dify_base or not dify_key:
+        dify_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "dify"}, {"_id": 0})
+        if dify_config:
+            dify_base = dify_config.get("base_url", dify_base)
+            dify_key = dify_config.get("api_key", dify_key)
+    rescored = 0
+    now = datetime.now(timezone.utc).isoformat()
+    for lead in leads:
+        business_data = f"Nombre: {lead.get('business_name','')}\nDireccion: {lead.get('address','')}, {lead.get('city','')}, {lead.get('province','')}\nTelefono: {lead.get('phone','')}\nWebsite: {lead.get('website','')}\nEmail: {lead.get('email','')}\nRating: {lead.get('rating',0)}\nReviews: {lead.get('reviews_count',0)}\nCategoria: {lead.get('normalized_category','')}"
+        scored = None
+        # Try Dify
+        if dify_base and dify_key:
+            try:
+                dify_url = dify_base.rstrip("/")
+                if dify_url.startswith("http://"):
+                    dify_url = "https://" + dify_url[7:]
+                async with httpx.AsyncClient(timeout=20, follow_redirects=True) as client:
+                    resp = await client.post(f"{dify_url}/workflows/run", headers={"Authorization": f"Bearer {dify_key}", "Content-Type": "application/json"}, json={"inputs": {"business_data": business_data}, "response_mode": "blocking", "user": "spectra-rescore"})
+                    result = resp.json()
+                    output = result.get("data", {}).get("outputs", {}).get("result", "")
+                    if output:
+                        import json as jm
+                        json_match = re.search(r'\{[\s\S]*\}', output) if isinstance(output, str) else None
+                        parsed = jm.loads(json_match.group(0)) if json_match else (output if isinstance(output, dict) else None)
+                        if parsed and parsed.get("ai_score"):
+                            scored = parsed
+            except:
+                pass
+        # Fallback: Emergent LLM scoring
+        if not scored:
+            try:
+                from emergentintegrations.llm.chat import LlmChat, UserMessage
+                chat = LlmChat(api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=f"score-{lead['id']}", system_message="Eres un clasificador de leads B2B. Califica del 0 al 100. Responde SOLO JSON: {\"ai_score\": N, \"quality_level\": \"excellent/good/average/poor\", \"recommendation\": \"texto\", \"recommended_first_line\": \"texto\"}")
+                resp_text = await chat.send_message(UserMessage(text=f"Clasifica este lead:\n{business_data}"))
+                import json as jm
+                json_match = re.search(r'\{[\s\S]*\}', resp_text)
+                if json_match:
+                    scored = jm.loads(json_match.group(0))
+            except:
+                pass
+        if scored and scored.get("ai_score"):
+            score_val = int(scored["ai_score"])
+            status = "scored" if score_val >= 50 else "rejected"
+            await db.leads.update_one({"id": lead["id"]}, {"$set": {
+                "ai_score": score_val, "quality_level": scored.get("quality_level", "average"),
+                "recommendation": scored.get("recommendation", ""), "recommended_first_line": scored.get("recommended_first_line", ""),
+                "status": status, "updated_at": now
+            }})
+            rescored += 1
+    return {"message": f"{rescored} leads re-clasificados de {len(leads)}", "rescored": rescored, "total": len(leads)}
 
 @api_router.get("/email-marketing/automations")
 async def list_automations(request: Request):
