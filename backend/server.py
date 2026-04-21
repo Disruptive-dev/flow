@@ -2392,6 +2392,251 @@ async def bulk_deal_action(request: Request, body: BulkDealAction):
         return {"message": f"{result.deleted_count} oportunidades eliminadas"}
     raise HTTPException(status_code=400, detail="Accion invalida")
 
+
+# ==================== CRM TASKS ====================
+
+@api_router.get("/crm/tasks")
+async def list_tasks(request: Request, contact_id: Optional[str] = None, deal_id: Optional[str] = None, status: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"tenant_id": user["tenant_id"]}
+    if contact_id: query["contact_id"] = contact_id
+    if deal_id: query["deal_id"] = deal_id
+    if status: query["status"] = status
+    tasks = await db.crm_tasks.find(query, {"_id": 0}).sort("due_date", 1).to_list(200)
+    return tasks
+
+@api_router.post("/crm/tasks")
+async def create_task(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    task = {
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "contact_id": body.get("contact_id", ""), "deal_id": body.get("deal_id", ""),
+        "title": body.get("title", ""), "type": body.get("type", "tarea"),
+        "description": body.get("description", ""),
+        "due_date": body.get("due_date", ""), "status": "pendiente",
+        "assigned_to": body.get("assigned_to", user.get("name", "")),
+        "created_by": user.get("name", ""), "created_at": now, "updated_at": now
+    }
+    await db.crm_tasks.insert_one(task)
+    await _log_activity(user, "tarea_creada", f"Tarea: {task['title']}", body.get("contact_id", ""), body.get("deal_id", ""))
+    return {k: v for k, v in task.items() if k != "_id"}
+
+@api_router.put("/crm/tasks/{task_id}")
+async def update_task(request: Request, task_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now}
+    for f in ["title", "type", "description", "due_date", "status", "assigned_to"]:
+        if f in body: update[f] = body[f]
+    await db.crm_tasks.update_one({"id": task_id, "tenant_id": user["tenant_id"]}, {"$set": update})
+    if body.get("status") == "completada":
+        await _log_activity(user, "tarea_completada", f"Tarea completada: {body.get('title', task_id)}", "", "")
+    task = await db.crm_tasks.find_one({"id": task_id}, {"_id": 0})
+    return task
+
+@api_router.delete("/crm/tasks/{task_id}")
+async def delete_task(request: Request, task_id: str):
+    user = await get_current_user(request)
+    await db.crm_tasks.delete_one({"id": task_id, "tenant_id": user["tenant_id"]})
+    return {"message": "Tarea eliminada"}
+
+# ==================== CRM NOTES ====================
+
+@api_router.get("/crm/notes")
+async def list_notes(request: Request, contact_id: Optional[str] = None, deal_id: Optional[str] = None):
+    user = await get_current_user(request)
+    query = {"tenant_id": user["tenant_id"]}
+    if contact_id: query["contact_id"] = contact_id
+    if deal_id: query["deal_id"] = deal_id
+    notes = await db.crm_notes.find(query, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return notes
+
+@api_router.post("/crm/notes")
+async def create_note(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    note = {
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "contact_id": body.get("contact_id", ""), "deal_id": body.get("deal_id", ""),
+        "content": body.get("content", ""), "created_by": user.get("name", ""),
+        "created_at": now, "updated_at": now
+    }
+    await db.crm_notes.insert_one(note)
+    await _log_activity(user, "nota_creada", f"Nota agregada", body.get("contact_id", ""), body.get("deal_id", ""))
+    return {k: v for k, v in note.items() if k != "_id"}
+
+# ==================== CRM PRODUCTS ====================
+
+@api_router.get("/crm/products")
+async def list_products(request: Request):
+    user = await get_current_user(request)
+    products = await db.crm_products.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("name", 1).to_list(100)
+    return products
+
+@api_router.post("/crm/products")
+async def create_product(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    product = {
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "name": body.get("name", ""), "price": body.get("price", 0),
+        "description": body.get("description", ""), "currency": body.get("currency", "USD"),
+        "created_at": now, "updated_at": now
+    }
+    await db.crm_products.insert_one(product)
+    return {k: v for k, v in product.items() if k != "_id"}
+
+@api_router.put("/crm/products/{product_id}")
+async def update_product(request: Request, product_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    update = {"updated_at": now}
+    for f in ["name", "price", "description", "currency"]:
+        if f in body: update[f] = body[f]
+    await db.crm_products.update_one({"id": product_id, "tenant_id": user["tenant_id"]}, {"$set": update})
+    return await db.crm_products.find_one({"id": product_id}, {"_id": 0})
+
+@api_router.delete("/crm/products/{product_id}")
+async def delete_product(request: Request, product_id: str):
+    user = await get_current_user(request)
+    await db.crm_products.delete_one({"id": product_id, "tenant_id": user["tenant_id"]})
+    return {"message": "Producto eliminado"}
+
+# ==================== DEAL PRODUCTS (ITEMS) ====================
+
+@api_router.get("/crm/deals/{deal_id}/products")
+async def list_deal_products(request: Request, deal_id: str):
+    user = await get_current_user(request)
+    items = await db.crm_deal_products.find({"deal_id": deal_id, "tenant_id": user["tenant_id"]}, {"_id": 0}).to_list(50)
+    return items
+
+@api_router.post("/crm/deals/{deal_id}/products")
+async def add_deal_product(request: Request, deal_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    item = {
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "deal_id": deal_id,
+        "product_id": body.get("product_id", ""), "product_name": body.get("product_name", ""),
+        "quantity": body.get("quantity", 1), "price": body.get("price", 0),
+        "created_at": now
+    }
+    await db.crm_deal_products.insert_one(item)
+    total = sum([i["price"] * i["quantity"] for i in await db.crm_deal_products.find({"deal_id": deal_id}, {"_id": 0}).to_list(50)])
+    await db.crm_deals.update_one({"id": deal_id}, {"$set": {"value": total, "updated_at": now}})
+    await _log_activity(user, "producto_agregado", f"Producto: {item['product_name']}", "", deal_id)
+    return {k: v for k, v in item.items() if k != "_id"}
+
+@api_router.delete("/crm/deals/{deal_id}/products/{item_id}")
+async def remove_deal_product(request: Request, deal_id: str, item_id: str):
+    user = await get_current_user(request)
+    await db.crm_deal_products.delete_one({"id": item_id})
+    now = datetime.now(timezone.utc).isoformat()
+    total = sum([i["price"] * i["quantity"] for i in await db.crm_deal_products.find({"deal_id": deal_id}, {"_id": 0}).to_list(50)])
+    await db.crm_deals.update_one({"id": deal_id}, {"$set": {"value": total, "updated_at": now}})
+    return {"message": "Producto removido"}
+
+# ==================== CRM TAGS ====================
+
+@api_router.put("/crm/deals/{deal_id}/tags")
+async def update_deal_tags(request: Request, deal_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    tags = body.get("tags", [])
+    await db.crm_deals.update_one({"id": deal_id, "tenant_id": user["tenant_id"]}, {"$set": {"tags": tags, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await _log_activity(user, "etiquetas_actualizadas", f"Etiquetas: {', '.join(tags)}", "", deal_id)
+    return {"tags": tags}
+
+# ==================== ACTIVITY LOG ====================
+
+async def _log_activity(user: dict, action: str, details: str, contact_id: str = "", deal_id: str = ""):
+    await db.activity_log.insert_one({
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "user_name": user.get("name", ""), "user_email": user.get("email", ""),
+        "action": action, "details": details,
+        "contact_id": contact_id, "deal_id": deal_id,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+
+@api_router.get("/crm/activity-log")
+async def get_activity_log(request: Request, contact_id: Optional[str] = None, deal_id: Optional[str] = None, limit: int = 50):
+    user = await get_current_user(request)
+    query = {"tenant_id": user["tenant_id"]}
+    if contact_id: query["contact_id"] = contact_id
+    if deal_id: query["deal_id"] = deal_id
+    logs = await db.activity_log.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return logs
+
+@api_router.get("/settings/activity-log")
+async def get_settings_activity_log(request: Request, limit: int = 100):
+    user = await get_current_user(request)
+    logs = await db.activity_log.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return logs
+
+# ==================== EMAIL SEGMENTS ====================
+
+@api_router.get("/email-marketing/segments")
+async def list_segments(request: Request):
+    user = await get_current_user(request)
+    segments = await db.email_segments.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    # Calculate dynamic counts
+    for seg in segments:
+        query = _build_segment_query(seg.get("rules", []), user["tenant_id"])
+        seg["count"] = await db.leads.count_documents(query)
+    return segments
+
+@api_router.post("/email-marketing/segments")
+async def create_segment(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    now = datetime.now(timezone.utc).isoformat()
+    segment = {
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "name": body.get("name", ""), "rules": body.get("rules", []),
+        "created_at": now, "updated_at": now
+    }
+    await db.email_segments.insert_one(segment)
+    query = _build_segment_query(segment["rules"], user["tenant_id"])
+    segment["count"] = await db.leads.count_documents(query)
+    return {k: v for k, v in segment.items() if k != "_id"}
+
+@api_router.get("/email-marketing/segments/{segment_id}/leads")
+async def get_segment_leads(request: Request, segment_id: str, page: int = 1, limit: int = 50):
+    user = await get_current_user(request)
+    segment = await db.email_segments.find_one({"id": segment_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not segment:
+        raise HTTPException(status_code=404, detail="Segmento no encontrado")
+    query = _build_segment_query(segment.get("rules", []), user["tenant_id"])
+    total = await db.leads.count_documents(query)
+    leads = await db.leads.find(query, {"_id": 0}).sort("ai_score", -1).skip((page - 1) * limit).limit(limit).to_list(limit)
+    return {"leads": leads, "total": total, "segment": segment}
+
+@api_router.delete("/email-marketing/segments/{segment_id}")
+async def delete_segment(request: Request, segment_id: str):
+    user = await get_current_user(request)
+    await db.email_segments.delete_one({"id": segment_id, "tenant_id": user["tenant_id"]})
+    return {"message": "Segmento eliminado"}
+
+def _build_segment_query(rules: list, tenant_id: str) -> dict:
+    query = {"tenant_id": tenant_id}
+    for rule in rules:
+        field = rule.get("field", "")
+        op = rule.get("operator", "equals")
+        value = rule.get("value", "")
+        if not field or not value: continue
+        if op == "equals":
+            query[field] = value
+        elif op == "contains":
+            query[field] = {"$regex": value, "$options": "i"}
+        elif op == "gte":
+            try: query[field] = {"$gte": int(value)}
+            except: pass
+        elif op == "lte":
+            try: query[field] = {"$lte": int(value)}
+            except: pass
+        elif op == "in":
+            query[field] = {"$in": [v.strip() for v in value.split(",")]}
+    return query
+
+
 # ==================== EXPORT ====================
 
 @api_router.get("/export/n8n-workflow")

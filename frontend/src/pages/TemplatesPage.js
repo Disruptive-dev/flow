@@ -36,7 +36,7 @@ export default function TemplatesPage() {
   const [abName, setAbName] = useState('');
 
   const generateWithAI = async () => {
-    if (!aiIndustry) return toast.error('Selecciona una industria');
+    if (!aiIndustry && !aiCustomPrompt) return toast.error('Ingresa una industria o instrucciones personalizadas');
     setGeneratingAI(true);
     try {
       const { data } = await api.post('/ai/generate-template', { industry: aiIndustry, objective: 'generar interes y agendar reunion', tone: aiTone, custom_prompt: aiCustomPrompt });

@@ -26,9 +26,13 @@ const navSections = [
     { key: 'email_marketing', label: 'Email Marketing', path: '/email-marketing', icon: AtSign },
     { key: 'campaigns', label: 'Campanas', path: '/campaigns', icon: Mail },
     { key: 'templates', label: 'Plantillas', path: '/templates', icon: FileText },
+    { key: 'forms', label: 'Formularios', path: '/forms', icon: FileText, badge: 'Pronto' },
   ]},
   { title: 'Spectra CRM', module: 'crm', items: [
     { key: 'crm_sync', label: 'Spectra CRM', path: '/crm-sync', icon: RefreshCw },
+  ]},
+  { title: 'Spectra Web', module: null, items: [
+    { key: 'landing_pages', label: 'Landing Pages', path: '/landing-pages', icon: LayoutDashboard, badge: 'Pronto' },
   ]},
   { title: null, items: [
     { key: 'analytics', label: 'Analisis', path: '/analytics', icon: BarChart3 },
@@ -77,7 +81,7 @@ export default function Sidebar() {
                 )}
                 {!section.title && si > 0 && <Separator className="my-2 bg-zinc-800" />}
                 <div className="space-y-0.5">
-                  {section.items.map(({ key, label, path, icon: Icon }) => {
+                  {section.items.map(({ key, label, path, icon: Icon, badge }) => {
                     const isActive = path === '/' ? location.pathname === '/' : location.pathname.startsWith(path);
                     return (
                       <NavLink
@@ -92,6 +96,7 @@ export default function Sidebar() {
                       >
                         <Icon className="w-[18px] h-[18px]" />
                         <span>{t(key) !== key ? t(key) : label}</span>
+                        {badge && <span className="ml-auto text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{badge}</span>}
                       </NavLink>
                     );
                   })}
