@@ -100,7 +100,7 @@ export default function FlowBotButton({ section }) {
 
             {context && (
               <div className="px-4 pb-2 flex flex-wrap gap-1.5">
-                {Object.entries(context).map(([key, val]) => (
+                {Object.entries(context).filter(([k, v]) => typeof v === 'number' || typeof v === 'string').map(([key, val]) => (
                   <span key={key} className="text-[9px] bg-zinc-100 text-zinc-500 px-1.5 py-0.5 rounded-full">{key.replace(/_/g, ' ')}: {val}</span>
                 ))}
               </div>

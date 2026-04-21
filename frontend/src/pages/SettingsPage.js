@@ -225,6 +225,7 @@ export default function SettingsPage() {
                   <Select value={newUser.role} onValueChange={v => setNewUser(u => ({ ...u, role: v }))}>
                     <SelectTrigger data-testid="new-user-role"><SelectValue /></SelectTrigger>
                     <SelectContent>
+                      {user?.role === 'super_admin' && <SelectItem value="super_admin">Super Administrador</SelectItem>}
                       <SelectItem value="tenant_admin">Admin del Tenant</SelectItem>
                       <SelectItem value="operator">Operador</SelectItem>
                       <SelectItem value="viewer">Visor</SelectItem>

@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, ArrowRight, Clock, CheckCircle2, X, FileText, Pencil, Trash2, Rocket, Eye } from 'lucide-react';
 import { toast } from 'sonner';
@@ -46,7 +46,10 @@ export default function EmailMarketingPage() {
   const [pickLeadsOpen, setPickLeadsOpen] = useState(null);
   const [availableLeads, setAvailableLeads] = useState([]);
   const [leadSearch, setLeadSearch] = useState('');
+  const [leadSourceFilter, setLeadSourceFilter] = useState('');
+  const [leadStatusFilter, setLeadStatusFilter] = useState('');
   const [pickedLeads, setPickedLeads] = useState([]);
+  const [editCampaign, setEditCampaign] = useState(null);
 
   const fetchData = async () => {
     try {
@@ -114,6 +117,8 @@ export default function EmailMarketingPage() {
     setPickLeadsOpen(listId);
     setPickedLeads([]);
     setLeadSearch('');
+    setLeadSourceFilter('');
+    setLeadStatusFilter('');
     try {
       const { data } = await api.get('/leads', { params: { limit: 200 } });
       setAvailableLeads(data.leads || []);
@@ -128,6 +133,15 @@ export default function EmailMarketingPage() {
       setPickLeadsOpen(null);
       setPickedLeads([]);
     } catch { toast.error('Error al agregar leads'); }
+  };
+  const saveEditCampaign = async () => {
+    if (!editCampaign) return;
+    try {
+      const { data } = await api.put(`/email-marketing/campaigns/${editCampaign.id}`, { name: editCampaign.name, list_id: editCampaign.list_id, template_id: editCampaign.template_id });
+      setCampaigns(prev => prev.map(c => c.id === editCampaign.id ? data : c));
+      setEditCampaign(null);
+      toast.success('Campana actualizada');
+    } catch { toast.error('Error'); }
   };
 
   const startEditAutomation = (auto) => { setEditingAutomation(auto); setEditSteps([...(auto.steps || [])]); setEditTrigger(auto.trigger || 'manual'); };
@@ -192,17 +206,18 @@ export default function EmailMarketingPage() {
                       <h3 className="font-medium text-zinc-900">{c.name}</h3>
                       <div className="flex items-center gap-2 mt-1">
                         <Badge className={c.status === 'enviada' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700'}>{c.status}</Badge>
-                        {c.list_id && <span className="text-xs text-zinc-400">Lista vinculada</span>}
-                        {c.template_id && <span className="text-xs text-zinc-400">Plantilla vinculada</span>}
+                        {c.list_id ? <span className="text-xs text-emerald-600">Lista: {lists.find(l => l.id === c.list_id)?.name || 'vinculada'}</span> : <span className="text-xs text-red-400">Sin lista</span>}
+                        {c.template_id ? <span className="text-xs text-emerald-600">Plantilla: {templates.find(t => t.id === c.template_id)?.name || 'vinculada'}</span> : <span className="text-xs text-red-400">Sin plantilla</span>}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       {c.status === 'borrador' && (
                         <>
+                          <Button size="sm" variant="outline" onClick={() => setEditCampaign(c)} data-testid={`em-edit-campaign-${i}`}><Pencil className="w-3.5 h-3.5 mr-1" /> Editar</Button>
                           <Button size="sm" variant="outline" onClick={() => simulateCampaign(c.id)} data-testid={`em-simulate-${i}`}><Play className="w-3.5 h-3.5 mr-1" /> Simular</Button>
-                          {c.list_id && (
+                          {c.list_id && c.template_id && (
                             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => sendRealCampaign(c.id)} disabled={sendingReal === c.id} data-testid={`em-send-real-${i}`}>
-                              {sendingReal === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Rocket className="w-3.5 h-3.5 mr-1" />} Enviar Real
+                              {sendingReal === c.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Rocket className="w-3.5 h-3.5 mr-1" />} Enviar
                             </Button>
                           )}
                         </>
@@ -338,9 +353,32 @@ export default function EmailMarketingPage() {
       <Dialog open={!!pickLeadsOpen} onOpenChange={(o) => !o && setPickLeadsOpen(null)}>
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="font-heading">Agregar Leads a la Lista</DialogTitle></DialogHeader>
-          <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)} placeholder="Buscar por nombre, email..." className="mb-3" data-testid="pick-leads-search" />
+          <div className="flex gap-2 mb-3">
+            <Input value={leadSearch} onChange={e => setLeadSearch(e.target.value)} placeholder="Buscar por nombre, email..." className="flex-1" data-testid="pick-leads-search" />
+            <Select value={leadSourceFilter || 'all'} onValueChange={v => setLeadSourceFilter(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Fuente" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="google_maps">B2B</SelectItem>
+                <SelectItem value="linkedin">LinkedIn</SelectItem>
+                <SelectItem value="bot">Bot</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={leadStatusFilter || 'all'} onValueChange={v => setLeadStatusFilter(v === 'all' ? '' : v)}>
+              <SelectTrigger className="w-[140px]"><SelectValue placeholder="Estado" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="scored">Calificados</SelectItem>
+                <SelectItem value="approved">Aprobados</SelectItem>
+                <SelectItem value="rejected">Rechazados</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           <div className="space-y-1 max-h-[50vh] overflow-y-auto">
             {availableLeads.filter(l => {
+              if (leadSourceFilter && l.source !== leadSourceFilter) return false;
+              if (leadStatusFilter && l.status !== leadStatusFilter) return false;
               if (!leadSearch) return true;
               const q = leadSearch.toLowerCase();
               return (l.business_name||'').toLowerCase().includes(q) || (l.email||'').toLowerCase().includes(q) || (l.city||'').toLowerCase().includes(q);
@@ -361,6 +399,41 @@ export default function EmailMarketingPage() {
               <Button onClick={confirmPickLeads} disabled={!pickedLeads.length} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="confirm-pick-leads">Agregar a Lista</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Edit Campaign Dialog */}
+      <Dialog open={!!editCampaign} onOpenChange={(o) => !o && setEditCampaign(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Editar Campana</DialogTitle></DialogHeader>
+          {editCampaign && (
+            <div className="space-y-4">
+              <div><Label>Nombre</Label><Input value={editCampaign.name} onChange={e => setEditCampaign(p => ({...p, name: e.target.value}))} /></div>
+              <div>
+                <Label>Lista de Leads</Label>
+                <Select value={editCampaign.list_id || 'none'} onValueChange={v => setEditCampaign(p => ({...p, list_id: v === 'none' ? '' : v}))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar lista..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin lista</SelectItem>
+                    {lists.map(l => <SelectItem key={l.id} value={l.id}>{l.name} ({l.subscriber_count})</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Plantilla</Label>
+                <Select value={editCampaign.template_id || 'none'} onValueChange={v => setEditCampaign(p => ({...p, template_id: v === 'none' ? '' : v}))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar plantilla..." /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sin plantilla</SelectItem>
+                    {templates.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditCampaign(null)}>Cancelar</Button>
+            <Button onClick={saveEditCampaign} className="bg-blue-600 hover:bg-blue-700 text-white">Guardar</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
