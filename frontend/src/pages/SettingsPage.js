@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Building2, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package, Pencil, Eye, EyeOff, Sliders, Download } from 'lucide-react';
+import { Building2, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package, Pencil, Eye, EyeOff, Sliders, Download, Clock, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import DomainsPage from '@/pages/DomainsPage';
 
@@ -22,6 +22,65 @@ function maskApiKey(key) {
   if (!key || key === '***configured***') return '***configured***';
   if (key.length <= 8) return '*'.repeat(key.length);
   return key.slice(0, 4) + '*'.repeat(Math.min(key.length - 8, 20)) + key.slice(-4);
+}
+
+function ProductsConfig() {
+  const [products, setProducts] = useState([]);
+  const [form, setForm] = useState({ name: '', price: 0, description: '', currency: 'USD' });
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { api.get('/crm/products').then(r => setProducts(r.data)).catch(() => {}).finally(() => setLoading(false)); }, []);
+  const create = async () => {
+    if (!form.name.trim()) return toast.error('Nombre requerido');
+    const { data } = await api.post('/crm/products', form);
+    setProducts(prev => [...prev, data]);
+    setForm({ name: '', price: 0, description: '', currency: 'USD' });
+    toast.success('Producto creado');
+  };
+  const remove = async (id) => { await api.delete(`/crm/products/${id}`); setProducts(prev => prev.filter(p => p.id !== id)); toast.success('Eliminado'); };
+  return (
+    <Card className="border-zinc-200 rounded-xl"><CardContent className="p-6 space-y-4">
+      <h3 className="font-heading font-medium text-zinc-900">Catalogo de Productos</h3>
+      <p className="text-xs text-zinc-500">Configura productos predefinidos que podras asignar a oportunidades en el CRM.</p>
+      <div className="flex gap-2">
+        <Input value={form.name} onChange={e => setForm(p => ({...p, name: e.target.value}))} placeholder="Nombre del producto" className="flex-1 h-9" />
+        <Input type="number" value={form.price} onChange={e => setForm(p => ({...p, price: parseFloat(e.target.value) || 0}))} placeholder="Precio" className="w-24 h-9" />
+        <Button size="sm" onClick={create} className="bg-blue-600 hover:bg-blue-700 text-white h-9"><Plus className="w-4 h-4 mr-1" /> Agregar</Button>
+      </div>
+      <div className="space-y-2">
+        {products.map(p => (
+          <div key={p.id} className="flex items-center justify-between p-3 border rounded-lg">
+            <div><p className="text-sm font-medium text-zinc-900">{p.name}</p><p className="text-xs text-zinc-500">${p.price} {p.currency}</p></div>
+            <Button size="sm" variant="ghost" className="text-red-400" onClick={() => remove(p.id)}><Trash2 className="w-3.5 h-3.5" /></Button>
+          </div>
+        ))}
+        {!products.length && !loading && <p className="text-xs text-zinc-400 text-center py-4">Sin productos. Agrega tu primer producto.</p>}
+      </div>
+    </CardContent></Card>
+  );
+}
+
+function ActivityLogConfig() {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { api.get('/settings/activity-log?limit=100').then(r => setLogs(r.data)).catch(() => {}).finally(() => setLoading(false)); }, []);
+  return (
+    <Card className="border-zinc-200 rounded-xl"><CardContent className="p-6 space-y-4">
+      <h3 className="font-heading font-medium text-zinc-900">Log de Actividad</h3>
+      <p className="text-xs text-zinc-500">Registro de todas las acciones realizadas por los usuarios del sistema.</p>
+      <div className="space-y-1 max-h-[60vh] overflow-y-auto">
+        {logs.map((log, i) => (
+          <div key={log.id || i} className="flex items-start gap-3 p-2.5 hover:bg-zinc-50 rounded-lg">
+            <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-zinc-700">{log.details}</p>
+              <p className="text-[10px] text-zinc-400">{log.user_name} ({log.user_email}) &middot; {log.action} &middot; {log.created_at?.slice(0, 16).replace('T', ' ')}</p>
+            </div>
+          </div>
+        ))}
+        {!logs.length && !loading && <p className="text-xs text-zinc-400 text-center py-6">Sin actividad registrada.</p>}
+      </div>
+    </CardContent></Card>
+  );
 }
 
 export default function SettingsPage() {
@@ -132,6 +191,8 @@ export default function SettingsPage() {
           <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
           {user?.role === 'super_admin' && <TabsTrigger value="modules" data-testid="settings-tab-modules"><Package className="w-4 h-4 mr-1.5" />Modulos</TabsTrigger>}
           <TabsTrigger value="scoring" data-testid="settings-tab-scoring"><Sliders className="w-4 h-4 mr-1.5" />Scoring</TabsTrigger>
+          <TabsTrigger value="products" data-testid="settings-tab-products"><Package className="w-4 h-4 mr-1.5" />Productos</TabsTrigger>
+          {user?.role === 'super_admin' && <TabsTrigger value="activity" data-testid="settings-tab-activity"><Clock className="w-4 h-4 mr-1.5" />Actividad</TabsTrigger>}
         </TabsList>
 
         {/* Company Info */}
@@ -321,6 +382,8 @@ export default function SettingsPage() {
                 { key: 'leads', label: 'Leads', desc: 'Centro de leads (prospeccion, bot, LinkedIn)', color: 'bg-indigo-50 text-indigo-700' },
                 { key: 'email_marketing', label: 'Spectra Email Marketing', desc: 'Listas, Campanas de Email, Plantillas', color: 'bg-purple-50 text-purple-700' },
                 { key: 'crm', label: 'Spectra CRM', desc: 'Contactos, Pipeline de Oportunidades, Notas', color: 'bg-emerald-50 text-emerald-700' },
+                { key: 'web', label: 'Spectra Web', desc: 'Landing Pages, Formularios', color: 'bg-orange-50 text-orange-700' },
+                { key: 'performance', label: 'Spectra Performance', desc: 'Meta Ads, Google Ads, TikTok, SEO, GEO', color: 'bg-red-50 text-red-700' },
               ].map(({ key, label, desc, color }) => (
                 <div key={key} className="flex items-center justify-between p-4 border border-zinc-200 rounded-xl" data-testid={`module-${key}`}>
                   <div className="flex items-center gap-4">
@@ -402,6 +465,18 @@ export default function SettingsPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* PRODUCTS TAB */}
+        <TabsContent value="products">
+          <ProductsConfig />
+        </TabsContent>
+
+        {/* ACTIVITY LOG TAB */}
+        {user?.role === 'super_admin' && (
+          <TabsContent value="activity">
+            <ActivityLogConfig />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

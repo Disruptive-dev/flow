@@ -31,8 +31,11 @@ const navSections = [
   { title: 'Spectra CRM', module: 'crm', items: [
     { key: 'crm_sync', label: 'Spectra CRM', path: '/crm-sync', icon: RefreshCw },
   ]},
-  { title: 'Spectra Web', module: null, items: [
+  { title: 'Spectra Web', module: 'web', items: [
     { key: 'landing_pages', label: 'Landing Pages', path: '/landing-pages', icon: LayoutDashboard, badge: 'Pronto' },
+  ]},
+  { title: 'Spectra Performance', module: 'performance', items: [
+    { key: 'performance', label: 'Performance', path: '/performance', icon: BarChart3 },
   ]},
   { title: null, items: [
     { key: 'analytics', label: 'Analisis', path: '/analytics', icon: BarChart3 },

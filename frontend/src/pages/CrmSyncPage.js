@@ -13,9 +13,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Users, Briefcase, Plus, Search, Loader2, Building2, Mail, Phone, MapPin, TrendingUp, Send, GripVertical, DollarSign, Download, Upload, Trash2, X, MoreHorizontal } from 'lucide-react';
+import { Users, Briefcase, Plus, Search, Loader2, Building2, Mail, Phone, MapPin, TrendingUp, Send, GripVertical, DollarSign, Download, Upload, Trash2, X, MoreHorizontal, Tag, Clock, FileText, CheckCircle2, Calendar, Pencil, Package, History, Rocket } from 'lucide-react';
 import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
+
+const taskTypes = [
+  { value: 'llamada', label: 'Llamar' },
+  { value: 'email', label: 'Enviar email' },
+  { value: 'reunion', label: 'Reunion' },
+  { value: 'seguimiento', label: 'Seguimiento' },
+  { value: 'whatsapp', label: 'WhatsApp' },
+  { value: 'tarea', label: 'Otra tarea' },
+];
 
 const stageColors = {
   nuevo: { bg: "bg-slate-50", text: "text-slate-800", border: "border-slate-300", header: "bg-slate-200", card: "border-l-4 border-l-slate-400" },
@@ -46,6 +55,16 @@ export default function CrmPage() {
   const [contactForm, setContactForm] = useState({ business_name: '', contact_name: '', email: '', phone: '', city: '', province: '', category: '', notes: '' });
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
+  // Detail tabs
+  const [detailTab, setDetailTab] = useState('info');
+  const [tasks, setTasks] = useState([]);
+  const [notes, setNotes] = useState([]);
+  const [dealProducts, setDealProducts] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [activityLog, setActivityLog] = useState([]);
+  const [newTaskForm, setNewTaskForm] = useState({ title: '', type: 'llamada', due_date: '', description: '' });
+  const [dealTags, setDealTags] = useState([]);
+  const [newTag, setNewTag] = useState('');
 
   const fetchData = async () => {
     try {
@@ -63,8 +82,25 @@ export default function CrmPage() {
 
   const openContact = async (contactId) => {
     try {
-      const { data } = await api.get(`/crm/contacts/${contactId}`);
-      setSelectedContact(data); setSheetOpen(true);
+      const [cData, tData, nData, aData, pData] = await Promise.all([
+        api.get(`/crm/contacts/${contactId}`),
+        api.get('/crm/tasks', { params: { contact_id: contactId } }),
+        api.get('/crm/notes', { params: { contact_id: contactId } }),
+        api.get('/crm/activity-log', { params: { contact_id: contactId } }),
+        api.get('/crm/products').catch(() => ({ data: [] })),
+      ]);
+      setSelectedContact(cData.data);
+      setTasks(tData.data);
+      setNotes(nData.data);
+      setActivityLog(aData.data);
+      setProducts(pData.data);
+      setDealTags(cData.data.deals?.[0]?.tags || []);
+      if (cData.data.deals?.[0]?.id) {
+        const dpData = await api.get(`/crm/deals/${cData.data.deals[0].id}/products`);
+        setDealProducts(dpData.data);
+      } else { setDealProducts([]); }
+      setSheetOpen(true);
+      setDetailTab('info');
     } catch { toast.error('Error al cargar contacto'); }
   };
 
@@ -73,10 +109,52 @@ export default function CrmPage() {
     try {
       await api.post('/crm/notes', { contact_id: selectedContact.id, content: newNote });
       setNewNote('');
-      const { data } = await api.get(`/crm/contacts/${selectedContact.id}`);
-      setSelectedContact(data);
+      const { data } = await api.get('/crm/notes', { params: { contact_id: selectedContact.id } });
+      setNotes(data);
       toast.success('Nota agregada');
     } catch { toast.error('Error'); }
+  };
+  const addTask = async () => {
+    if (!newTaskForm.title.trim() || !selectedContact) return;
+    try {
+      await api.post('/crm/tasks', { ...newTaskForm, contact_id: selectedContact.id });
+      setNewTaskForm({ title: '', type: 'llamada', due_date: '', description: '' });
+      const { data } = await api.get('/crm/tasks', { params: { contact_id: selectedContact.id } });
+      setTasks(data);
+      toast.success('Tarea creada');
+    } catch { toast.error('Error'); }
+  };
+  const toggleTask = async (taskId, status) => {
+    const newStatus = status === 'completada' ? 'pendiente' : 'completada';
+    await api.put(`/crm/tasks/${taskId}`, { status: newStatus });
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+  };
+  const addDealProduct = async (dealId, product) => {
+    try {
+      await api.post(`/crm/deals/${dealId}/products`, { product_id: product.id, product_name: product.name, price: product.price, quantity: 1 });
+      const { data } = await api.get(`/crm/deals/${dealId}/products`);
+      setDealProducts(data);
+      fetchData();
+      toast.success('Producto agregado');
+    } catch { toast.error('Error'); }
+  };
+  const removeDealProduct = async (dealId, itemId) => {
+    await api.delete(`/crm/deals/${dealId}/products/${itemId}`);
+    setDealProducts(prev => prev.filter(p => p.id !== itemId));
+    fetchData();
+  };
+  const addTag = async () => {
+    if (!newTag.trim() || !selectedContact?.deals?.[0]) return;
+    const updated = [...dealTags, newTag.trim()];
+    await api.put(`/crm/deals/${selectedContact.deals[0].id}/tags`, { tags: updated });
+    setDealTags(updated);
+    setNewTag('');
+  };
+  const removeTag = (tag) => {
+    if (!selectedContact?.deals?.[0]) return;
+    const updated = dealTags.filter(t => t !== tag);
+    api.put(`/crm/deals/${selectedContact.deals[0].id}/tags`, { tags: updated });
+    setDealTags(updated);
   };
 
   const createDeal = async () => {
@@ -327,63 +405,161 @@ export default function CrmPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Contact Detail Sheet */}
+      {/* Contact Detail Sheet - Enhanced */}
       <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-[500px] sm:max-w-[500px] overflow-y-auto" data-testid="crm-contact-sheet">
-          <SheetHeader><SheetTitle className="font-heading text-xl">{selectedContact?.business_name}</SheetTitle></SheetHeader>
+        <SheetContent className="w-[560px] sm:max-w-[560px] overflow-y-auto p-0" data-testid="crm-contact-sheet">
           {selectedContact && (
-            <div className="mt-6 space-y-5">
-              <div className="flex items-center gap-2">
-                <Badge className={`${stageColors[selectedContact.stage]?.bg} ${stageColors[selectedContact.stage]?.text}`}>{stageLabels[selectedContact.stage]}</Badge>
-                {selectedContact.ai_score > 0 && <span className="text-sm font-semibold text-blue-600">Score IA: {selectedContact.ai_score}</span>}
+            <>
+              {/* Header */}
+              <div className="px-6 pt-6 pb-4 border-b border-zinc-200">
+                <h2 className="text-xl font-heading font-semibold text-zinc-900">{selectedContact.business_name}</h2>
+                <p className="text-sm text-zinc-500 mt-0.5">{selectedContact.contact_name || ''}</p>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <Badge className={`${stageColors[selectedContact.stage]?.bg} ${stageColors[selectedContact.stage]?.text}`}>{stageLabels[selectedContact.stage]}</Badge>
+                  {selectedContact.ai_score > 0 && <span className="text-sm font-semibold text-blue-600">Score: {selectedContact.ai_score}</span>}
+                  {dealTags.map(tag => (
+                    <Badge key={tag} className="bg-indigo-50 text-indigo-700 text-[10px] gap-1">{tag}<button onClick={() => removeTag(tag)} className="ml-0.5 hover:text-red-500"><X className="w-2.5 h-2.5" /></button></Badge>
+                  ))}
+                  <div className="flex gap-1 items-center">
+                    <Input value={newTag} onChange={e => setNewTag(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTag()} placeholder="+ etiqueta" className="h-6 w-20 text-[10px] px-1.5" />
+                  </div>
+                </div>
               </div>
-              <Separator />
-              <div className="grid grid-cols-1 gap-3">
-                {[[<Mail className="w-4 h-4 text-zinc-400" />, "Email", selectedContact.email],
-                  [<Phone className="w-4 h-4 text-zinc-400" />, "Telefono", selectedContact.phone],
-                  [<MapPin className="w-4 h-4 text-zinc-400" />, "Ubicacion", [selectedContact.city, selectedContact.province].filter(Boolean).join(', ')],
-                  [<Building2 className="w-4 h-4 text-zinc-400" />, "Categoria", selectedContact.category],
-                ].map(([icon, label, val], i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-lg hover:bg-zinc-50">{icon}<div><p className="text-[10px] text-zinc-400 uppercase tracking-wider">{label}</p><p className="text-sm text-zinc-800">{val || '-'}</p></div></div>
-                ))}
-              </div>
-              {selectedContact.notes && typeof selectedContact.notes === 'string' && selectedContact.notes.length > 0 && (
-                <p className="text-sm text-zinc-500 italic bg-amber-50 p-3 rounded-lg border border-amber-100">{selectedContact.notes}</p>
-              )}
-              <Separator />
-              <div>
-                <div className="flex items-center justify-between mb-3"><h4 className="text-sm font-heading font-medium text-zinc-900">Oportunidades ({selectedContact.deals?.length || 0})</h4><Button size="sm" variant="outline" onClick={() => setShowDealForm(!showDealForm)} data-testid="add-deal-button"><Plus className="w-3.5 h-3.5 mr-1" /> Nueva</Button></div>
-                {showDealForm && (
-                  <Card className="border-blue-200 bg-blue-50/30 mb-3"><CardContent className="p-3 space-y-2">
-                    <Input value={dealForm.title} onChange={e => setDealForm(f => ({ ...f, title: e.target.value }))} placeholder="Titulo de la oportunidad" className="text-sm" data-testid="deal-title-input" />
-                    <div className="flex gap-2">
-                      <div className="relative flex-1"><DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" /><Input type="number" value={dealForm.value} onChange={e => setDealForm(f => ({ ...f, value: parseFloat(e.target.value) || 0 }))} placeholder="Valor" className="text-sm pl-8" data-testid="deal-value-input" /></div>
-                      <Button size="sm" onClick={createDeal} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-deal-button">Crear</Button>
-                    </div>
-                  </CardContent></Card>
-                )}
-                <div className="space-y-2">
-                  {(selectedContact.deals || []).map(deal => (
-                    <div key={deal.id} className="flex items-center justify-between p-3 bg-white border border-zinc-200 rounded-lg">
-                      <div className="flex-1 min-w-0 mr-3"><p className="text-sm font-medium text-zinc-900 truncate">{deal.title}</p><div className="flex items-center gap-2 mt-1">{deal.value > 0 && <span className="text-xs font-semibold text-emerald-600">${deal.value.toLocaleString()}</span>}<span className="text-[10px] text-zinc-400">{deal.assigned_to}</span></div></div>
-                      <Select value={deal.stage} onValueChange={v => updateDealStage(deal.id, v)}><SelectTrigger className="h-7 w-[130px] text-xs"><SelectValue /></SelectTrigger><SelectContent>{stages.map(s => <SelectItem key={s} value={s}>{stageLabels[s]}</SelectItem>)}</SelectContent></Select>
+
+              {/* Tabs */}
+              <Tabs value={detailTab} onValueChange={setDetailTab} className="px-6 pt-3">
+                <TabsList className="bg-zinc-100 h-9">
+                  <TabsTrigger value="info" className="text-xs h-7">Info</TabsTrigger>
+                  <TabsTrigger value="notas" className="text-xs h-7">Notas</TabsTrigger>
+                  <TabsTrigger value="tareas" className="text-xs h-7">Tareas ({tasks.filter(t => t.status !== 'completada').length})</TabsTrigger>
+                  <TabsTrigger value="oportunidades" className="text-xs h-7">Opps</TabsTrigger>
+                  <TabsTrigger value="productos" className="text-xs h-7">Productos</TabsTrigger>
+                  <TabsTrigger value="historial" className="text-xs h-7">Historial</TabsTrigger>
+                </TabsList>
+
+                {/* INFO TAB */}
+                <TabsContent value="info" className="space-y-4 mt-3">
+                  <div className="grid grid-cols-1 gap-2">
+                    {[[<Mail className="w-4 h-4 text-zinc-400" />, "Email", selectedContact.email],
+                      [<Phone className="w-4 h-4 text-zinc-400" />, "Telefono", selectedContact.phone],
+                      [<MapPin className="w-4 h-4 text-zinc-400" />, "Ubicacion", [selectedContact.city, selectedContact.province].filter(Boolean).join(', ')],
+                      [<Building2 className="w-4 h-4 text-zinc-400" />, "Categoria", selectedContact.category],
+                    ].map(([icon, label, val], i) => (
+                      <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-zinc-50">{icon}<div><p className="text-[10px] text-zinc-400 uppercase tracking-wider">{label}</p><p className="text-sm text-zinc-800">{val || '-'}</p></div></div>
+                    ))}
+                  </div>
+                  {selectedContact.notes && typeof selectedContact.notes === 'string' && <p className="text-sm text-zinc-500 italic bg-amber-50 p-3 rounded-lg border border-amber-100">{selectedContact.notes}</p>}
+                </TabsContent>
+
+                {/* NOTAS TAB */}
+                <TabsContent value="notas" className="space-y-3 mt-3">
+                  <div className="flex gap-2">
+                    <Textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Agregar nota..." rows={2} className="text-sm flex-1" data-testid="crm-note-input" />
+                    <Button size="sm" onClick={addNote} className="bg-blue-600 hover:bg-blue-700 text-white self-end" data-testid="add-note-button"><Send className="w-3.5 h-3.5" /></Button>
+                  </div>
+                  {notes.map((note, i) => (
+                    <div key={note.id || i} className="p-3 bg-zinc-50 rounded-lg border border-zinc-100">
+                      <p className="text-sm text-zinc-700 whitespace-pre-wrap">{note.content}</p>
+                      <p className="text-[10px] text-zinc-400 mt-1.5">{note.created_by} &middot; {note.created_at?.slice(0, 16).replace('T', ' ')}</p>
                     </div>
                   ))}
-                  {(!selectedContact.deals?.length) && <p className="text-xs text-zinc-400 text-center py-4">Sin oportunidades. Crea la primera.</p>}
-                </div>
-              </div>
-              <Separator />
-              <div>
-                <h4 className="text-sm font-heading font-medium text-zinc-900 mb-3">Notas y Actividad</h4>
-                <div className="flex gap-2 mb-3">
-                  <Textarea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Agregar nota..." rows={2} className="text-sm flex-1" data-testid="crm-note-input" />
-                  <Button size="sm" onClick={addNote} className="bg-blue-600 hover:bg-blue-700 text-white self-end" data-testid="add-note-button"><Send className="w-3.5 h-3.5" /></Button>
-                </div>
-                {(selectedContact.notes_list || []).map((note, i) => (
-                  <div key={i} className="p-3 bg-zinc-50 rounded-lg border border-zinc-100 mb-2"><p className="text-sm text-zinc-700">{note.content}</p><p className="text-[10px] text-zinc-400 mt-1.5">{note.author} &middot; {new Date(note.created_at).toLocaleString()}</p></div>
-                ))}
-              </div>
-            </div>
+                  {!notes.length && <p className="text-xs text-zinc-400 text-center py-6">Sin notas. Agrega la primera.</p>}
+                </TabsContent>
+
+                {/* TAREAS TAB */}
+                <TabsContent value="tareas" className="space-y-3 mt-3">
+                  <div className="space-y-2 p-3 bg-zinc-50 rounded-lg border">
+                    <div className="flex gap-2">
+                      <Input value={newTaskForm.title} onChange={e => setNewTaskForm(p => ({...p, title: e.target.value}))} placeholder="Titulo de la tarea..." className="flex-1 h-8 text-sm" />
+                      <Select value={newTaskForm.type} onValueChange={v => setNewTaskForm(p => ({...p, type: v}))}>
+                        <SelectTrigger className="w-[120px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>{taskTypes.map(t => <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Input type="date" value={newTaskForm.due_date} onChange={e => setNewTaskForm(p => ({...p, due_date: e.target.value}))} className="flex-1 h-8 text-xs" />
+                      <Button size="sm" onClick={addTask} className="bg-blue-600 hover:bg-blue-700 text-white h-8"><Plus className="w-3.5 h-3.5 mr-1" /> Crear</Button>
+                    </div>
+                  </div>
+                  {tasks.map(task => (
+                    <div key={task.id} className={`flex items-start gap-3 p-3 rounded-lg border ${task.status === 'completada' ? 'bg-emerald-50/50 border-emerald-200' : 'bg-white border-zinc-200'}`}>
+                      <button onClick={() => toggleTask(task.id, task.status)} className={`mt-0.5 w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${task.status === 'completada' ? 'border-emerald-500 bg-emerald-500' : 'border-zinc-300'}`}>
+                        {task.status === 'completada' && <CheckCircle2 className="w-3 h-3 text-white" />}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-sm font-medium ${task.status === 'completada' ? 'text-zinc-400 line-through' : 'text-zinc-900'}`}>{task.title}</p>
+                        <div className="flex gap-2 mt-0.5">
+                          <Badge className="bg-zinc-100 text-zinc-600 text-[10px]">{taskTypes.find(t => t.value === task.type)?.label || task.type}</Badge>
+                          {task.due_date && <span className="text-[10px] text-zinc-400">{task.due_date.slice(0, 10)}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {!tasks.length && <p className="text-xs text-zinc-400 text-center py-6">Sin tareas. Crea la primera.</p>}
+                </TabsContent>
+
+                {/* OPORTUNIDADES TAB */}
+                <TabsContent value="oportunidades" className="space-y-3 mt-3">
+                  <Button size="sm" variant="outline" onClick={() => setShowDealForm(!showDealForm)} data-testid="add-deal-button"><Plus className="w-3.5 h-3.5 mr-1" /> Nueva Oportunidad</Button>
+                  {showDealForm && (
+                    <Card className="border-blue-200 bg-blue-50/30"><CardContent className="p-3 space-y-2">
+                      <Input value={dealForm.title} onChange={e => setDealForm(f => ({ ...f, title: e.target.value }))} placeholder="Titulo" className="text-sm" />
+                      <div className="flex gap-2">
+                        <div className="relative flex-1"><DollarSign className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" /><Input type="number" value={dealForm.value} onChange={e => setDealForm(f => ({ ...f, value: parseFloat(e.target.value) || 0 }))} className="text-sm pl-8" /></div>
+                        <Button size="sm" onClick={createDeal} className="bg-blue-600 hover:bg-blue-700 text-white">Crear</Button>
+                      </div>
+                    </CardContent></Card>
+                  )}
+                  {(selectedContact.deals || []).map(deal => (
+                    <div key={deal.id} className="p-3 bg-white border border-zinc-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div><p className="text-sm font-medium text-zinc-900">{deal.title}</p>{deal.value > 0 && <span className="text-xs font-semibold text-emerald-600">${deal.value.toLocaleString()}</span>}</div>
+                        <Select value={deal.stage} onValueChange={v => updateDealStage(deal.id, v)}><SelectTrigger className="h-7 w-[130px] text-xs"><SelectValue /></SelectTrigger><SelectContent>{stages.map(s => <SelectItem key={s} value={s}>{stageLabels[s]}</SelectItem>)}</SelectContent></Select>
+                      </div>
+                    </div>
+                  ))}
+                  {/* Presupuestos - Coming Soon */}
+                  <Separator />
+                  <div className="text-center py-4">
+                    <div className="inline-flex items-center gap-2 bg-amber-50 text-amber-700 px-3 py-1.5 rounded-full text-xs font-medium"><Rocket className="w-3 h-3" /> Presupuestos — Muy Pronto</div>
+                  </div>
+                </TabsContent>
+
+                {/* PRODUCTOS TAB */}
+                <TabsContent value="productos" className="space-y-3 mt-3">
+                  {selectedContact.deals?.[0] ? (
+                    <>
+                      <Select onValueChange={v => { const p = products.find(pr => pr.id === v); if (p && selectedContact.deals[0]) addDealProduct(selectedContact.deals[0].id, p); }}>
+                        <SelectTrigger className="h-9"><SelectValue placeholder="Agregar producto..." /></SelectTrigger>
+                        <SelectContent>{products.map(p => <SelectItem key={p.id} value={p.id}>{p.name} — ${p.price}</SelectItem>)}</SelectContent>
+                      </Select>
+                      {dealProducts.map(dp => (
+                        <div key={dp.id} className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                          <div><p className="text-sm font-medium text-zinc-900">{dp.product_name}</p><p className="text-xs text-zinc-500">{dp.quantity}x — ${dp.price}</p></div>
+                          <Button size="sm" variant="ghost" className="text-red-400 h-7" onClick={() => removeDealProduct(selectedContact.deals[0].id, dp.id)}><Trash2 className="w-3 h-3" /></Button>
+                        </div>
+                      ))}
+                      {!dealProducts.length && <p className="text-xs text-zinc-400 text-center py-4">Sin productos. Configura productos en Configuracion y agregalos aqui.</p>}
+                      <p className="text-[10px] text-zinc-400">Total: <span className="font-semibold text-zinc-700">${dealProducts.reduce((s, p) => s + (p.price * p.quantity), 0).toLocaleString()}</span></p>
+                    </>
+                  ) : <p className="text-xs text-zinc-400 text-center py-6">Crea una oportunidad primero para agregar productos.</p>}
+                </TabsContent>
+
+                {/* HISTORIAL TAB */}
+                <TabsContent value="historial" className="space-y-2 mt-3">
+                  {activityLog.map((log, i) => (
+                    <div key={log.id || i} className="flex items-start gap-3 p-2.5">
+                      <div className="w-2 h-2 rounded-full bg-blue-400 mt-1.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-sm text-zinc-700">{log.details}</p>
+                        <p className="text-[10px] text-zinc-400">{log.user_name} &middot; {log.created_at?.slice(0, 16).replace('T', ' ')}</p>
+                      </div>
+                    </div>
+                  ))}
+                  {!activityLog.length && <p className="text-xs text-zinc-400 text-center py-6">Sin actividad registrada.</p>}
+                </TabsContent>
+              </Tabs>
+            </>
           )}
         </SheetContent>
       </Sheet>

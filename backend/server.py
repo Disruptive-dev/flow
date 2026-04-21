@@ -2257,7 +2257,7 @@ async def ai_help(request: Request, body: Dict[str, Any] = {}):
 async def get_tenant_modules(request: Request):
     user = await get_current_user(request)
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
-    return tenant.get("modules", {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True}) if tenant else {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True}
+    return tenant.get("modules", {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False}) if tenant else {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False}
 
 @api_router.put("/tenant/modules")
 async def update_tenant_modules(request: Request, body: Dict[str, bool] = {}):

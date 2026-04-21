@@ -20,6 +20,7 @@ import EmailMarketingPage from '@/pages/EmailMarketingPage';
 import TenantAdminPage from '@/pages/TenantAdminPage';
 import LandingPagesPage from '@/pages/LandingPagesPage';
 import FormsPage from '@/pages/FormsPage';
+import PerformancePage from '@/pages/PerformancePage';
 import { Loader2 } from 'lucide-react';
 
 function ProtectedRoute({ children }) {
@@ -60,6 +61,7 @@ function AppRoutes() {
           <Route path="/admin/tenants" element={<TenantAdminPage />} />
           <Route path="/landing-pages" element={<LandingPagesPage />} />
           <Route path="/forms" element={<FormsPage />} />
+          <Route path="/performance" element={<PerformancePage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
