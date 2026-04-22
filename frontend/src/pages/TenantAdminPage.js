@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ShieldCheck, Plus, Users, Target, Mail, Building2, Pencil, Loader2, DollarSign } from 'lucide-react';
+import { ShieldCheck, Plus, Users, Target, Mail, Building2, Pencil, Loader2, DollarSign, TrendingUp } from 'lucide-react';
 import { toast } from 'sonner';
 
 const planColors = {
@@ -25,6 +25,7 @@ export default function TenantAdminPage() {
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTenant, setEditTenant] = useState(null);
+  const [funnel, setFunnel] = useState(null);
   const [form, setForm] = useState({ name: '', admin_email: '', admin_password: '', admin_name: '', plan: 'starter', price: 0, modules: { ...defaultModules } });
 
   const fetchTenants = async () => {
@@ -35,7 +36,10 @@ export default function TenantAdminPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchTenants(); }, []);
+  useEffect(() => {
+    fetchTenants();
+    api.get('/admin/conversion-funnel').then(r => setFunnel(r.data)).catch(() => {});
+  }, []);
 
   const handleCreate = async () => {
     if (!form.name || !form.admin_email || !form.admin_password) {
@@ -98,6 +102,61 @@ export default function TenantAdminPage() {
           <Plus className="w-4 h-4" /> Nuevo Cliente
         </Button>
       </div>
+
+      {/* Conversion Funnel */}
+      {funnel && (
+        <Card className="border-zinc-200 rounded-xl" data-testid="conversion-funnel">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-heading font-medium text-zinc-900 text-lg flex items-center gap-2"><TrendingUp className="w-5 h-5 text-emerald-600" /> Embudo de Conversion Trial to Pro</h3>
+              <div className="text-xs text-zinc-500">
+                <span className="font-semibold text-zinc-900">{funnel.totals?.trial_tenants || 0}</span> trial · <span className="font-semibold text-emerald-700">{funnel.totals?.paid_tenants || 0}</span> paid
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                <p className="text-[10px] uppercase font-semibold text-blue-700 mb-1">Banner visto</p>
+                <p className="text-2xl font-bold text-blue-900">{funnel.funnel?.banner_shown_unique || 0}</p>
+                <p className="text-[10px] text-blue-600 mt-0.5">tenants unicos</p>
+              </div>
+              <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-3">
+                <p className="text-[10px] uppercase font-semibold text-indigo-700 mb-1">Abrio dialog</p>
+                <p className="text-2xl font-bold text-indigo-900">{funnel.funnel?.dialog_opened_unique || 0}</p>
+                <p className="text-[10px] text-indigo-600 mt-0.5">{funnel.funnel?.dialog_open_rate || 0}% del total</p>
+              </div>
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+                <p className="text-[10px] uppercase font-semibold text-emerald-700 mb-1">Solicito upgrade</p>
+                <p className="text-2xl font-bold text-emerald-900">{funnel.funnel?.requested_unique || 0}</p>
+                <p className="text-[10px] text-emerald-600 mt-0.5">{funnel.funnel?.request_rate || 0}% de los que abrieron</p>
+              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                <p className="text-[10px] uppercase font-semibold text-amber-700 mb-1">Conversion E2E</p>
+                <p className="text-2xl font-bold text-amber-900">{funnel.funnel?.end_to_end_rate || 0}%</p>
+                <p className="text-[10px] text-amber-600 mt-0.5">banner to request</p>
+              </div>
+              <div className="bg-zinc-50 border border-zinc-200 rounded-lg p-3">
+                <p className="text-[10px] uppercase font-semibold text-zinc-700 mb-1">Solicitudes pendientes</p>
+                <p className="text-2xl font-bold text-zinc-900">{funnel.recent_requests?.filter(r => r.status === 'pending').length || 0}</p>
+                <p className="text-[10px] text-zinc-600 mt-0.5">por contactar</p>
+              </div>
+            </div>
+            {funnel.recent_requests && funnel.recent_requests.length > 0 && (
+              <div className="space-y-1.5 pt-2">
+                <p className="text-xs font-semibold text-zinc-600 uppercase">Ultimas solicitudes</p>
+                {funnel.recent_requests.slice(0, 5).map((r, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs bg-zinc-50 rounded-md px-3 py-1.5">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium text-zinc-900 truncate">{r.tenant_name}</span>
+                      <span className="text-zinc-500 truncate">{r.user_email}</span>
+                    </div>
+                    <span className="text-zinc-400 shrink-0">{new Date(r.created_at).toLocaleDateString()}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tenant Table */}
       <Card className="border-zinc-200 rounded-xl overflow-hidden">

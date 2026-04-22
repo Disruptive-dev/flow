@@ -2363,6 +2363,12 @@ async def request_tenant_upgrade(request: Request, body: Dict[str, Any] = {}):
         "user_email": user.get("email", ""), "user_name": user.get("name", ""),
         "message": message, "status": "pending", "created_at": now
     })
+    await db.conversion_events.insert_one({
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "event": "upgrade_requested", "user_email": user.get("email", ""),
+        "plan_at_event": tenant.get("plan", "") if tenant else "",
+        "created_at": now
+    })
     try:
         resend.emails.send({
             "from": "no-reply@spectra-metrics.com",
@@ -2373,6 +2379,56 @@ async def request_tenant_upgrade(request: Request, body: Dict[str, Any] = {}):
     except Exception as e:
         logger.error(f"Upgrade request email failed: {e}")
     return {"message": "Solicitud recibida. Te contactaremos pronto."}
+
+@api_router.post("/tenant/track-event")
+async def track_conversion_event(request: Request, body: Dict[str, Any] = {}):
+    """Track conversion funnel events: upgrade_dialog_opened, upgrade_dialog_dismissed, trial_banner_shown, etc."""
+    user = await get_current_user(request)
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0, "plan": 1, "trial_ends_at": 1})
+    event_name = body.get("event", "")
+    if not event_name:
+        raise HTTPException(status_code=400, detail="event name required")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.conversion_events.insert_one({
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "event": event_name, "user_email": user.get("email", ""),
+        "plan_at_event": tenant.get("plan", "") if tenant else "",
+        "metadata": body.get("metadata", {}),
+        "created_at": now
+    })
+    return {"ok": True}
+
+@api_router.get("/admin/conversion-funnel")
+async def get_conversion_funnel(request: Request):
+    """SUPER ADMIN: conversion funnel metrics for trial → paid."""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    # Count events
+    pipeline = [{"$group": {"_id": "$event", "count": {"$sum": 1}, "unique_tenants": {"$addToSet": "$tenant_id"}}}]
+    events_agg = await db.conversion_events.aggregate(pipeline).to_list(100)
+    events = {e["_id"]: {"total": e["count"], "unique_tenants": len(e["unique_tenants"])} for e in events_agg}
+    # Trial tenants count
+    trial_tenants = await db.tenants.count_documents({"plan": "trial"})
+    paid_tenants = await db.tenants.count_documents({"plan": {"$in": ["starter", "pro", "enterprise"]}})
+    # Recent upgrade requests
+    recent = await db.upgrade_requests.find({}, {"_id": 0}).sort("created_at", -1).to_list(50)
+    shown = events.get("trial_banner_shown", {"total": 0, "unique_tenants": 0})["unique_tenants"]
+    opened = events.get("upgrade_dialog_opened", {"total": 0, "unique_tenants": 0})["unique_tenants"]
+    requested = events.get("upgrade_requested", {"total": 0, "unique_tenants": 0})["unique_tenants"]
+    return {
+        "totals": {"trial_tenants": trial_tenants, "paid_tenants": paid_tenants},
+        "funnel": {
+            "banner_shown_unique": shown,
+            "dialog_opened_unique": opened,
+            "requested_unique": requested,
+            "dialog_open_rate": round((opened / shown * 100), 1) if shown else 0,
+            "request_rate": round((requested / opened * 100), 1) if opened else 0,
+            "end_to_end_rate": round((requested / shown * 100), 1) if shown else 0,
+        },
+        "events": events,
+        "recent_requests": recent[:20],
+    }
 
 @api_router.put("/tenant/modules")
 async def update_tenant_modules(request: Request, body: Dict[str, bool] = {}):
@@ -3191,7 +3247,7 @@ app.include_router(api_router)
 app.mount("/api/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name="uploads")
 
 # ==================== TRIAL EXPIRY MIDDLEWARE ====================
-TRIAL_EXEMPT_PATHS = ("/api/auth/", "/api/tenant/status", "/api/tenant/request-upgrade", "/api/admin/", "/api/uploads/")
+TRIAL_EXEMPT_PATHS = ("/api/auth/", "/api/tenant/status", "/api/tenant/request-upgrade", "/api/tenant/track-event", "/api/admin/", "/api/uploads/")
 
 @app.middleware("http")
 async def enforce_trial_expiry(request: Request, call_next):

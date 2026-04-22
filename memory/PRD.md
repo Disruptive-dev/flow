@@ -48,6 +48,7 @@ React 19 + FastAPI + MongoDB + Resend + Emergent LLM + Dify + n8n + Apify (PWA)
 ## Changelog
 - 2026-02 (iter 10): Forgot/reset password + 15-day trial + reset demo data + CRM Lista view + mobile sidebar (PASSED 10/10 backend + UI tests)
 - 2026-02 (iter 11): Trial expiry middleware (402 on expired) + trial countdown banner + upgrade request flow to info@spectra-metrics.com
+- 2026-02 (iter 12): Conversion funnel tracking (trial_banner_shown, upgrade_dialog_opened, upgrade_requested) + Super Admin funnel widget on /admin/tenants + i18n "soon/coming_soon" keys + Performance sidebar "Pronto" badge + full product docs at /app/SPECTRA_FLOW_DOCUMENTACION_COMPLETA.txt
 
 ## Backlog
 - P1: Refactor server.py (>3200 lines) into routes/

@@ -45,6 +45,7 @@ const translations = {
     create: "Create", edit: "Edit", close: "Close",
     pipeline_overview: "Pipeline Overview",
     leads_sent_to_crm: "Sent to CRM",
+    soon: "Soon", coming_soon: "Coming Soon",
   },
   es: {
     dashboard: "Panel Principal", prospect_finder: "Buscador de Prospectos", jobs: "Flow IA",
@@ -95,6 +96,7 @@ const translations = {
     create: "Crear", edit: "Editar", close: "Cerrar",
     pipeline_overview: "Vista del Pipeline",
     leads_sent_to_crm: "Enviados al CRM",
+    soon: "Pronto", coming_soon: "Muy Pronto",
   }
 };
 

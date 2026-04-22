@@ -2,6 +2,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Rocket } from 'lucide-react';
 import FlowBotButton from '@/components/FlowBotButton';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const channels = [
   { name: 'Meta Ads', desc: 'Facebook & Instagram Ads', icon: '📱', color: 'bg-blue-50 border-blue-200' },
@@ -12,6 +13,7 @@ const channels = [
 ];
 
 export default function PerformancePage() {
+  const { t } = useLanguage();
   return (
     <div className="space-y-8 animate-fade-in" data-testid="performance-page">
       <div className="flex items-center justify-between">
@@ -30,7 +32,7 @@ export default function PerformancePage() {
               <h2 className="text-xl font-heading font-semibold">{ch.name}</h2>
               <p className="text-sm opacity-70">{ch.desc}</p>
               <div className="inline-flex items-center gap-2 bg-amber-50 text-amber-700 px-4 py-2 rounded-full text-sm font-medium">
-                <Rocket className="w-4 h-4" /> Muy Pronto
+                <Rocket className="w-4 h-4" /> {t('coming_soon')}
               </div>
             </CardContent>
           </Card>
@@ -41,7 +43,7 @@ export default function PerformancePage() {
         <CardContent className="p-8 text-center space-y-3">
           <h3 className="text-lg font-heading font-medium text-zinc-900">Tablero Unificado de Performance</h3>
           <p className="text-sm text-zinc-500 max-w-lg mx-auto">Conecta tus cuentas de Meta, Google, TikTok y herramientas SEO para ver metricas de todas tus campanas en un solo dashboard. Compara rendimiento, optimiza presupuestos y toma decisiones basadas en datos reales.</p>
-          <Badge className="bg-amber-50 text-amber-700 text-sm"><Rocket className="w-3.5 h-3.5 mr-1" /> Proximamente</Badge>
+          <Badge className="bg-amber-50 text-amber-700 text-sm"><Rocket className="w-3.5 h-3.5 mr-1" /> {t('coming_soon')}</Badge>
         </CardContent>
       </Card>
     </div>

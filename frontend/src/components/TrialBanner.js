@@ -12,13 +12,31 @@ export default function TrialBanner() {
   const [upgradeOpen, setUpgradeOpen] = useState(false);
 
   useEffect(() => {
-    const fetchStatus = () => api.get('/tenant/status').then(r => setStatus(r.data)).catch(() => {});
+    const fetchStatus = () => api.get('/tenant/status').then(r => {
+      setStatus(r.data);
+      if (r.data?.is_trial) {
+        // Fire banner_shown once per session per tenant
+        const key = `trial_banner_tracked_${r.data.tenant_name || 'x'}`;
+        if (!sessionStorage.getItem(key)) {
+          api.post('/tenant/track-event', { event: 'trial_banner_shown', metadata: { days_remaining: r.data.days_remaining } }).catch(() => {});
+          sessionStorage.setItem(key, '1');
+        }
+      }
+    }).catch(() => {});
     fetchStatus();
     const interval = setInterval(fetchStatus, 5 * 60 * 1000); // refresh every 5 min
-    const onBlock = (e) => setBlocked(e.detail);
+    const onBlock = (e) => {
+      setBlocked(e.detail);
+      api.post('/tenant/track-event', { event: 'trial_expired_blocked', metadata: e.detail }).catch(() => {});
+    };
     window.addEventListener('trial-blocked', onBlock);
     return () => { clearInterval(interval); window.removeEventListener('trial-blocked', onBlock); };
   }, []);
+
+  const openUpgradeDialog = () => {
+    setUpgradeOpen(true);
+    api.post('/tenant/track-event', { event: 'upgrade_dialog_opened', metadata: { days_remaining: status?.days_remaining, source: 'banner' } }).catch(() => {});
+  };
 
   const requestUpgrade = async () => {
     try {
@@ -78,10 +96,10 @@ export default function TrialBanner() {
           <span className="hidden sm:inline text-xs opacity-80">· Activa tu plan Pro para desbloquear todos los modulos</span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
-          <Button size="sm" onClick={() => setUpgradeOpen(true)} className="h-7 bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1" data-testid="trial-banner-upgrade">
+          <Button size="sm" onClick={openUpgradeDialog} className="h-7 bg-blue-600 hover:bg-blue-700 text-white text-xs gap-1" data-testid="trial-banner-upgrade">
             <Zap className="w-3 h-3" /> Activar Pro
           </Button>
-          <button onClick={() => setDismissed(true)} className="p-1 hover:bg-black/5 rounded" data-testid="trial-banner-dismiss" aria-label="Cerrar">
+          <button onClick={() => { setDismissed(true); api.post('/tenant/track-event', { event: 'trial_banner_dismissed', metadata: { days_remaining: status?.days_remaining } }).catch(() => {}); }} className="p-1 hover:bg-black/5 rounded" data-testid="trial-banner-dismiss" aria-label="Cerrar">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>

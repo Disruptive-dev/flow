@@ -26,16 +26,16 @@ const navSections = [
     { key: 'email_marketing', label: 'Email Marketing', path: '/email-marketing', icon: AtSign },
     { key: 'campaigns', label: 'Campanas', path: '/campaigns', icon: Mail },
     { key: 'templates', label: 'Plantillas', path: '/templates', icon: FileText },
-    { key: 'forms', label: 'Formularios', path: '/forms', icon: FileText, badge: 'Pronto' },
+    { key: 'forms', label: 'Formularios', path: '/forms', icon: FileText, badge: 'soon' },
   ]},
   { title: 'Spectra CRM', module: 'crm', items: [
     { key: 'crm_sync', label: 'Spectra CRM', path: '/crm-sync', icon: RefreshCw },
   ]},
   { title: 'Spectra Web', module: 'web', items: [
-    { key: 'landing_pages', label: 'Landing Pages', path: '/landing-pages', icon: LayoutDashboard, badge: 'Pronto' },
+    { key: 'landing_pages', label: 'Landing Pages', path: '/landing-pages', icon: LayoutDashboard, badge: 'soon' },
   ]},
   { title: 'Spectra Performance', module: 'performance', items: [
-    { key: 'performance', label: 'Performance', path: '/performance', icon: BarChart3 },
+    { key: 'performance', label: 'Performance', path: '/performance', icon: BarChart3, badge: 'soon' },
   ]},
   { title: null, items: [
     { key: 'analytics', label: 'Analisis', path: '/analytics', icon: BarChart3 },
@@ -106,7 +106,7 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
                       >
                         <Icon className="w-[18px] h-[18px]" />
                         <span>{t(key) !== key ? t(key) : label}</span>
-                        {badge && <span className="ml-auto text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{badge}</span>}
+                        {badge && <span className="ml-auto text-[9px] bg-amber-500/20 text-amber-400 px-1.5 py-0.5 rounded-full">{t(badge)}</span>}
                       </NavLink>
                     );
                   })}

@@ -1,0 +1,683 @@
+================================================================================
+ SPECTRA FLOW - DOCUMENTACION COMPLETA DE PRODUCTO Y STACK TECNOLOGICO
+================================================================================
+Version: 1.0 (Pre-Launch)
+Fecha: 22 de Febrero, 2026
+Autor: Pablo Paez (Disruptive SW)
+Estado: LISTO PARA PRODUCCION
+================================================================================
+
+
+================================================================================
+ 1. QUE ES SPECTRA FLOW
+================================================================================
+
+Spectra Flow es una plataforma SaaS multi-tenant premium que consolida en una
+sola app: prospeccion automatizada con IA, CRM comercial, Email Marketing
+(estilo Brevo), analisis de performance y gestion multi-cliente con roles.
+
+Lema: "Find. Clean. Activate. Convert." (Encontrar, Limpiar, Activar, Convertir)
+
+Propuesta de valor unica:
+- Encuentra prospectos B2B con IA (Google Maps + LinkedIn)
+- Limpia y califica leads automaticamente via scoring con IA
+- Activa leads en secuencias de email marketing personalizadas
+- Convierte leads a oportunidades en un CRM completo con pipeline visual
+
+Target: agencias de marketing, equipos comerciales B2B, consultores, PyMEs que
+quieren automatizar su prospeccion y ventas desde una sola plataforma.
+
+
+================================================================================
+ 2. STACK TECNOLOGICO COMPLETO
+================================================================================
+
+--- INFRAESTRUCTURA / DEPLOYMENT ---
+* Hosting: DigitalOcean (Droplet propio del cliente)
+* Orquestacion: EasyPanel (panel de control sobre Docker en DigitalOcean)
+* Dominio principal: spectra-metrics.com
+* Control de versiones: GitHub (push desde boton "Save to GitHub" de Emergent)
+* CI/CD: Rebuild manual en EasyPanel post-push a GitHub
+* Contenedores: Docker + docker-compose (3 servicios: frontend, backend, MongoDB)
+
+--- FRONTEND ---
+* Framework: React 19
+* Build: Create React App (CRA) customizado
+* Routing: react-router-dom v6
+* Estado: Context API (AuthContext, LanguageContext, DemoContext)
+* HTTP Client: Axios con interceptors (Bearer + refresh token + 402 handler)
+* UI library: Shadcn/UI (sobre Radix UI primitives)
+* Styling: Tailwind CSS + CSS variables
+* Iconos: lucide-react
+* Charts: Recharts (Bar, Line, Area, Pie, Funnel)
+* Toasts: sonner
+* Fonts: Inter + Playfair Display (via Google Fonts)
+* Drag & Drop: HTML5 Drag and Drop API (CRM Kanban)
+* Servidor estatico en produccion: nginx
+
+--- BACKEND ---
+* Framework: FastAPI (Python 3.11)
+* Driver MongoDB: Motor (async)
+* Auth: JWT (python-jose + bcrypt) con cookies HttpOnly + fallback Bearer
+* Password hashing: bcrypt
+* Email transaccional: Resend Python SDK
+* HTTP client externo: httpx (async)
+* Validacion: Pydantic v2
+* Uploads: fastapi.UploadFile + StaticFiles mount en /api/uploads
+* CORS: starlette CORSMiddleware
+* Middleware custom: enforce_trial_expiry (bloquea tenants con trial vencido)
+* Logger: logging standard de Python
+
+--- BASE DE DATOS ---
+* MongoDB (via Motor async driver)
+* Colecciones principales:
+  - tenants: {id, name, plan, price, active, trial_ends_at, modules,
+              branding, sender_defaults, integrations, created_at}
+  - users: {_id, email, password_hash, name, role, tenant_id, avatar_url,
+           phone, job_title, created_at}
+  - leads: {id, tenant_id, business_name, email, phone, website, ai_score,
+            quality_level, status, source, channel, recommendation, city,
+            province, category, created_at}
+  - prospect_jobs: {id, tenant_id, source, category, city, province, quantity,
+                    status, stages, raw_count, cleaned_count, qualified_count,
+                    linkedin_params, created_at}
+  - crm_contacts: {id, tenant_id, business_name, contact_name, email, phone,
+                   city, stage, ai_score, deal_count, created_at}
+  - crm_deals: {id, tenant_id, contact_id, title, stage, value, tags, notes,
+                assigned_to, created_at}
+  - crm_tasks: {id, tenant_id, contact_id, deal_id, title, type, description,
+                due_date, status, assigned_to, created_by, created_at}
+  - crm_notes: {id, tenant_id, contact_id, deal_id, content, author, created_at}
+  - crm_deal_products: {id, tenant_id, deal_id, product_id, product_name,
+                        price, quantity, created_at}
+  - crm_products: {id, tenant_id, name, price, description, currency, created_at}
+  - email_campaigns: {id, tenant_id, name, list_id, template_id, segment_id,
+                      status, stats, schedule, created_at}
+  - email_lists: {id, tenant_id, name, contacts, tags, created_at}
+  - email_segments: {id, tenant_id, name, filters, created_at}
+  - email_templates: {id, tenant_id, name, subject, body, variables, created_at}
+  - campaigns: {id, tenant_id, name, status, stats, created_at}
+  - activity_log: {id, tenant_id, user_name, action, details, contact_id,
+                   deal_id, created_at}
+  - conversion_events: {id, tenant_id, event, user_email, plan_at_event,
+                        metadata, created_at}
+  - upgrade_requests: {id, tenant_id, tenant_name, user_email, user_name,
+                       message, status, created_at}
+  - integration_configs: {id, tenant_id, name, base_url, api_key, enabled,
+                          metadata, created_at}
+  - chatwoot_leads: {id, tenant_id, conversation_id, contact_email, content,
+                     channel, tags, created_at}
+  - domains: {id, tenant_id, domain, verified, dkim, spf, created_at}
+
+--- INTEGRACIONES DE TERCEROS ---
+* Resend (https://resend.com)
+  - Uso: emails transaccionales (reset password, campaigns, upgrade requests)
+  - Sender: no-reply@spectra-metrics.com
+  - Contacto publico: info@spectra-metrics.com
+  - API Key: configurada por tenant en /api/settings/integrations/resend
+
+* Apify (https://apify.com)
+  - Uso: scraping de LinkedIn companies via actor apify~google-search-scraper
+  - Estrategia: busca "site:linkedin.com/company <keyword> <location>" y extrae
+    resultados organicos (evita login LinkedIn)
+  - API Key: configurada por tenant
+
+* Dify (https://dify.ai)
+  - Uso: workflow de scoring de leads con IA
+  - Endpoint: /api/ai/dify-score-lead
+  - Variables: business_name, category, province, city, description
+  - API Key: configurada por tenant
+
+* n8n (self-hosted en infra del cliente)
+  - Uso: orquestacion de prospeccion (Google Maps scrape, cleaning, webhooks)
+  - Webhook callback: /api/webhooks/n8n-callback
+  - Workflow exportado: /app/n8n-optimia-spectra-2026.json
+  - API Key: configurada por tenant
+
+* Chatwoot (https://chatwoot.com, self-hosted en inbox.optimia...)
+  - Uso: recepcion de leads desde WhatsApp, web chat, Instagram, Facebook
+  - Webhook: POST /api/webhooks/chatwoot/lead
+  - Auto-extrae email del mensaje via regex
+  - Tagging automatico: "bot" channel
+  - Integracion con OptimIA Bot (producto hermano)
+
+* Emergent LLM Key (Universal)
+  - Uso: Flow IA (Claude / GPT / Gemini) para generacion de recomendaciones
+  - Proveedor: Emergent Integrations library
+  - Pago: via creditos de Emergent (Profile > Universal Key)
+
+* Productos externos linkeados (Sidebar > Productos):
+  - OptimIA Bot: https://inbox.optimia.disruptive-sw.com (Chatwoot instance)
+  - Spectra Content IA: https://content-ia.spectra-metrics.com
+  - Spectra Brain: https://brain.spectra-metrics.com
+
+
+================================================================================
+ 3. ARQUITECTURA / ESTRUCTURA DE ARCHIVOS
+================================================================================
+
+/app/
+├── backend/
+│   ├── server.py              # FastAPI monolitico (~3200 lineas)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── .env                   # MONGO_URL, DB_NAME, JWT_SECRET, RESEND_API_KEY
+│   ├── uploads/               # Archivos subidos (avatars, logos, imports)
+│   └── tests/                 # pytest de smoke tests (iteration10+)
+│
+├── frontend/
+│   ├── public/
+│   │   ├── favicon.svg        # Logo Spectra Flow (rayo)
+│   │   ├── manifest.json      # PWA manifest
+│   │   └── index.html
+│   ├── src/
+│   │   ├── App.js             # Rutas principales
+│   │   ├── index.js
+│   │   ├── index.css          # Tailwind + custom CSS vars
+│   │   ├── components/
+│   │   │   ├── layout/
+│   │   │   │   ├── AppLayout.js    # Header + sidebar + Outlet
+│   │   │   │   └── Sidebar.js       # Navegacion principal (colapsable mobile)
+│   │   │   ├── ui/              # Shadcn components (button, card, dialog, ...)
+│   │   │   ├── FlowBotButton.js # Boton flotante "Flow IA" contextual
+│   │   │   ├── GuideBanner.js   # Tips onboarding
+│   │   │   ├── HelpBot.js       # Widget de soporte
+│   │   │   └── TrialBanner.js   # Countdown trial + dialog upgrade
+│   │   ├── contexts/
+│   │   │   ├── AuthContext.js      # user, login, register, logout, refresh
+│   │   │   ├── LanguageContext.js  # i18n es/en con helper t()
+│   │   │   └── DemoContext.js      # Modo demo activo/inactivo
+│   │   ├── lib/
+│   │   │   └── api.js           # Axios configurado + interceptors (401/402)
+│   │   └── pages/
+│   │       ├── LoginPage.js           # Login + Register + Forgot password modal
+│   │       ├── ResetPasswordPage.js   # Reset via token JWT en query param
+│   │       ├── DashboardPage.js       # Panel principal con metricas
+│   │       ├── ProspectFinderPage.js  # Buscador de prospectos (form + jobs)
+│   │       ├── JobsPage.js            # Flow IA - detalles de jobs de scraping
+│   │       ├── LeadsPage.js           # Tabla de leads con filtros/edicion inline
+│   │       ├── CampaignsPage.js       # Campanas de email
+│   │       ├── TemplatesPage.js       # Plantillas de email
+│   │       ├── DomainsPage.js         # Verificacion de dominios
+│   │       ├── EmailMarketingPage.js  # Hub Brevo-style (Plantillas/Listas/...)
+│   │       ├── CrmSyncPage.js         # CRM con pipeline Kanban+Lista
+│   │       ├── AnalyticsPage.js       # Graficos de funnel + CRM stats
+│   │       ├── SettingsPage.js        # Config empresa, usuarios, integ, etc.
+│   │       ├── TenantAdminPage.js     # Super Admin: gestion de tenants + funnel
+│   │       ├── LandingPagesPage.js    # Placeholder "Coming Soon"
+│   │       ├── FormsPage.js           # Placeholder "Coming Soon"
+│   │       └── PerformancePage.js     # Spectra Performance (Meta/Google/etc.)
+│   ├── package.json
+│   ├── tailwind.config.js
+│   ├── Dockerfile
+│   └── nginx.conf             # Proxy /api -> backend:8001, resto -> React
+│
+├── docker-compose.yml         # Orquesta frontend + backend + mongo
+├── memory/
+│   ├── PRD.md                  # Product Requirements Document
+│   └── test_credentials.md     # Credenciales de test
+└── test_reports/               # Reportes JSON de iteraciones de testing
+
+
+================================================================================
+ 4. MODULOS Y FEATURES (DETALLE COMPLETO)
+================================================================================
+
+### 4.1 AUTENTICACION Y ONBOARDING
+- Login con email/password (JWT + cookie HttpOnly + refresh token 7 dias)
+- Registro de nuevo tenant: crea user + tenant, asigna plan=trial,
+  trial_ends_at = +15 dias, modules = {leads:true, crm:true, rest:false}
+- Forgot password: POST /api/auth/forgot-password -> manda email con link JWT
+- Reset password: POST /api/auth/reset-password con token JWT + new_password
+- Logout: borra cookies + dispara evento
+- Refresh token automatico via interceptor axios ante 401
+- Roles jerarquicos: super_admin > tenant_admin > operator
+- Cambio de password desde perfil (requiere password actual)
+- Actualizacion de perfil: nombre, telefono, cargo, avatar
+
+### 4.2 MIDDLEWARE DE TRIAL (GENTE QUE NO PAGA, NO PASA)
+- Middleware FastAPI que intercepta TODA la API (/api/*)
+- Si el tenant tiene plan="trial" y trial_ends_at < now -> retorna 402
+  con body {detail: "Tu trial de 15 dias expiro...", code: "trial_expired"}
+- Excepciones: /api/auth/*, /api/tenant/status, /api/tenant/request-upgrade,
+  /api/tenant/track-event, /api/admin/*, /api/uploads/*
+- Super admin bypassea siempre
+- Frontend: interceptor axios dispara evento "trial-blocked" -> modal con
+  boton "Activar plan Pro" que envia solicitud a info@spectra-metrics.com
+
+### 4.3 TRIAL COUNTDOWN BANNER
+- Componente <TrialBanner /> en AppLayout, visible en toda la app
+- Lee /api/tenant/status cada 5 min
+- Color-coded: azul (>7 dias), ambar (4-7 dias), rojo (<=3 dias)
+- Dismissible por sesion (sessionStorage)
+- CTA "Activar Pro" -> dialog con 5 beneficios + solicitud
+- Al abrir dialog dispara evento "upgrade_dialog_opened"
+- Al enviar solicitud dispara "upgrade_requested" + email a admin
+
+### 4.4 EMBUDO DE CONVERSION (SUPER ADMIN)
+- Endpoint: GET /api/admin/conversion-funnel (solo super_admin)
+- Metricas:
+  * total_tenants (trial vs paid)
+  * banner_shown_unique (tenants unicos que vieron el banner)
+  * dialog_opened_unique (tenants unicos que abrieron el dialog)
+  * requested_unique (tenants unicos que solicitaron upgrade)
+  * dialog_open_rate, request_rate, end_to_end_rate
+  * recent_requests (ultimas 20 solicitudes pendientes)
+- UI: Card en /admin/tenants con 5 KPIs + lista de ultimas solicitudes
+- Eventos trackeados en conversion_events:
+  * trial_banner_shown (1x por sesion por tenant)
+  * trial_banner_dismissed
+  * upgrade_dialog_opened
+  * upgrade_requested
+  * trial_expired_blocked
+
+### 4.5 SPECTRA PROSPECCION
+- Buscador de prospectos: form con provincia, ciudad, categoria, cantidad
+- Source selector: google_maps | linkedin
+- Modo n8n: si n8n esta configurado, manda webhook y espera callback
+- Modo Apify: si source=linkedin y Apify configurado, lanza actor
+  apify~google-search-scraper con query "site:linkedin.com/company..."
+- Modo Demo: genera datos simulados (100 leads random)
+- Stages tracking: job_created -> scraping -> prospects_found ->
+  ai_cleaning -> scoring_completed -> ready_for_review
+- Auto-rescore: job finalizado dispara rescoring en background con IA
+- Flow IA: vista detallada del job con timeline de stages + chat contextual
+
+### 4.6 LEADS (HUB CENTRAL)
+- Tabla con filtros: status, source, channel, quality, score range, ciudad
+- Sorting por cualquier columna (ai_score, created_at, business_name)
+- Columna editable inline: status, notas
+- Panel lateral con: info completa, recomendacion IA, primera linea sugerida
+- Acciones masivas: aprobar, rechazar, enviar a CRM, eliminar
+- Rescore individual y batch: /api/leads/batch-rescore
+- Import desde Excel/CSV: POST /api/import/leads
+- Export CSV: GET /api/export/leads
+
+### 4.7 SPECTRA EMAIL MARKETING (BREVO STYLE)
+Submenu con 5 secciones:
+1. Plantillas: editor de templates con variables ({{nombre}}, {{empresa}})
+2. Listas: grupos de contactos con tags
+3. Segmentos: filtros dinamicos sobre listas (ej: "score >= 80")
+4. Campanas: crear campana, asignar list+template, schedule o enviar ahora
+5. Formularios: placeholder "Coming Soon"
+
+Campana details:
+- Stats en tiempo real: enviados, aperturas (open rate), clics (CTR),
+  respuestas, interesados, enviados al CRM
+- Simulacion: POST /api/campaigns/{id}/simulate (genera stats random)
+- Tracking: pixel de apertura + redirects para clicks
+- Integration con Resend para envio real
+
+### 4.8 SPECTRA CRM
+- Stats: total_contacts, total_deals, pipeline_value, won_value
+- Dos vistas:
+  * Contactos: tabla con checkbox, bulk actions (mover etapa, eliminar)
+  * Pipeline: toggle Kanban (drag & drop entre 6 etapas) / Lista (tabla editable)
+
+Detail Sheet con 6 tabs:
+1. Info: empresa, contacto, email, telefono, ciudad, score
+2. Notas: agregar/ver notas con autor y timestamp
+3. Tareas: crear tareas con tipo (llamar, email, reunion, seguimiento,
+   whatsapp, tarea), fecha, descripcion, estado
+4. Oportunidades: crear deals con titulo, valor, etapa, tags
+5. Productos: asignar productos del catalogo a un deal, auto-calcula total
+6. Historial: activity_log cronologico (tarea_creada, deal_movido, nota_agregada)
+
+Bulk actions sobre deals: mover etapa (6 opciones) o eliminar con confirm
+Catalogo de Productos configurable en Settings > Productos
+
+### 4.9 SPECTRA WEB (PLACEHOLDER)
+- Landing Pages: "Coming Soon" / "Soon" segun idioma
+- Formularios: "Coming Soon" / "Soon" segun idioma
+
+### 4.10 SPECTRA PERFORMANCE (PLACEHOLDER)
+- 5 cards: Meta Ads, Google Ads, TikTok Ads, SEO, GEO
+- Todas "Coming Soon"
+- Placeholder para futuras integraciones con APIs de anuncios
+
+### 4.11 ANALISIS
+- Graficos interactivos con Recharts:
+  * Barras: leads por calidad, por source, por channel
+  * Linea temporal: leads por dia/semana/mes
+  * Pie: distribucion de leads por status
+  * Funnel: prospeccion -> calificados -> enviados -> aperturas -> respuestas
+  * CRM pipeline: barras apiladas por etapa con valor total
+- Filtros de periodo: hoy, 7 dias, 30 dias, all time
+
+### 4.12 CONFIGURACION
+Tabs:
+1. Empresa: datos fiscales, logo, colores de marca, descripcion
+   + Zona Peligrosa (super_admin): boton "Resetear datos demo"
+2. Usuarios: CRUD de usuarios del tenant con roles
+3. Integraciones (super_admin): toggle y config de Resend, Apify, Dify,
+   n8n, Chatwoot con base_url + api_key enmascarada
+4. Dominios: verificar dominio custom para emails (DKIM, SPF)
+5. Modulos (admin): toggle de prospeccion, leads, email_marketing, crm,
+   web, performance
+6. Scoring: configurar pesos del algoritmo de scoring de leads
+7. Productos: catalogo de productos/servicios para asignar a deals
+8. Actividad (super_admin): log completo de eventos del tenant
+
+### 4.13 SUPER ADMIN
+- /admin/tenants: gestion de todos los tenants del sistema
+  * Embudo de conversion con 5 KPIs (nuevo)
+  * Ultimas solicitudes de upgrade
+  * Tabla con todos los tenants: nombre, plan, precio, modulos, estado
+  * Crear nuevo tenant con admin inicial
+  * Editar/desactivar tenant existente
+- /admin/reset-demo-data: endpoint POST para limpiar datos del tenant actual
+
+
+================================================================================
+ 5. ENDPOINTS API (RESUMEN)
+================================================================================
+
+--- AUTH ---
+POST   /api/auth/login              # email + password -> JWT + cookies
+POST   /api/auth/register           # crea tenant trial + user admin
+POST   /api/auth/logout             # borra cookies
+POST   /api/auth/refresh            # usa refresh_token -> access_token nuevo
+GET    /api/auth/me                 # user actual
+POST   /api/auth/forgot-password    # email -> manda reset link via Resend
+POST   /api/auth/reset-password     # token + new_password -> cambia hash
+PUT    /api/auth/profile            # actualiza nombre/telefono/cargo/avatar
+POST   /api/auth/avatar             # upload multipart -> guarda en /uploads
+PUT    /api/auth/change-password    # current + new -> cambia con verificacion
+
+--- TENANT ---
+GET    /api/tenant/status           # {plan, is_trial, days_remaining, expired}
+GET    /api/tenant/modules          # modulos activos
+PUT    /api/tenant/modules          # actualizar modulos (admin)
+POST   /api/tenant/request-upgrade  # solicita pasar a Pro + email admin
+POST   /api/tenant/track-event      # trackea evento de conversion
+GET    /api/tenant/branding         # datos de marca de la empresa
+PUT    /api/tenant/branding         # actualizar datos de marca
+
+--- USERS ---
+GET    /api/users                   # listar usuarios del tenant
+POST   /api/users                   # crear (admin)
+DELETE /api/users/{id}              # eliminar (admin)
+
+--- SUPER ADMIN ---
+GET    /api/admin/tenants           # todos los tenants
+POST   /api/admin/tenants           # crear tenant nuevo
+PUT    /api/admin/tenants/{id}      # editar
+DELETE /api/admin/tenants/{id}      # desactivar
+POST   /api/admin/reset-demo-data   # limpiar datos del tenant
+GET    /api/admin/conversion-funnel # metricas de conversion
+
+--- LEADS ---
+GET    /api/leads                    # con filtros
+POST   /api/leads                    # crear manual
+PUT    /api/leads/{id}               # actualizar (inline edit)
+DELETE /api/leads/{id}
+POST   /api/leads/bulk-action        # approve/reject/delete masivo
+POST   /api/leads/batch-rescore      # rescore con IA
+POST   /api/leads/{id}/send-to-crm   # convierte a crm_contact
+
+--- PROSPECT JOBS ---
+GET    /api/prospect-jobs
+POST   /api/prospect-jobs
+GET    /api/prospect-jobs/{id}
+POST   /api/prospect-jobs/{id}/start # lanza n8n/apify/demo
+
+--- CRM CONTACTS ---
+GET    /api/crm/contacts
+POST   /api/crm/contacts
+GET    /api/crm/contacts/{id}
+PUT    /api/crm/contacts/{id}
+POST   /api/crm/contacts/bulk-action
+
+--- CRM DEALS ---
+GET    /api/crm/deals
+POST   /api/crm/deals
+PUT    /api/crm/deals/{id}           # cambiar etapa, valor, tags
+POST   /api/crm/deals/bulk-action    # move/delete masivo
+PUT    /api/crm/deals/{id}/tags
+
+--- CRM TASKS/NOTES/PRODUCTS ---
+GET    /api/crm/tasks               # con filtros contact_id/deal_id/status
+POST   /api/crm/tasks
+PUT    /api/crm/tasks/{id}
+GET    /api/crm/notes
+POST   /api/crm/notes
+GET    /api/crm/products            # catalogo
+POST   /api/crm/products
+DELETE /api/crm/products/{id}
+GET    /api/crm/deals/{id}/products
+POST   /api/crm/deals/{id}/products
+DELETE /api/crm/deals/{id}/products/{item_id}
+GET    /api/crm/activity-log
+GET    /api/crm/stats
+
+--- EMAIL MARKETING ---
+GET    /api/email/templates, /lists, /segments, /campaigns
+POST   /api/email/templates, /lists, /segments, /campaigns
+PUT    /api/email/...
+POST   /api/campaigns/{id}/start
+POST   /api/campaigns/{id}/simulate
+
+--- WEBHOOKS ---
+POST   /api/webhooks/n8n-callback
+POST   /api/webhooks/chatwoot/lead
+
+--- AI ---
+POST   /api/ai/dify-score-lead
+POST   /api/ai/flow-chat             # chat contextual con Emergent LLM
+
+--- SETTINGS / INTEGRATIONS ---
+GET    /api/settings/integrations
+PUT    /api/settings/integrations/{name}
+
+--- ANALYTICS ---
+GET    /api/analytics               # con periodo
+GET    /api/analytics/crm           # con periodo
+GET    /api/analytics/time-series
+
+--- IMPORT/EXPORT ---
+POST   /api/import/leads
+POST   /api/import/crm-contacts
+GET    /api/export/leads
+GET    /api/export/crm-contacts
+
+
+================================================================================
+ 6. FLUJOS PRINCIPALES DE USUARIO
+================================================================================
+
+### FLUJO 1: REGISTRO NUEVO CLIENTE
+1. Usuario va a /login -> click "Registrarse"
+2. Completa nombre, organizacion, email, password -> submit
+3. Backend crea tenant con plan=trial, trial_ends_at=+15d, modulos=leads+crm
+4. Login automatico, redirige a /
+5. Banner superior muestra "Te quedan 15 dias de trial"
+6. Solo ve en sidebar: Dashboard, Leads, CRM, Analisis, Config
+7. Cuando hace accion, se trackea evento trial_banner_shown
+
+### FLUJO 2: PROSPECCION CON LINKEDIN (APIFY)
+1. Settings > Integraciones > activa Apify + pega API key
+2. Prospect Finder > source=linkedin, keyword="restaurantes", city="Tucuman"
+3. Submit -> crea prospect_job con status=processing
+4. Background: _run_apify_linkedin ejecuta actor google-search-scraper
+5. Parsea resultados organicos con URL linkedin.com/company -> crea leads
+6. Auto-rescore con IA en background
+7. Usuario ve progress en tiempo real en /jobs/{id}
+8. Leads aparecen en /leads con status=scored, source=linkedin
+
+### FLUJO 3: RESET PASSWORD
+1. Login > click "Olvide mi password"
+2. Ingresa email -> POST /api/auth/forgot-password
+3. Backend genera JWT de 24h + envia email con link
+   https://app.spectra-metrics.com/reset-password?token=XXX
+4. Usuario abre email, click link -> ResetPasswordPage
+5. Ingresa nueva password 2 veces -> POST /api/auth/reset-password
+6. Backend verifica JWT, actualiza password_hash
+7. Redirect a /login, user ingresa con nueva password
+
+### FLUJO 4: TRIAL EXPIRA (USER NO PAGO)
+1. Dia 16: cron no hace nada, trial_ends_at ya paso
+2. User intenta hacer cualquier request a /api/*
+3. Middleware detecta plan=trial + trial_ends_at<now -> 402
+4. Frontend interceptor dispara evento "trial-blocked"
+5. Modal bloqueante aparece: "Trial expirado"
+6. Click "Activar plan Pro" -> POST /api/tenant/request-upgrade
+7. Backend guarda en upgrade_requests + envia email a info@spectra-metrics.com
+8. Trackea evento upgrade_requested
+9. Admin contacta al cliente manualmente, actualiza plan a pro via super_admin
+
+### FLUJO 5: CREAR DEAL DESDE LEAD
+1. /leads > seleccionar leads -> "Enviar al CRM"
+2. Backend crea crm_contact por cada lead
+3. /crm-sync > tab Contactos -> ver contacto recien creado
+4. Click en contacto -> panel lateral se abre en tab Info
+5. Ir a tab Oportunidades > "Crear Deal" con titulo y valor
+6. Tab Productos > seleccionar del catalogo
+7. Tab Tareas > crear tarea de seguimiento con fecha
+8. Deal aparece en Pipeline (Kanban o Lista) en etapa "nuevo"
+9. Drag & drop entre columnas OR cambio via dropdown en Lista view
+
+### FLUJO 6: CAMPANA DE EMAIL
+1. Email Marketing > Plantillas > crear template con variables
+2. > Listas > crear lista con contactos (manual o import)
+3. > Segmentos > filtrar lista por criterio (ej: quality=excellent)
+4. > Campanas > crear campana, asignar lista + template + segmento
+5. > Schedule (ahora o fecha futura)
+6. Backend envia via Resend, trackea stats
+7. Ver stats: open rate, CTR, respuestas, interesados, enviados a CRM
+
+
+================================================================================
+ 7. VARIABLES DE ENTORNO
+================================================================================
+
+### backend/.env
+MONGO_URL="mongodb://localhost:27017"
+DB_NAME="spectra_production"
+JWT_SECRET="<SECRET_ALEATORIO_LARGO>"
+RESEND_API_KEY="re_xxx"
+FRONTEND_URL="https://app.spectra-metrics.com"
+CORS_ORIGINS="https://app.spectra-metrics.com"
+
+### frontend/.env
+REACT_APP_BACKEND_URL=https://app.spectra-metrics.com
+
+
+================================================================================
+ 8. DEPLOYMENT A PRODUCCION (DIGITALOCEAN + EASYPANEL)
+================================================================================
+
+Workflow:
+1. Boton "Save to GitHub" en el chat de Emergent -> push a repo GitHub
+2. En EasyPanel: click "Rebuild" en el servicio (frontend y backend)
+3. EasyPanel hace git pull + docker-compose up --build -d
+4. Nginx sirve el frontend estatico, proxy /api al backend
+5. MongoDB corre como servicio separado (persistent volume)
+
+Archivos clave:
+- /app/docker-compose.yml: define servicios
+- /app/frontend/Dockerfile: build React + nginx
+- /app/frontend/nginx.conf: proxy config
+- /app/backend/Dockerfile: python + uvicorn
+
+Checklist post-deploy:
+[ ] Todas las variables de entorno configuradas
+[ ] MongoDB persiste en volumen
+[ ] SSL/TLS configurado en EasyPanel (Let's Encrypt)
+[ ] DNS apuntando a la IP del droplet
+[ ] Test curl de /api/auth/login funciona
+[ ] Test frontend carga en app.spectra-metrics.com
+
+
+================================================================================
+ 9. CREDENCIALES DE TEST
+================================================================================
+
+Super Admin Produccion:
+- Email: pablo@disruptive-sw.com
+- Password: 12345678
+- Role: super_admin
+
+Super Admin Demo:
+- Email: admin@spectraflow.com
+- Password: Admin123!
+- Role: super_admin
+
+Operator Demo:
+- Email: demo@spectraflow.com
+- Password: Demo123!
+- Role: operator
+
+
+================================================================================
+ 10. ROADMAP / BACKLOG
+================================================================================
+
+### P1 (proximo sprint)
+- Refactor server.py (>3200 lineas) en routes/ modular
+- Rate limiting en /api/auth/forgot-password (evitar email bombing)
+- JWT dedicado short-lived (15-60min) para reset-password
+- Tests automatizados con pytest (actualmente parcial en /tests/)
+
+### P2 (backlog)
+- Spectra Performance: conectores reales (Meta Graph API, Google Ads API,
+  TikTok Business API, SEO tools)
+- Landing Pages builder: editor drag&drop con templates
+- Formularios de captura embebibles (JS snippet + endpoint)
+- Presupuestos funcionales en CRM (PDFs generados con ReportLab)
+- Mobile app (React Native) consumiendo la misma API
+- Webhooks outgoing para integrar con Zapier/Make
+- Stripe billing automatico para upgrade trial to pro
+- Multi-idioma expandido (PT, FR)
+
+### P3 (vision futura)
+- Marketplace de integraciones
+- AI Copilot que sugiere acciones comerciales basado en historial
+- Automatizaciones visuales (if this then that) tipo n8n embebido
+
+
+================================================================================
+ 11. NOTAS DE MANTENIMIENTO
+================================================================================
+
+### Reiniciar servicios en produccion
+ssh root@<droplet-ip>
+cd /var/lib/easypanel/projects/spectra-flow
+docker-compose restart
+
+### Ver logs
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+### Backup MongoDB
+docker exec <mongo-container> mongodump --out /backup
+docker cp <mongo-container>:/backup ./backup-$(date +%F)
+
+### Seed data (primer arranque)
+El backend auto-ejecuta seed en startup si collection users esta vacia:
+- Crea admin@spectraflow.com + demo@spectraflow.com
+- Genera 1 tenant "Spectra Demo" con plan=enterprise
+- Crea ~5 leads de ejemplo + 1 prospect_job
+
+### Variables sensibles
+NUNCA commitear .env a GitHub. Usar secrets de EasyPanel.
+Rotar JWT_SECRET cada 6 meses (invalidara todos los tokens activos).
+
+
+================================================================================
+ 12. CONTACTO
+================================================================================
+
+Owner: Pablo Paez (Disruptive SW)
+Email publico: info@spectra-metrics.com
+Sender transaccional: no-reply@spectra-metrics.com
+Soporte: info@spectra-metrics.com
+
+Productos hermanos:
+- OptimIA Bot: https://inbox.optimia.disruptive-sw.com
+- Spectra Content IA: https://content-ia.spectra-metrics.com
+- Spectra Brain: https://brain.spectra-metrics.com
+
+
+================================================================================
+ FIN DEL DOCUMENTO
+================================================================================
