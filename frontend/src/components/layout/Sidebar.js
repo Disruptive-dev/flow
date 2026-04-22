@@ -153,12 +153,12 @@ export default function Sidebar() {
       {/* Footer */}
       <div className="p-3 border-t border-zinc-800 space-y-1">
         <a
-          href="mailto:flow@spectra-metrics.com"
+          href="mailto:info@spectra-metrics.com"
           className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-zinc-500 hover:text-white hover:bg-zinc-800/60 transition-colors w-full"
           data-testid="sidebar-contact-link"
         >
           <Mail className="w-[18px] h-[18px]" />
-          <span>flow@spectra-metrics.com</span>
+          <span>info@spectra-metrics.com</span>
         </a>
         <button
           onClick={logout}

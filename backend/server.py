@@ -212,7 +212,8 @@ async def register(response: Response, body: RegisterRequest):
         raise HTTPException(status_code=400, detail="Email already registered")
     tenant_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    tenant = {"id": tenant_id, "name": body.tenant_name or f"{body.name}'s Organization", "branding": {"company_name": body.tenant_name or f"{body.name}'s Organization", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "modules": {"prospeccion": False, "leads": True, "crm": False, "email_marketing": False}, "plan": "starter", "price": 0, "active": True, "created_at": now}
+    trial_end = (datetime.now(timezone.utc) + timedelta(days=15)).isoformat()
+    tenant = {"id": tenant_id, "name": body.tenant_name or f"{body.name}'s Organization", "branding": {"company_name": body.tenant_name or f"{body.name}'s Organization", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "sender_defaults": {"name": body.tenant_name or body.name, "email": "no-reply@spectra-metrics.com"}, "modules": {"prospeccion": False, "leads": True, "crm": True, "email_marketing": False, "web": False, "performance": False}, "plan": "trial", "price": 0, "active": True, "trial_ends_at": trial_end, "created_at": now}
     await db.tenants.insert_one(tenant)
     user_doc = {"email": email, "password_hash": hash_password(body.password), "name": body.name, "role": "tenant_admin", "tenant_id": tenant_id, "created_at": now}
     result = await db.users.insert_one(user_doc)
@@ -232,6 +233,51 @@ async def logout(response: Response):
     response.delete_cookie("access_token", path="/")
     response.delete_cookie("refresh_token", path="/")
     return {"message": "Logged out"}
+
+@api_router.post("/auth/forgot-password")
+async def forgot_password(body: Dict[str, Any] = {}):
+    email = body.get("email", "").lower().strip()
+    if not email:
+        raise HTTPException(status_code=400, detail="Email requerido")
+    user = await db.users.find_one({"email": email})
+    if not user:
+        return {"message": "Si el email existe, recibiras un enlace para restablecer tu password"}
+    token = create_access_token(str(user["_id"]), email)
+    frontend_url = os.environ.get("FRONTEND_URL", os.environ.get("REACT_APP_BACKEND_URL", ""))
+    reset_link = f"{frontend_url}/reset-password?token={token}"
+    try:
+        resend.emails.send({"from": "no-reply@spectra-metrics.com", "to": [email], "subject": "Restablecer password - Spectra Flow", "html": f"<h2>Restablecer password</h2><p>Haz click en el siguiente enlace para restablecer tu password:</p><p><a href='{reset_link}' style='color:#1D4ED8;font-weight:bold;'>Restablecer password</a></p><p>Este enlace expira en 1 hora.</p><p>Si no solicitaste esto, ignora este email.</p>"})
+    except Exception as e:
+        logger.error(f"Error sending reset email: {e}")
+    return {"message": "Si el email existe, recibiras un enlace para restablecer tu password"}
+
+@api_router.post("/auth/reset-password")
+async def reset_password(body: Dict[str, Any] = {}):
+    token = body.get("token", "")
+    new_pw = body.get("new_password", "")
+    if not token or not new_pw or len(new_pw) < 6:
+        raise HTTPException(status_code=400, detail="Token y nueva password (min 6 chars) requeridos")
+    try:
+        payload = jwt.decode(token, os.environ.get("JWT_SECRET", "spectra-flow-secret-key-2024"), algorithms=["HS256"])
+        user_id = payload.get("sub")
+        new_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+        await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": {"password_hash": new_hash, "updated_at": datetime.now(timezone.utc).isoformat()}})
+        return {"message": "Password restablecida exitosamente"}
+    except:
+        raise HTTPException(status_code=400, detail="Token invalido o expirado")
+
+@api_router.post("/admin/reset-demo-data")
+async def reset_demo_data(request: Request):
+    """Reset all demo data - SUPER ADMIN ONLY"""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    tid = user["tenant_id"]
+    counts = {}
+    for col in ["leads", "crm_contacts", "crm_deals", "crm_tasks", "crm_notes", "crm_deal_products", "prospect_jobs", "campaigns", "email_campaigns", "email_lists", "email_segments", "activity_log"]:
+        r = await db[col].delete_many({"tenant_id": tid})
+        counts[col] = r.deleted_count
+    return {"message": "Datos demo eliminados", "deleted": counts}
 
 @api_router.put("/auth/profile")
 async def update_profile(request: Request, body: Dict[str, Any] = {}):
@@ -416,25 +462,28 @@ async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: s
         keyword = li_params.get("keyword", job.get("category", ""))
         location = li_params.get("location", job.get("city", ""))
         industry = li_params.get("industry", "")
-        company_size = li_params.get("company_size", "")
         quantity = job.get("quantity", 50)
-        # Start Apify actor run
-        actor_input = {"searchUrl": f"https://www.linkedin.com/search/results/companies/?keywords={keyword}", "maxResults": min(quantity, 100)}
+        # Use Google search to find LinkedIn company profiles (reliable, no login needed)
+        search_query = f"site:linkedin.com/company {keyword}"
         if location:
-            actor_input["searchUrl"] += f"&geoUrn={location}"
+            search_query += f" {location}"
+        if industry:
+            search_query += f" {industry}"
+        actor_input = {"queries": search_query, "maxPagesPerQuery": max(1, quantity // 10), "resultsPerPage": 10}
         async with httpx.AsyncClient(timeout=120) as client:
             run_resp = await client.post(
-                f"https://api.apify.com/v2/acts/apimaestro~linkedin-companies-search-scraper/runs?token={api_key}",
+                f"https://api.apify.com/v2/acts/apify~google-search-scraper/runs?token={api_key}",
                 json=actor_input
             )
             run_data = run_resp.json().get("data", {})
             run_id = run_data.get("id", "")
             if not run_id:
-                raise Exception("No run ID from Apify")
-            # Poll for completion (max 90 seconds)
+                logger.error(f"Apify no run ID: {run_resp.text[:200]}")
+                await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
+                return
             now_ts = datetime.now(timezone.utc).isoformat()
             await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"stages.1.status": "completed", "stages.2.status": "processing", "updated_at": now_ts}})
-            for _ in range(18):
+            for _ in range(24):
                 await asyncio.sleep(5)
                 status_resp = await client.get(f"https://api.apify.com/v2/actor-runs/{run_id}?token={api_key}")
                 status = status_resp.json().get("data", {}).get("status", "")
@@ -443,34 +492,39 @@ async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: s
             if status != "SUCCEEDED":
                 await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
                 return
-            # Fetch results
             dataset_id = run_data.get("defaultDatasetId", "")
             results_resp = await client.get(f"https://api.apify.com/v2/datasets/{dataset_id}/items?token={api_key}")
-            items = results_resp.json() if isinstance(results_resp.json(), list) else []
+            raw_items = results_resp.json() if isinstance(results_resp.json(), list) else []
+            # Parse Google search results for LinkedIn company pages
+            items = []
+            for r in raw_items:
+                organic = r.get("organicResults", [])
+                for org in organic:
+                    url = org.get("url", "")
+                    if "linkedin.com/company" in url:
+                        items.append({"name": org.get("title", "").split(" |")[0].split(" -")[0].strip(), "url": url, "description": org.get("description", ""), "location": location})
             now = datetime.now(timezone.utc).isoformat()
             inserted = 0
-            for item in items:
-                bname = item.get("name", item.get("title", "")).strip()
-                if not bname:
+            for item in items[:quantity]:
+                bname = item.get("name", "").strip()
+                if not bname or len(bname) < 2:
                     continue
-                existing = await db.leads.find_one({"business_name": {"$regex": f"^{bname}$", "$options": "i"}, "tenant_id": tenant_id})
+                existing = await db.leads.find_one({"business_name": {"$regex": f"^{re.escape(bname)}$", "$options": "i"}, "tenant_id": tenant_id})
                 if existing:
                     continue
                 lead = {
                     "id": str(uuid.uuid4()), "tenant_id": tenant_id, "job_id": job_id,
                     "business_name": bname,
                     "raw_category": industry or keyword,
-                    "normalized_category": item.get("industry", industry or keyword),
-                    "province": "", "city": item.get("location", location),
-                    "website": item.get("url", item.get("linkedinUrl", "")),
+                    "normalized_category": industry or keyword,
+                    "province": "", "city": location,
+                    "website": item.get("url", ""),
                     "email": "", "phone": "",
                     "ai_score": 50, "quality_level": "average",
                     "recommendation": item.get("description", "")[:300],
                     "recommended_first_line": "",
-                    "address": item.get("location", ""),
-                    "source": "linkedin",
-                    "status": "scored",
-                    "created_at": now, "updated_at": now
+                    "address": location, "source": "linkedin",
+                    "status": "scored", "created_at": now, "updated_at": now
                 }
                 await db.leads.insert_one(lead)
                 inserted += 1
@@ -485,6 +539,12 @@ async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: s
                 "status": "completed", "raw_count": len(items), "cleaned_count": inserted,
                 "qualified_count": inserted, "rejected_count": 0, "stages": stages, "updated_at": now
             }})
+            # Auto-rescore
+            if inserted > 0:
+                asyncio.create_task(_auto_rescore_job_leads(job_id, tenant_id))
+    except Exception as e:
+        logger.error(f"Apify LinkedIn error for job {job_id}: {e}")
+        await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
     except Exception as e:
         logger.error(f"Apify LinkedIn error for job {job_id}: {e}")
         await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
