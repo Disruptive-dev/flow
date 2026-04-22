@@ -47,10 +47,17 @@ React 19 + FastAPI + MongoDB + Resend + Emergent LLM + Dify + n8n + Apify (PWA)
 
 ## Changelog
 - 2026-02 (iter 10): Forgot/reset password + 15-day trial + reset demo data + CRM Lista view + mobile sidebar (PASSED 10/10 backend + UI tests)
+- 2026-02 (iter 11): Trial expiry middleware (402 on expired) + trial countdown banner + upgrade request flow to info@spectra-metrics.com
 
 ## Backlog
-- P1: Refactor server.py (>3100 lines) into routes/
+- P1: Refactor server.py (>3200 lines) into routes/
 - P1: Rate limiting on /api/auth/forgot-password
+- P1: Dedicated short-lived reset-password JWT token type (15-60min)
+- P2: Performance connectors (Meta/Google/TikTok APIs)
+- P2: Landing Pages builder
+- P2: Formularios de captura
+- P2: Presupuestos funcionales
+uth/forgot-password
 - P1: Dedicated short-lived reset-password JWT token type (15-60min)
 - P1: Trial expiry middleware (block tenants after trial_ends_at)
 - P2: Performance connectors (Meta/Google/TikTok APIs)

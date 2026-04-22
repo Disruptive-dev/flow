@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import TrialBanner from '@/components/TrialBanner';
 
 export default function AppLayout() {
   const { user, logout } = useAuth();
@@ -179,6 +180,9 @@ export default function AppLayout() {
             </div>
           </div>
         </header>
+
+        {/* Trial Countdown Banner */}
+        <TrialBanner />
 
         {/* Demo Banner */}
         {demoActive && (

@@ -20,6 +20,14 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   async (error) => {
+    // Trial expired or tenant inactive - dispatch global event
+    if (error.response?.status === 402) {
+      const code = error.response?.data?.code;
+      if (code === 'trial_expired' || code === 'tenant_inactive') {
+        window.dispatchEvent(new CustomEvent('trial-blocked', { detail: error.response.data }));
+      }
+      return Promise.reject(error);
+    }
     // Don't retry auth endpoints
     if (error.config?.url?.includes('/auth/')) {
       return Promise.reject(error);

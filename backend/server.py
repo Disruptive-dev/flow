@@ -5,6 +5,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 from fastapi import FastAPI, APIRouter, Request, HTTPException, Response
+from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
@@ -2317,6 +2318,62 @@ async def get_tenant_modules(request: Request):
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
     return tenant.get("modules", {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False}) if tenant else {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False}
 
+@api_router.get("/tenant/status")
+async def get_tenant_status(request: Request):
+    """Trial countdown + plan info for banner."""
+    user = await get_current_user(request)
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    if not tenant:
+        return {"plan": "unknown", "active": True, "is_trial": False, "days_remaining": 0, "expired": False}
+    plan = tenant.get("plan", "starter")
+    is_trial = plan == "trial"
+    days_remaining = 0
+    expired = False
+    trial_ends_at = tenant.get("trial_ends_at", "")
+    if is_trial and trial_ends_at:
+        try:
+            ends = datetime.fromisoformat(trial_ends_at.replace("Z", "+00:00"))
+            if ends.tzinfo is None:
+                ends = ends.replace(tzinfo=timezone.utc)
+            delta = ends - datetime.now(timezone.utc)
+            days_remaining = max(0, delta.days + (1 if delta.seconds > 0 else 0))
+            expired = datetime.now(timezone.utc) > ends
+        except Exception:
+            pass
+    return {
+        "plan": plan,
+        "active": tenant.get("active", True),
+        "is_trial": is_trial,
+        "trial_ends_at": trial_ends_at,
+        "days_remaining": days_remaining,
+        "expired": expired,
+        "tenant_name": tenant.get("name", ""),
+    }
+
+@api_router.post("/tenant/request-upgrade")
+async def request_tenant_upgrade(request: Request, body: Dict[str, Any] = {}):
+    """User requests upgrade from trial to pro - notifies admin via email."""
+    user = await get_current_user(request)
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    message = body.get("message", "Solicitud de upgrade a plan Pro")
+    now = datetime.now(timezone.utc).isoformat()
+    await db.upgrade_requests.insert_one({
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "tenant_name": tenant.get("name", "") if tenant else "",
+        "user_email": user.get("email", ""), "user_name": user.get("name", ""),
+        "message": message, "status": "pending", "created_at": now
+    })
+    try:
+        resend.emails.send({
+            "from": "no-reply@spectra-metrics.com",
+            "to": ["info@spectra-metrics.com"],
+            "subject": f"Upgrade request - {tenant.get('name', 'Unknown') if tenant else ''}",
+            "html": f"<h3>Nueva solicitud de upgrade</h3><p><b>Tenant:</b> {tenant.get('name', '') if tenant else ''}</p><p><b>Usuario:</b> {user.get('name', '')} ({user.get('email', '')})</p><p><b>Mensaje:</b> {message}</p>"
+        })
+    except Exception as e:
+        logger.error(f"Upgrade request email failed: {e}")
+    return {"message": "Solicitud recibida. Te contactaremos pronto."}
+
 @api_router.put("/tenant/modules")
 async def update_tenant_modules(request: Request, body: Dict[str, bool] = {}):
     user = await get_current_user(request)
@@ -3132,6 +3189,47 @@ async def shutdown():
 
 app.include_router(api_router)
 app.mount("/api/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name="uploads")
+
+# ==================== TRIAL EXPIRY MIDDLEWARE ====================
+TRIAL_EXEMPT_PATHS = ("/api/auth/", "/api/tenant/status", "/api/tenant/request-upgrade", "/api/admin/", "/api/uploads/")
+
+@app.middleware("http")
+async def enforce_trial_expiry(request: Request, call_next):
+    path = request.url.path
+    # Only enforce for API routes, skip auth and trial-status itself
+    if not path.startswith("/api/") or any(path.startswith(p) for p in TRIAL_EXEMPT_PATHS) or request.method == "OPTIONS":
+        return await call_next(request)
+    # Try to extract token silently (don't block anonymous - let get_current_user do it)
+    token = request.cookies.get("access_token") or ""
+    auth_header = request.headers.get("Authorization", "")
+    if not token and auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    if not token:
+        return await call_next(request)
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            return await call_next(request)
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])}, {"role": 1, "tenant_id": 1})
+        if not user or user.get("role") == "super_admin":
+            return await call_next(request)
+        tenant = await db.tenants.find_one({"id": user.get("tenant_id")}, {"plan": 1, "trial_ends_at": 1, "active": 1})
+        if not tenant:
+            return await call_next(request)
+        if tenant.get("active") is False:
+            return JSONResponse(status_code=402, content={"detail": "Cuenta desactivada. Contacta soporte.", "code": "tenant_inactive"})
+        if tenant.get("plan") == "trial" and tenant.get("trial_ends_at"):
+            try:
+                ends = datetime.fromisoformat(tenant["trial_ends_at"].replace("Z", "+00:00"))
+                if ends.tzinfo is None:
+                    ends = ends.replace(tzinfo=timezone.utc)
+                if datetime.now(timezone.utc) > ends:
+                    return JSONResponse(status_code=402, content={"detail": "Tu trial de 15 dias expiro. Actualiza tu plan para continuar.", "code": "trial_expired", "trial_ends_at": tenant["trial_ends_at"]})
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return await call_next(request)
 
 frontend_url = os.environ.get("FRONTEND_URL", "http://localhost:3000")
 app.add_middleware(
