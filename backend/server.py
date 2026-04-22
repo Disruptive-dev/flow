@@ -3126,6 +3126,39 @@ async def resend_events_webhook(request: Request, body: Dict[str, Any] = {}):
 async def seed_data():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@spectraflow.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!")
+    # Ensure Pablo (production owner) exists as super_admin - self-heal on every startup
+    pablo_email = "pablo@disruptive-sw.com"
+    pablo_password = "Disruptive2026!"
+    pablo = await db.users.find_one({"email": pablo_email})
+    now_ts = datetime.now(timezone.utc).isoformat()
+    if pablo:
+        # Always sync password + role to desired values on boot
+        await db.users.update_one(
+            {"email": pablo_email},
+            {"$set": {"password_hash": hash_password(pablo_password), "role": "super_admin", "updated_at": now_ts}}
+        )
+        logger.info("Pablo super_admin synced")
+    else:
+        # Need a tenant for Pablo - use existing Spectra Demo or create one
+        t = await db.tenants.find_one({"name": "Spectra Demo"})
+        if not t:
+            t_id = str(uuid.uuid4())
+            await db.tenants.insert_one({
+                "id": t_id, "name": "Spectra Demo",
+                "branding": {"company_name": "Spectra Demo", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"},
+                "sender_defaults": {"name": "Spectra Flow", "email": "no-reply@spectra-metrics.com"},
+                "modules": {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False},
+                "plan": "enterprise", "price": 0, "active": True, "created_at": now_ts
+            })
+        else:
+            t_id = t["id"]
+        await db.users.insert_one({
+            "email": pablo_email, "password_hash": hash_password(pablo_password),
+            "name": "Pablo Paez", "role": "super_admin", "tenant_id": t_id,
+            "created_at": now_ts
+        })
+        logger.info("Pablo super_admin created")
+
     existing_admin = await db.users.find_one({"email": admin_email})
     if existing_admin:
         if not verify_password(admin_password, existing_admin["password_hash"]):
@@ -3133,7 +3166,7 @@ async def seed_data():
         logger.info("Seed data already exists")
         os.makedirs("/app/memory", exist_ok=True)
         with open("/app/memory/test_credentials.md", "w") as f:
-            f.write(f"# Test Credentials\n\n## Admin Account\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: super_admin\n\n## Demo Operator\n- Email: demo@spectraflow.com\n- Password: Demo123!\n- Role: operator\n\n## Auth Endpoints\n- POST /api/auth/login\n- POST /api/auth/register\n- GET /api/auth/me\n- POST /api/auth/logout\n")
+            f.write(f"# Test Credentials\n\n## Production Super Admin\n- Email: pablo@disruptive-sw.com\n- Password: Disruptive2026!\n- Role: super_admin\n\n## Seed Admin\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: super_admin\n\n## Demo Operator\n- Email: demo@spectraflow.com\n- Password: Demo123!\n- Role: operator\n\n## Auth Endpoints\n- POST /api/auth/login\n- POST /api/auth/register\n- POST /api/auth/forgot-password\n- POST /api/auth/reset-password\n- GET /api/auth/me\n- POST /api/auth/logout\n")
         return
 
     logger.info("Seeding demo data...")
@@ -3230,7 +3263,7 @@ async def seed_data():
 
     os.makedirs("/app/memory", exist_ok=True)
     with open("/app/memory/test_credentials.md", "w") as f:
-        f.write(f"# Test Credentials\n\n## Admin Account\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: super_admin\n\n## Demo Operator\n- Email: demo@spectraflow.com\n- Password: Demo123!\n- Role: operator\n\n## Auth Endpoints\n- POST /api/auth/login\n- POST /api/auth/register\n- GET /api/auth/me\n- POST /api/auth/logout\n")
+        f.write(f"# Test Credentials\n\n## Production Super Admin\n- Email: pablo@disruptive-sw.com\n- Password: Disruptive2026!\n- Role: super_admin\n\n## Seed Admin\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: super_admin\n\n## Demo Operator\n- Email: demo@spectraflow.com\n- Password: Demo123!\n- Role: operator\n\n## Auth Endpoints\n- POST /api/auth/login\n- POST /api/auth/register\n- POST /api/auth/forgot-password\n- POST /api/auth/reset-password\n- GET /api/auth/me\n- POST /api/auth/logout\n")
     logger.info("Seed data created successfully!")
 
 # ==================== STARTUP / SHUTDOWN ====================
