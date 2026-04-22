@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import HelpBot from '@/components/HelpBot';
 import LoginPage from '@/pages/LoginPage';
+import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProspectFinderPage from '@/pages/ProspectFinderPage';
 import JobsPage from '@/pages/JobsPage';
@@ -46,6 +47,7 @@ function AppRoutes() {
     <>
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/prospect-finder" element={<ProspectFinderPage />} />

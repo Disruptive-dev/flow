@@ -4,7 +4,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDemo } from '@/contexts/DemoContext';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle, Pencil } from 'lucide-react';
+import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle, Pencil, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -27,6 +27,7 @@ export default function AppLayout() {
   const [profileForm, setProfileForm] = useState({ name: user?.name || '', phone: user?.phone || '', job_title: user?.job_title || '' });
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm: '' });
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const saveProfile = async () => {
     try {
@@ -102,11 +103,20 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <Sidebar />
-      <div className="ml-[260px] min-h-screen">
+      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      <div className="lg:ml-[260px] min-h-screen">
         {/* Top Header */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm border-b border-zinc-200 px-8 py-3">
-          <div className="flex items-center justify-end gap-3">
+        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm border-b border-zinc-200 px-4 sm:px-8 py-3">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-1.5 rounded-md hover:bg-zinc-100 text-zinc-600"
+              data-testid="sidebar-mobile-toggle"
+              aria-label="Abrir menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <div className="flex items-center justify-end gap-2 sm:gap-3 flex-1">
             {/* Demo Button */}
             <Button
               onClick={runDemo}
@@ -166,6 +176,7 @@ export default function AppLayout() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           </div>
         </header>
 
@@ -182,7 +193,7 @@ export default function AppLayout() {
         )}
 
         {/* Main Content */}
-        <main className="px-8 pt-6 pb-12">
+        <main className="px-4 sm:px-6 lg:px-8 pt-6 pb-12">
           <Outlet />
         </main>
       </div>

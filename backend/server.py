@@ -457,6 +457,7 @@ async def get_prospect_job(request: Request, job_id: str):
 async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: str):
     """Background task: Run Apify LinkedIn scraper and store results"""
     import asyncio
+    import httpx
     try:
         li_params = job.get("linkedin_params", {})
         keyword = li_params.get("keyword", job.get("category", ""))
@@ -542,9 +543,6 @@ async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: s
             # Auto-rescore
             if inserted > 0:
                 asyncio.create_task(_auto_rescore_job_leads(job_id, tenant_id))
-    except Exception as e:
-        logger.error(f"Apify LinkedIn error for job {job_id}: {e}")
-        await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
     except Exception as e:
         logger.error(f"Apify LinkedIn error for job {job_id}: {e}")
         await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})

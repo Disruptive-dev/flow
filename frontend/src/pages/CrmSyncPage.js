@@ -65,6 +65,8 @@ export default function CrmPage() {
   const [newTaskForm, setNewTaskForm] = useState({ title: '', type: 'llamada', due_date: '', description: '' });
   const [dealTags, setDealTags] = useState([]);
   const [newTag, setNewTag] = useState('');
+  const [pipelineView, setPipelineView] = useState('kanban'); // 'kanban' | 'list'
+  const [selectedDeals, setSelectedDeals] = useState([]);
 
   const fetchData = async () => {
     try {
@@ -222,6 +224,21 @@ export default function CrmPage() {
   const toggleSelect = (id) => setSelectedContacts(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   const toggleAll = () => setSelectedContacts(selectedContacts.length === contacts.length ? [] : contacts.map(c => c.id));
 
+  const toggleDealSelect = (id) => setSelectedDeals(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleAllDeals = () => setSelectedDeals(selectedDeals.length === deals.length ? [] : deals.map(d => d.id));
+  const bulkDealAction = async (action, stage) => {
+    if (!selectedDeals.length) return;
+    try {
+      if (action === 'delete' && !window.confirm(`Eliminar ${selectedDeals.length} oportunidades?`)) return;
+      const body = { deal_ids: selectedDeals, action };
+      if (stage) body.stage = stage;
+      const { data } = await api.post('/crm/deals/bulk-action', body);
+      toast.success(data.message);
+      setSelectedDeals([]);
+      fetchData();
+    } catch { toast.error('Error en accion masiva'); }
+  };
+
   // Drag & Drop
   const handleDragStart = (e, deal) => { setDraggedDeal(deal); e.dataTransfer.effectAllowed = 'move'; e.currentTarget.style.opacity = '0.5'; };
   const handleDragEnd = (e) => { e.currentTarget.style.opacity = '1'; setDraggedDeal(null); setDragOverStage(null); };
@@ -361,7 +378,34 @@ export default function CrmPage() {
 
         {/* Pipeline Tab */}
         <TabsContent value="pipeline">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="crm-pipeline">
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div className="flex items-center gap-1 bg-zinc-100 rounded-lg p-0.5">
+              <button
+                onClick={() => setPipelineView('kanban')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${pipelineView === 'kanban' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                data-testid="pipeline-view-kanban">Kanban</button>
+              <button
+                onClick={() => setPipelineView('list')}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${pipelineView === 'list' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
+                data-testid="pipeline-view-list">Lista</button>
+            </div>
+            {pipelineView === 'list' && selectedDeals.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" data-testid="pipeline-bulk-actions">Acciones masivas ({selectedDeals.length})</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {stages.map(s => (
+                    <DropdownMenuItem key={s} onClick={() => bulkDealAction('move', s)}>Mover a {stageLabels[s]}</DropdownMenuItem>
+                  ))}
+                  <DropdownMenuItem onClick={() => bulkDealAction('delete')} className="text-red-600"><Trash2 className="w-3.5 h-3.5 mr-2" /> Eliminar seleccionadas</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+
+          {pipelineView === 'kanban' ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="crm-pipeline">
             {stages.map(stage => {
               const stageDeals = deals.filter(d => d.stage === stage);
               const sc = stageColors[stage];
@@ -402,6 +446,43 @@ export default function CrmPage() {
               );
             })}
           </div>
+          ) : (
+          <Card className="border-zinc-200 rounded-xl overflow-hidden" data-testid="crm-pipeline-list">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-zinc-50 hover:bg-zinc-50">
+                    <TableHead className="w-10"><Checkbox checked={selectedDeals.length === deals.length && deals.length > 0} onCheckedChange={toggleAllDeals} /></TableHead>
+                    <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Titulo</TableHead>
+                    <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Contacto</TableHead>
+                    <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Etapa</TableHead>
+                    <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Valor</TableHead>
+                    <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Creado</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {deals.length === 0 ? (
+                    <TableRow><TableCell colSpan={6} className="text-center py-12 text-zinc-400">No hay oportunidades aun.</TableCell></TableRow>
+                  ) : deals.map((d, i) => (
+                    <TableRow key={d.id} className="hover:bg-zinc-50/80" data-testid={`pipeline-list-row-${i}`}>
+                      <TableCell><Checkbox checked={selectedDeals.includes(d.id)} onCheckedChange={() => toggleDealSelect(d.id)} /></TableCell>
+                      <TableCell className="font-medium text-zinc-900 text-sm cursor-pointer hover:text-blue-600" onClick={() => d.contact_id && openContact(d.contact_id)}>{d.title}</TableCell>
+                      <TableCell className="text-sm text-zinc-600">{d.contact_name || '-'}</TableCell>
+                      <TableCell>
+                        <Select value={d.stage} onValueChange={(v) => updateDealStage(d.id, v)}>
+                          <SelectTrigger className="h-7 text-xs w-36 border-zinc-200"><SelectValue /></SelectTrigger>
+                          <SelectContent>{stages.map(s => <SelectItem key={s} value={s}>{stageLabels[s]}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </TableCell>
+                      <TableCell className="text-sm font-semibold text-emerald-600">{d.value > 0 ? `$${d.value.toLocaleString()}` : '-'}</TableCell>
+                      <TableCell className="text-xs text-zinc-500">{d.created_at ? new Date(d.created_at).toLocaleDateString() : '-'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </Card>
+          )}
         </TabsContent>
       </Tabs>
 

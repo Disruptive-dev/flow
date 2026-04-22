@@ -45,7 +45,7 @@ const navSections = [
 
 const superAdminSection = { key: 'tenants', label: 'Admin Tenants', path: '/admin/tenants', icon: ShieldCheck };
 
-export default function Sidebar() {
+export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const location = useLocation();
@@ -59,10 +59,17 @@ export default function Sidebar() {
     return () => window.removeEventListener('modules-updated', loadModules);
   }, []);
 
+  // Close mobile sidebar on route change
+  useEffect(() => { if (mobileOpen) onClose(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
   const isSuperAdmin = user?.role === 'super_admin';
 
   return (
-    <aside data-testid="sidebar" className="fixed left-0 top-0 h-screen w-[260px] bg-zinc-950 text-white flex flex-col z-50">
+    <>
+      {/* Mobile overlay */}
+      {mobileOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={onClose} data-testid="sidebar-overlay" />}
+      <aside data-testid="sidebar" className={`fixed left-0 top-0 h-screen w-[260px] bg-zinc-950 text-white flex flex-col z-50 transition-transform duration-300 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} onClick={(e) => e.stopPropagation()}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-zinc-800">
         <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">
@@ -170,5 +177,6 @@ export default function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }

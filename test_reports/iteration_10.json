@@ -1,0 +1,69 @@
+{
+  "summary": "Iteration 10 pre-launch testing complete. Verified 1) forgot/reset password (JWT-based), 2) 15-day trial on register with only leads+crm modules, 3) super_admin-only reset-demo-data endpoint, 4) CRM deals bulk-action move/delete, 5) LoginPage forgot-password modal, 6) ResetPasswordPage rendering + redirect without token, 7) Pipeline Kanban/Lista toggle, 8) Settings Empresa reset-demo-data-button visible for super_admin, 9) Mobile sidebar toggle (<lg viewport). All 10 backend tests pass. All verified frontend flows pass.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/reset-password", "issue": "Uses bare 'except:' which catches any exception (including KeyboardInterrupt/SystemExit). Narrow to jwt.PyJWTError/Exception."},
+      {"endpoint": "POST /api/auth/reset-password", "issue": "Fallback JWT secret hardcoded 'spectra-flow-secret-key-2024' if JWT_SECRET missing. Should fail fast instead to avoid insecure default."},
+      {"endpoint": "POST /api/auth/forgot-password", "issue": "Returns 400 when email missing which slightly leaks behavior vs enumeration protection; consider returning 200 generic message for any input."},
+      {"endpoint": "POST /api/admin/reset-demo-data", "issue": "Deletes only current user's tenant_id data; endpoint name says 'demo' but super_admin could accidentally wipe real tenant. Consider explicit tenant_id param or demo-only flag."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CRM Pipeline Lista view", "issues": ["Uses custom circle icons instead of native <input type=checkbox> which limits native a11y / keyboard accessibility. Consider adding role=checkbox and aria-checked."]}
+    ]
+  },
+  "passed_tests": [
+    "POST /api/auth/forgot-password valid email returns 200 generic message",
+    "POST /api/auth/forgot-password non-existent email returns 200 (no enumeration)",
+    "POST /api/auth/reset-password invalid token returns 400",
+    "POST /api/auth/reset-password valid JWT token updates password; old password rejected",
+    "POST /api/auth/register creates tenant plan=trial, trial_ends_at ~15 days, modules leads=true crm=true prospeccion=false email_marketing=false",
+    "POST /api/admin/reset-demo-data returns 403 for non super_admin",
+    "POST /api/admin/reset-demo-data as super_admin returns deleted counts for expected collections",
+    "POST /api/crm/deals/bulk-action action=move updates stage on listed deals (verified via GET /api/crm/deals)",
+    "POST /api/crm/deals/bulk-action action=delete removes deals",
+    "POST /api/crm/deals/bulk-action invalid action returns 400",
+    "Login page renders 'Olvide mi password' link and modal with email input submits successfully",
+    "/reset-password without token redirects to /login",
+    "/reset-password?token=... renders 2 password inputs",
+    "/settings Empresa tab shows reset-demo-data-button (data-testid) for super_admin",
+    "/crm-sync Pipeline tab shows pipeline-view-kanban and pipeline-view-list toggle buttons",
+    "Switching to Lista view renders table with stage dropdown and selection circles",
+    "Mobile viewport (390x844) shows sidebar-mobile-toggle hamburger that opens the sidebar drawer"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iteration10.py",
+    "/app/test_reports/pytest/pytest_results_v10.xml"
+  ],
+  "action_items": [
+    "(minor) Replace bare 'except:' in /api/auth/reset-password with 'except Exception' and log the error",
+    "(minor) Remove hardcoded JWT secret fallback in reset-password; rely only on os.environ['JWT_SECRET']",
+    "(enhancement) Make /api/auth/forgot-password return 200 for empty email instead of 400 to fully prevent enumeration",
+    "(enhancement) Consider tenant_id scoping / demo-flag guard on /api/admin/reset-demo-data"
+  ],
+  "critical_code_review_comments": [
+    "server.py is 3144 lines - should be split into modular routers (auth, crm, leads, admin, email) for maintainability.",
+    "Reset-password endpoint uses bare except which swallows all errors and makes debugging hard.",
+    "No rate limiting on /api/auth/forgot-password - could be abused for email bombing.",
+    "JWT token for reset-password reuses access token type (24h expiry). Industry best practice is a short-lived (15-60 min) dedicated password_reset token type.",
+    "Trial expiry enforcement not tested - verify middleware checks trial_ends_at to block tenants after 15 days."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration10.py"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 tests passed)",
+    "frontend": "100% (all UI flows verified)"
+  },
+  "test_credentials": {
+    "super_admin": "admin@spectraflow.com / Admin123! (from /app/memory/test_credentials.md - NOTE: review_request mentioned pablo@disruptive-sw.com/12345678 which is NOT seeded; used admin@spectraflow.com instead)"
+  },
+  "seed_data_creation": "Created transient users: trial-reset-*@example.com, trial-test-*@example.com, non-sa-*@example.com and their tenants; TEST_BulkDeal/TEST_BulkContact deals/contacts via admin tenant.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All iteration 10 features working. Note: super_admin credentials in /app/memory/test_credentials.md are admin@spectraflow.com/Admin123! — the pablo@disruptive-sw.com credentials mentioned in review requests are NOT seeded. /api/auth/reset-password uses JWT access tokens as reset tokens; tests fabricate the token using JWT_SECRET. CRM deals have no GET-by-id endpoint — use GET /api/crm/deals listing to verify. CRM Pipeline 'Lista' view uses custom circle icons (not native checkboxes) for selection."
+}
