@@ -3045,14 +3045,23 @@ async def n8n_job_progress(request: Request, job_id: str, body: Dict[str, Any] =
     return {"message": f"Stage {stage_name} updated to {stage_status}"}
 
 @api_router.post("/webhooks/chatwoot/lead")
-async def chatwoot_lead_webhook(request: Request, body: Dict[str, Any] = {}):
-    """Receives new leads from Chatwoot/OptimIA Bot — creates in LEADS collection with BOT tag"""
-    tenant_id = body.get("tenant_id", "")
+@api_router.post("/webhooks/chatwoot/lead/{tenant_token}")
+async def chatwoot_lead_webhook(request: Request, tenant_token: str = "", body: Dict[str, Any] = {}):
+    """Receives new leads from Chatwoot/OptimIA Bot — creates in LEADS collection with OptimIA Bot source.
+
+    URL format per tenant: POST /api/webhooks/chatwoot/lead/{tenant_id}
+    Also accepts tenant_id in body as fallback.
+    """
+    tenant_id = tenant_token or body.get("tenant_id", "")
     if not tenant_id:
         tenant = await db.tenants.find_one({}, {"_id": 0, "id": 1})
         tenant_id = tenant["id"] if tenant else ""
     if not tenant_id:
-        raise HTTPException(status_code=400, detail="tenant_id required")
+        raise HTTPException(status_code=400, detail="tenant_id required (pass as URL path or body.tenant_id)")
+    # Validate tenant exists
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0, "id": 1, "name": 1})
+    if not tenant:
+        raise HTTPException(status_code=404, detail=f"tenant {tenant_id} not found")
     now = datetime.now(timezone.utc).isoformat()
     email = body.get("email", "")
     phone = body.get("phone", body.get("phone_number", ""))
