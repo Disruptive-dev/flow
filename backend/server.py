@@ -829,6 +829,9 @@ async def bulk_lead_action(request: Request, body: BulkActionRequest):
     user = await get_current_user(request)
     now = datetime.now(timezone.utc).isoformat()
     status_map = {"approve": "approved", "reject": "rejected", "queue_sequence": "queued_for_sequence", "send_to_crm": "sent_to_crm"}
+    if body.action == "delete":
+        result = await db.leads.delete_many({"id": {"$in": body.lead_ids}, "tenant_id": user["tenant_id"]})
+        return {"message": f"{result.deleted_count} leads eliminados"}
     new_status = status_map.get(body.action)
     if not new_status:
         raise HTTPException(status_code=400, detail="Invalid action")

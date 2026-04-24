@@ -224,6 +224,7 @@ export default function LeadsPage() {
   };
   const handleBulk = async (action) => {
     if (!selected.length) return toast.error('Selecciona leads primero');
+    if (action === 'delete' && !window.confirm(`Eliminar ${selected.length} lead(s)? Esta accion no se puede deshacer.`)) return;
     try { const { data } = await api.post('/leads/bulk-action', { lead_ids: selected, action }); toast.success(data.message); setSelected([]); fetchLeads(); }
     catch { toast.error('Error en accion masiva'); }
   };
@@ -337,6 +338,7 @@ export default function LeadsPage() {
                 <DropdownMenuItem onClick={() => handleBulk('reject')} data-testid="bulk-reject">Rechazar seleccionados</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleBulk('queue_sequence')}>Enviar a secuencia</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => handleBulk('send_to_crm')}>Enviar al CRM</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleBulk('delete')} className="text-red-600" data-testid="bulk-delete">Eliminar seleccionados</DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           )}
