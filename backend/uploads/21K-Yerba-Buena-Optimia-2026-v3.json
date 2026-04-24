@@ -1,0 +1,706 @@
+{
+  "name": "[21K Yerba Buena] - Optimia 2026",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aead23c4-6f1f-4ead-908f-5a3777463080",
+        "options": {}
+      },
+      "id": "8f247683-a200-422d-9952-b144a98dd921",
+      "name": "Webhook Entrante",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        352,
+        2688
+      ],
+      "webhookId": "aead23c4-6f1f-4ead-908f-5a3777463080"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "00f6bf63-a78a-4b73-9659-6fb68f6827e9",
+              "leftValue": "={{ $json.body.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "35a200ea-dd69-42e8-af84-d24f6c13f802",
+              "leftValue": "={{ $json.body.event }}",
+              "rightValue": "message_created",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "d7975576-7b08-424b-a8a2-5b826153cbbe",
+              "leftValue": "={{ $json.body.conversation.assignee_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "61044d8d-fd91-49b2-b5de-e6af66101d8d",
+      "name": "Filtro Cliente",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        592,
+        2688
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.min($node[\"Cerebro Dify\"].json.answer.length * 0.05, 5) }}",
+        "unit": "seconds"
+      },
+      "id": "ec4b2290-1aaa-40d0-b5e6-a08b06de4f95",
+      "name": "Efecto Humano (Wait)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1760,
+        3072
+      ],
+      "webhookId": "f24e7707-de0e-44a5-981d-7cce617dbc7e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://inbox.optimia.disruptive-sw.com/api/v1/accounts/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"conversation\"][\"id\"] }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "uwH8W8e2eQN5ppjjtSRGrNUa "
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $node[\"Cerebro Dify\"].json[\"answer\"] }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "5110d314-05fc-49b3-8d7e-ce02eb71bc2d",
+      "name": "Enviar Respuesta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2000,
+        3056
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://inbox.optimia.disruptive-sw.com/api/v1/accounts/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"account\"][\"id\"] }}/contacts/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"sender\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "uwH8W8e2eQN5ppjjtSRGrNUa"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "79ece815-1c9d-4cc4-b94f-07192ef60d1a",
+      "name": "Datos del Cliente - Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        864,
+        2432
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://dify.optimia.disruptive-sw.com/v1/chat-messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer app-yakABiaccuXqKHysnspZwaYX"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={{ ({}) }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ $('Filtro Cliente').item.json.body.conversation.messages[0].processed_message_content }}"
+            },
+            {
+              "name": "response_mode",
+              "value": "blocking"
+            },
+            {
+              "name": "user",
+              "value": "={{ $json.payload.id }}"
+            },
+            {
+              "name": "nombre_chatwoot",
+              "value": "={{ $json.payload.name }}"
+            },
+            {
+              "name": "email_chatwoot",
+              "value": "={{ $json.payload.email }}"
+            },
+            {
+              "name": "conversation_id",
+              "value": "={{ $json.payload.custom_attributes.dify_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c72cb08c-550d-4c55-afd4-c8589bd684dc",
+      "name": "Cerebro Dify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1088,
+        2352
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://inbox.optimia.disruptive-sw.com/api/v1/accounts/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"account\"][\"id\"] }}/contacts/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"sender\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "uwH8W8e2eQN5ppjjtSRGrNUa"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"custom_attributes\": {\n    \"dify_id\": \"{{ $node[\"Cerebro Dify\"].json.conversation_id }}\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2128,
+        2464
+      ],
+      "id": "06bccbda-c8c5-4f86-8361-eb5f930c3c14",
+      "name": "Update Contact"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fd18b83b-eb00-4273-a9c8-fd9b8923bccd",
+              "leftValue": "={{ $node[\"Cerebro Dify\"].json.answer }}",
+              "rightValue": "[HUMAN_REQUEST]",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1680,
+        2240
+      ],
+      "id": "7528de84-3cce-48e7-b58d-8104b8880e1e",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://inbox.optimia.disruptive-sw.com/api/v1/accounts/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"conversation\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "uwH8W8e2eQN5ppjjtSRGrNUa"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"status\": \"open\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1936,
+        2272
+      ],
+      "id": "c3473663-4b70-49d9-b149-f5849c1e8e20",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://inbox.optimia.disruptive-sw.com/api/v1/accounts/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante\"].json[\"body\"][\"conversation\"][\"id\"] }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "uwH8W8e2eQN5ppjjtSRGrNUa"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": \"¡Excelente decisión, {{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}! 🚀 He detectado que necesitás una atención personalizada. Acabo de avisar a mi equipo humano y te contactarán por aquí mismo en breve. ¡Aguardame un instante!\",\n  \"message_type\": \"outgoing\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2144,
+        2272
+      ],
+      "id": "82a269ef-ba0b-4d78-b106-2f9ac630ea1f",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "url": "https://crm.optimia.disruptive-sw.com/api/v1/Lead",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "where[0][type]",
+              "value": "equals"
+            },
+            {
+              "name": "where[0][attribute]",
+              "value": "emailAddress"
+            },
+            {
+              "name": "where[0][value]",
+              "value": "={{ $node[\"Cerebro Dify\"].json.metadata.usage.email_chatwoot }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "d0455611fe454faf62f5d459436d0699"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1248,
+        2368
+      ],
+      "id": "182c3085-eba8-410e-993c-e4f00f51b12a",
+      "name": "Buscar en EspoCRM (El \"Detective\")"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8a7f6d50-25a1-4122-a22c-19765a34f909",
+              "leftValue": "={{ $json.total }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1408,
+        2304
+      ],
+      "id": "a058e5cf-6ab3-4b76-ba44-24a3d8556d0f",
+      "name": "IF (El \"Portero\")"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://crm.optimia.disruptive-sw.com/api/v1/Lead",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "d0455611fe454faf62f5d459436d0699"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"firstName\": \"{{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}\",\n  \"emailAddress\": \"{{ $node[\"Cerebro Dify\"].json.metadata.usage.email_chatwoot }}\",\n  \"phoneNumber\": \"{{ $node[\"Webhook Entrante\"].json.body.sender.phone_number }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1632,
+        2448
+      ],
+      "id": "5e5ae018-c21d-4ed1-b471-6d3014c9a416",
+      "name": "Crear Lead (El \"Cazador\")"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://flow.spectra-metrics.com/api/webhooks/chatwoot/lead/a6027a8d-f21b-4568-915f-a68778580f19",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"business_name\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.name }}\",\n  \"contact_name\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.name }}\",\n  \"email\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.email }}\",\n  \"phone\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.phone_number }}\",\n  \"channel\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::Whatsapp' ? 'whatsapp' : $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::WebWidget' ? 'web' : $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::FacebookPage' ? 'facebook' : $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::Instagram' ? 'instagram' : 'otro' }}\",\n  \"city\": \"\",\n  \"message\": \"Lead desde {{ $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.name }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2402,
+        2672
+      ],
+      "id": "71defa95-7a93-4381-8475-de67b1a61687",
+      "name": "Enviar a Spectra Flow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "b8d10740-9465-4f68-9b37-2d01d63a5068",
+              "leftValue": "={{ $('Datos del Cliente - Chatwoot').item.json.payload.phone_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "7cafa0c7-4fd3-4f5e-9fe5-76cfa5a6da8b",
+              "leftValue": "={{ $('Datos del Cliente - Chatwoot').item.json.payload.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "40ae3646-eae2-4e82-9e08-5db3e71a610e",
+              "leftValue": "={{ ($('Datos del Cliente - Chatwoot').item.json.payload.name || '').match(/^[a-z]+-[a-z]+-\\d+$/) ? 'anonimo' : 'real' }}",
+              "rightValue": "real",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "b5f83f6e-8d93-4cb5-8214-3c775206d5d3",
+      "name": "Filtro Lead Valido",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2102,
+        2672
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook Entrante": {
+      "main": [
+        [
+          {
+            "node": "Filtro Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Cliente": {
+      "main": [
+        [
+          {
+            "node": "Datos del Cliente - Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos del Cliente - Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Cerebro Dify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cerebro Dify": {
+      "main": [
+        [
+          {
+            "node": "Buscar en EspoCRM (El \"Detective\")",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar en EspoCRM (El \"Detective\")": {
+      "main": [
+        [
+          {
+            "node": "IF (El \"Portero\")",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF (El \"Portero\")": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Crear Lead (El \"Cazador\")",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Lead (El \"Cazador\")": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Filtro Lead Valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact": {
+      "main": [
+        [
+          {
+            "node": "Efecto Humano (Wait)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Efecto Humano (Wait)": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Filtro Lead Valido",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Lead Valido": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Spectra Flow",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "bc971216-b329-4fd0-825c-0dadc2437acd",
+  "meta": {
+    "instanceId": "11baef16da47541ce1966eb2009a036543444bcddb67c4e8aecdda46714f4c95"
+  },
+  "id": "qJsrjlwKLu95rvSm",
+  "tags": [
+    {
+      "updatedAt": "2026-02-18T02:41:10.028Z",
+      "createdAt": "2026-02-18T02:41:10.028Z",
+      "id": "x6Lhwx8MiKCl6vtK",
+      "name": "OPTIMIA"
+    }
+  ]
+}
