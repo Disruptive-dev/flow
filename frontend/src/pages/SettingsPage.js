@@ -178,10 +178,10 @@ export default function SettingsPage() {
   };
 
   const resetDemoData = async () => {
-    if (!window.confirm('Estas seguro? Esto eliminara TODOS los datos de demo (leads, contactos, deals, tareas, notas, campanas) del tenant actual. No se puede deshacer.')) return;
+    if (!window.confirm('Estas seguro? Se eliminaran UNICAMENTE los datos creados por el modo Demo (leads, jobs y campanas marcadas como demo). Los datos reales NO se tocan. Esta accion no se puede deshacer.')) return;
     try {
       const { data } = await api.post('/admin/reset-demo-data');
-      toast.success(`Datos eliminados: ${Object.values(data.deleted).reduce((a, b) => a + b, 0)} registros`);
+      toast.success(data.message || 'Datos demo eliminados');
     } catch (err) { toast.error(err.response?.data?.detail || 'Error al resetear'); }
   };
 
@@ -245,10 +245,10 @@ export default function SettingsPage() {
               <Button onClick={saveBranding} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-branding-button">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />} Guardar
               </Button>
-              {user?.role === 'super_admin' && (
+              {(user?.role === 'super_admin' || user?.role === 'tenant_admin') && (
                 <div className="mt-8 pt-6 border-t border-red-200">
                   <h3 className="font-heading font-medium text-red-700 text-sm mb-1">Zona peligrosa</h3>
-                  <p className="text-xs text-zinc-500 mb-3">Elimina todos los datos de demo del tenant actual. Solo visible para Super Admin.</p>
+                  <p className="text-xs text-zinc-500 mb-3">Elimina unicamente los datos creados por el modo Demo (prospect jobs, leads, campanas marcadas como demo). No afecta datos reales.</p>
                   <Button onClick={resetDemoData} variant="outline" className="border-red-300 text-red-700 hover:bg-red-50" data-testid="reset-demo-data-button">
                     <Trash2 className="w-4 h-4 mr-2" /> Resetear datos demo
                   </Button>

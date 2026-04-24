@@ -64,12 +64,13 @@ export default function AppLayout() {
     toast.info('Modo Demo activado. Creando trabajo de prospeccion...');
 
     try {
-      // Step 1: Create a prospect job
+      // Step 1: Create a prospect job (marcado como demo)
       const { data: job } = await api.post('/prospect-jobs', {
         province: 'Tucuman',
         city: 'San Miguel de Tucuman',
         category: 'Real Estate',
-        quantity: 50
+        quantity: 50,
+        is_demo: true
       });
       toast.success(`Trabajo creado: Real Estate en San Miguel de Tucuman`);
 
@@ -85,7 +86,7 @@ export default function AppLayout() {
 
       // Step 3: Create a demo campaign
       await new Promise(r => setTimeout(r, 1000));
-      const { data: campaign } = await api.post('/campaigns', { name: 'Demo - Real Estate Tucuman' });
+      const { data: campaign } = await api.post('/campaigns', { name: 'Demo - Real Estate Tucuman', is_demo: true });
       toast.success('Campana demo creada');
 
       // Step 4: Simulate campaign sending
@@ -118,7 +119,8 @@ export default function AppLayout() {
               <Menu className="w-5 h-5" />
             </button>
             <div className="flex items-center justify-end gap-2 sm:gap-3 flex-1">
-            {/* Demo Button */}
+            {/* Demo Button - solo admins */}
+            {(user?.role === 'super_admin' || user?.role === 'tenant_admin') && (
             <Button
               onClick={runDemo}
               disabled={demoRunning}
@@ -133,6 +135,7 @@ export default function AppLayout() {
               {demoRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
               {demoRunning ? 'Ejecutando Demo...' : demoActive ? 'Demo Activo' : 'Demo'}
             </Button>
+            )}
 
             <Button
               variant="ghost"

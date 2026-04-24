@@ -111,6 +111,7 @@ class ProspectJobCreate(BaseModel):
     filters: Optional[Dict[str, Any]] = None
     source: Optional[str] = "google_maps"
     linkedin_params: Optional[Dict[str, Any]] = None
+    is_demo: Optional[bool] = False
 
 class LeadStatusUpdate(BaseModel):
     status: str
@@ -124,6 +125,7 @@ class CampaignCreate(BaseModel):
     sender_profile_id: Optional[str] = ""
     template_id: Optional[str] = ""
     lead_ids: Optional[List[str]] = []
+    is_demo: Optional[bool] = False
 
 class CampaignUpdate(BaseModel):
     name: Optional[str] = None
@@ -269,16 +271,38 @@ async def reset_password(body: Dict[str, Any] = {}):
 
 @api_router.post("/admin/reset-demo-data")
 async def reset_demo_data(request: Request):
-    """Reset all demo data - SUPER ADMIN ONLY"""
+    """Borra SOLO datos marcados como is_demo=true del tenant actual.
+    Accesible para tenant_admin y super_admin."""
     user = await get_current_user(request)
-    if user["role"] != "super_admin":
-        raise HTTPException(status_code=403, detail="Solo super_admin")
+    if user["role"] not in ("super_admin", "tenant_admin"):
+        raise HTTPException(status_code=403, detail="Solo administradores")
     tid = user["tenant_id"]
     counts = {}
-    for col in ["leads", "crm_contacts", "crm_deals", "crm_tasks", "crm_notes", "crm_deal_products", "prospect_jobs", "campaigns", "email_campaigns", "email_lists", "email_segments", "activity_log"]:
-        r = await db[col].delete_many({"tenant_id": tid})
+    # 1) Borrar jobs demo y sus leads asociados
+    demo_jobs = await db.prospect_jobs.find({"tenant_id": tid, "is_demo": True}, {"id": 1, "_id": 0}).to_list(10000)
+    demo_job_ids = [j["id"] for j in demo_jobs]
+    # 2) Borrar leads que sean is_demo=true O que pertenezcan a un job demo
+    lead_filter = {"tenant_id": tid, "$or": [{"is_demo": True}, {"job_id": {"$in": demo_job_ids}}]} if demo_job_ids else {"tenant_id": tid, "is_demo": True}
+    r = await db.leads.delete_many(lead_filter)
+    counts["leads"] = r.deleted_count
+    # 3) Borrar campañas demo
+    demo_campaigns = await db.campaigns.find({"tenant_id": tid, "is_demo": True}, {"id": 1, "_id": 0}).to_list(10000)
+    demo_campaign_ids = [c["id"] for c in demo_campaigns]
+    r = await db.campaigns.delete_many({"tenant_id": tid, "is_demo": True})
+    counts["campaigns"] = r.deleted_count
+    # 4) Borrar jobs demo
+    r = await db.prospect_jobs.delete_many({"tenant_id": tid, "is_demo": True})
+    counts["prospect_jobs"] = r.deleted_count
+    # 5) Borrar CRM (contactos/deals/tasks/notes) que sean is_demo=true
+    for col in ["crm_contacts", "crm_deals", "crm_tasks", "crm_notes", "crm_deal_products"]:
+        r = await db[col].delete_many({"tenant_id": tid, "is_demo": True})
         counts[col] = r.deleted_count
-    return {"message": "Datos demo eliminados", "deleted": counts}
+    # 6) Borrar email marketing demo
+    for col in ["email_campaigns", "email_lists", "email_segments"]:
+        r = await db[col].delete_many({"tenant_id": tid, "is_demo": True})
+        counts[col] = r.deleted_count
+    total = sum(counts.values())
+    return {"message": f"Datos demo eliminados ({total} registros)", "deleted": counts}
 
 @api_router.put("/auth/profile")
 async def update_profile(request: Request, body: Dict[str, Any] = {}):
@@ -410,6 +434,7 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
         "linkedin_params": body.linkedin_params or {},
         "raw_count": 0, "cleaned_count": 0, "qualified_count": 0,
         "rejected_count": 0, "approved_count": 0,
+        "is_demo": bool(body.is_demo),
         "stages": [
             {"name": "job_created", "status": "completed", "timestamp": now},
             {"name": "scraping", "status": "pending", "timestamp": None},
@@ -678,6 +703,7 @@ async def start_prospect_job(request: Request, job_id: str):
             "recommendation": random.choice(rec_texts[quality_levels[ql]]),
             "recommended_first_line": random.choice(first_lines),
             "status": random.choice(statuses_pool),
+            "is_demo": bool(job.get("is_demo", False)),
             "created_at": now, "updated_at": now
         }
         leads_to_insert.append(lead)
@@ -859,7 +885,7 @@ async def create_campaign(request: Request, body: CampaignCreate):
     user = await get_current_user(request)
     campaign_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
-    campaign = {"id": campaign_id, "tenant_id": user["tenant_id"], "name": body.name, "sender_profile_id": body.sender_profile_id or "", "template_id": body.template_id or "", "status": "draft", "lead_count": len(body.lead_ids) if body.lead_ids else 0, "lead_ids": body.lead_ids or [], "sent_count": 0, "open_count": 0, "click_count": 0, "reply_count": 0, "interested_count": 0, "crm_count": 0, "created_by": user["name"], "created_at": now, "updated_at": now}
+    campaign = {"id": campaign_id, "tenant_id": user["tenant_id"], "name": body.name, "sender_profile_id": body.sender_profile_id or "", "template_id": body.template_id or "", "status": "draft", "is_demo": bool(body.is_demo), "lead_count": len(body.lead_ids) if body.lead_ids else 0, "lead_ids": body.lead_ids or [], "sent_count": 0, "open_count": 0, "click_count": 0, "reply_count": 0, "interested_count": 0, "crm_count": 0, "created_by": user["name"], "created_at": now, "updated_at": now}
     await db.campaigns.insert_one(campaign)
     return serialize_doc(campaign)
 
