@@ -436,7 +436,7 @@ export default function CrmPage() {
               const isOver = dragOverStage === stage;
               const stageValue = stageDeals.reduce((sum, d) => sum + (d.value || 0), 0);
               return (
-                <div key={stage} className={`shrink-0 w-[260px] sm:w-[230px] md:w-[210px] xl:w-[200px] snap-start rounded-xl border transition-all ${isOver ? `${sc.border} border-2 shadow-md` : 'border-zinc-200'}`}
+                <div key={stage} className={`shrink-0 w-[260px] sm:w-[240px] md:w-[220px] lg:w-auto lg:flex-1 lg:min-w-[180px] xl:min-w-[170px] snap-start rounded-xl border transition-all ${isOver ? `${sc.border} border-2 shadow-md` : 'border-zinc-200'}`}
                   onDragOver={(e) => handleDragOver(e, stage)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, stage)} data-testid={`pipeline-stage-${stage}`}>
                   <div className={`px-3 py-2.5 rounded-t-xl ${sc.header} border-b ${sc.border}`}>
                     <div className="flex items-center justify-between">
