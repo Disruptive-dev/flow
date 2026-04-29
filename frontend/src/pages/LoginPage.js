@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Zap, Globe, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function LoginPage() {
   const { user, login, register, formatApiError } = useAuth();
@@ -57,14 +58,17 @@ export default function LoginPage() {
     <div className="min-h-screen bg-zinc-950 flex" data-testid="login-page">
       {/* Left Side - Form */}
       <div className="w-full lg:w-[480px] flex flex-col justify-center px-8 lg:px-16 relative">
-        <button
-          onClick={toggleLang}
-          className="absolute top-6 right-6 text-zinc-500 hover:text-white flex items-center gap-1.5 text-sm transition-colors"
-          data-testid="login-language-toggle"
-        >
-          <Globe className="w-4 h-4" />
-          {lang.toUpperCase()}
-        </button>
+        <div className="absolute top-6 right-6 flex items-center gap-3">
+          <ThemeToggle variant="login" />
+          <button
+            onClick={toggleLang}
+            className="text-zinc-500 hover:text-white flex items-center gap-1.5 text-sm transition-colors"
+            data-testid="login-language-toggle"
+          >
+            <Globe className="w-4 h-4" />
+            {lang.toUpperCase()}
+          </button>
+        </div>
 
         <div className="mb-10">
           <div className="flex items-center gap-3 mb-8">
@@ -194,10 +198,10 @@ export default function LoginPage() {
             <Zap className="w-10 h-10 text-blue-500" />
           </div>
           <h2 className="text-3xl font-heading font-semibold text-white mb-4 tracking-tight">
-            Find. Clean. Activate. Convert.
+            {t('tagline_find')}
           </h2>
           <p className="text-zinc-400 text-base leading-relaxed max-w-md mx-auto">
-            Spectra Flow finds, cleans, activates, and converts business opportunities from a single premium platform.
+            {t('tagline_desc')}
           </p>
         </div>
       </div>

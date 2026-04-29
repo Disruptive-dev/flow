@@ -5,6 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useDemo } from '@/contexts/DemoContext';
 import { Outlet, useNavigate } from 'react-router-dom';
 import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle, Pencil, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import ThemeToggle from '@/components/ThemeToggle';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -109,11 +110,11 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div className="min-h-screen bg-zinc-50 dark:bg-zinc-900">
       <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} desktopHidden={desktopHidden} />
       <div className={`min-h-screen transition-[margin] duration-300 ${desktopHidden ? 'lg:ml-0' : 'lg:ml-[260px]'}`}>
         {/* Top Header */}
-        <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm border-b border-zinc-200 px-4 sm:px-8 py-3">
+        <header className="sticky top-0 z-40 bg-white/80 dark:bg-zinc-950/80 backdrop-blur-sm border-b border-zinc-200 dark:border-zinc-800 px-4 sm:px-8 py-3">
           <div className="flex items-center justify-between gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -150,6 +151,8 @@ export default function AppLayout() {
               {demoRunning ? 'Ejecutando Demo...' : demoActive ? 'Demo Activo' : 'Demo'}
             </Button>
             )}
+
+            <ThemeToggle />
 
             <Button
               variant="ghost"

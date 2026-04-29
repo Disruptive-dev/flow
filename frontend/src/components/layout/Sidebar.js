@@ -5,7 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import {
   LayoutDashboard, Search, Zap, Users, Mail, FileText,
   RefreshCw, BarChart3, Settings, LogOut, AtSign, ShieldCheck,
-  MessageCircle, Palette, Brain, DollarSign, FolderKanban, Heart, ExternalLink
+  MessageCircle, Palette, Brain, DollarSign, FolderKanban, Heart, ExternalLink, WandSparkles, Bot
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -169,7 +169,7 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {}, deskto
             className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/60 transition-all duration-200 group"
             data-testid="sidebar-nav-content-ia">
             <span className="flex items-center gap-3">
-              <Palette className="w-[18px] h-[18px] text-purple-400" />
+              <WandSparkles className="w-[18px] h-[18px] text-purple-400" />
               <span className="text-purple-400 font-semibold">Spectra Content IA</span>
             </span>
             <ExternalLink className="w-3.5 h-3.5 text-purple-400/70 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -178,8 +178,8 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {}, deskto
             className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/60 transition-all duration-200 group"
             data-testid="sidebar-nav-optimia">
             <span className="flex items-center gap-3">
-              <MessageCircle className="w-[18px] h-[18px] text-emerald-400" />
-              <span className="text-emerald-400 font-semibold">OptimIA Bot</span>
+              <Bot className="w-[18px] h-[18px] text-emerald-400" />
+              <span className="text-emerald-400 font-semibold">OptimIA BOT</span>
             </span>
             <ExternalLink className="w-3.5 h-3.5 text-emerald-400/70 opacity-0 group-hover:opacity-100 transition-opacity" />
           </a>
