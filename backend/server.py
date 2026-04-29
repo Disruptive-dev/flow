@@ -3404,7 +3404,7 @@ app.include_router(api_router)
 app.mount("/api/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name="uploads")
 
 # ==================== TRIAL EXPIRY MIDDLEWARE ====================
-TRIAL_EXEMPT_PATHS = ("/api/auth/", "/api/tenant/status", "/api/tenant/request-upgrade", "/api/tenant/track-event", "/api/admin/", "/api/uploads/")
+TRIAL_EXEMPT_PATHS = ("/api/auth/", "/api/tenant/status", "/api/tenant/request-upgrade", "/api/tenant/track-event", "/api/admin/", "/api/uploads/", "/api/public/")
 
 @app.middleware("http")
 async def enforce_trial_expiry(request: Request, call_next):

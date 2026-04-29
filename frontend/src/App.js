@@ -7,6 +7,7 @@ import AppLayout from '@/components/layout/AppLayout';
 import HelpBot from '@/components/HelpBot';
 import ScrollToTop from '@/components/ScrollToTop';
 import LoginPage from '@/pages/LoginPage';
+import LandingPage from '@/pages/LandingPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import DashboardPage from '@/pages/DashboardPage';
 import ProspectFinderPage from '@/pages/ProspectFinderPage';
@@ -50,6 +51,7 @@ function AppRoutes() {
       <ScrollToTop />
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/landing" element={<LandingPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
         <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
           <Route path="/" element={<DashboardPage />} />
