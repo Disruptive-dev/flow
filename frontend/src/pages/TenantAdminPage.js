@@ -106,6 +106,17 @@ export default function TenantAdminPage() {
     setSavingIntegration('');
   };
 
+  const testTenantIntegration = async (name) => {
+    if (!detailTenant) return;
+    setSavingIntegration(name);
+    try {
+      const { data } = await api.post(`/admin/tenants/${detailTenant.id}/integrations/${name}/test`);
+      if (data.ok) toast.success(`✓ ${name}: ${data.message}`);
+      else toast.error(`✗ ${name}: ${data.message || 'Sin respuesta'}`);
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error probando conexion'); }
+    setSavingIntegration('');
+  };
+
   const moduleList = [
     { key: 'prospeccion', label: 'Spectra Prospeccion', color: 'bg-blue-100 text-blue-800' },
     { key: 'leads', label: 'Leads', color: 'bg-indigo-100 text-indigo-800' },
@@ -451,11 +462,24 @@ export default function TenantAdminPage() {
                       <div key={name} className="border border-zinc-200 rounded-lg p-3 bg-white">
                         <div className="flex items-center justify-between mb-2">
                           <p className="text-sm font-semibold">{labels[name]}</p>
-                          <Switch
-                            checked={!!intg.enabled}
-                            onCheckedChange={(v) => updateTenantIntegration(name, { enabled: v })}
-                            data-testid={`toggle-${name}`}
-                          />
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs"
+                              onClick={() => testTenantIntegration(name)}
+                              disabled={savingIntegration === name}
+                              data-testid={`test-${name}`}
+                            >
+                              {savingIntegration === name ? <Loader2 className="w-3 h-3 animate-spin" /> : 'Probar'}
+                            </Button>
+                            <Switch
+                              checked={!!intg.enabled}
+                              onCheckedChange={(v) => updateTenantIntegration(name, { enabled: v })}
+                              data-testid={`toggle-${name}`}
+                            />
+                          </div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <div>

@@ -2827,6 +2827,56 @@ async def admin_update_tenant_integration(request: Request, tenant_id: str, name
     cfg = await db.integration_configs.find_one({"tenant_id": tenant_id, "name": name}, {"_id": 0})
     return cfg
 
+@api_router.post("/admin/tenants/{tenant_id}/integrations/{name}/test")
+async def admin_test_tenant_integration(request: Request, tenant_id: str, name: str):
+    """Super admin: probe configured integration to verify credentials/URL respond."""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    cfg = await db.integration_configs.find_one({"tenant_id": tenant_id, "name": name}, {"_id": 0})
+    if not cfg:
+        raise HTTPException(status_code=404, detail="Integracion no encontrada")
+    base_url = (cfg.get("base_url") or "").strip().rstrip("/")
+    api_key = (cfg.get("api_key") or "").strip()
+    import httpx as _hx
+    try:
+        async with _hx.AsyncClient(timeout=8, follow_redirects=True) as cl:
+            if name == "n8n":
+                if not base_url:
+                    return {"ok": False, "message": "Falta base_url del webhook n8n"}
+                # Probe webhook with empty payload; n8n usually returns 200/400
+                r = await cl.post(base_url, json={"_probe": True})
+                ok = r.status_code < 500
+                return {"ok": ok, "status_code": r.status_code, "message": "Webhook responde" if ok else f"n8n no responde (HTTP {r.status_code})"}
+            if name == "dify":
+                if not base_url:
+                    return {"ok": False, "message": "Falta base_url de Dify"}
+                # Best-effort GET
+                r = await cl.get(base_url, headers={"Authorization": f"Bearer {api_key}"} if api_key else {})
+                ok = r.status_code < 500
+                return {"ok": ok, "status_code": r.status_code, "message": "Dify responde" if ok else f"Dify no responde (HTTP {r.status_code})"}
+            if name == "resend":
+                if not api_key:
+                    return {"ok": False, "message": "Falta API Key de Resend"}
+                r = await cl.get("https://api.resend.com/domains", headers={"Authorization": f"Bearer {api_key}"})
+                if r.status_code == 200:
+                    return {"ok": True, "status_code": 200, "message": "API Key valida"}
+                if r.status_code == 401:
+                    return {"ok": False, "status_code": 401, "message": "API Key invalida"}
+                return {"ok": False, "status_code": r.status_code, "message": f"Resend respondio HTTP {r.status_code}"}
+            if name == "apify":
+                if not api_key:
+                    return {"ok": False, "message": "Falta API Key de Apify"}
+                r = await cl.get(f"https://api.apify.com/v2/users/me?token={api_key}")
+                if r.status_code == 200:
+                    return {"ok": True, "status_code": 200, "message": "Token valido"}
+                if r.status_code == 401:
+                    return {"ok": False, "status_code": 401, "message": "Token invalido"}
+                return {"ok": False, "status_code": r.status_code, "message": f"Apify respondio HTTP {r.status_code}"}
+    except Exception as e:
+        return {"ok": False, "message": f"Error de red: {str(e)[:120]}"}
+    return {"ok": False, "message": "Test no implementado para esta integracion"}
+
 # ==================== BULK DEAL ACTIONS ====================
 
 class BulkDealAction(BaseModel):
@@ -3418,11 +3468,46 @@ async def resend_events_webhook(request: Request, body: Dict[str, Any] = {}):
 async def seed_data():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@spectraflow.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!")
+    # ==== DEMO USERS (idempotent self-heal on every boot) ====
+    demo_password = "Demo2026!"
+    now_ts = datetime.now(timezone.utc).isoformat()
+    # Ensure "Spectra Demo" tenant exists (used by 3 of the 4 demo accounts)
+    demo_tenant = await db.tenants.find_one({"name": "Spectra Demo"})
+    if not demo_tenant:
+        demo_tenant_id = str(uuid.uuid4())
+        await db.tenants.insert_one({
+            "id": demo_tenant_id, "name": "Spectra Demo",
+            "branding": {"company_name": "Spectra Demo", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"},
+            "sender_defaults": {"name": "Spectra Flow", "email": "no-reply@spectra-metrics.com"},
+            "modules": {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False},
+            "plan": "enterprise", "price": 0, "active": True, "created_at": now_ts,
+        })
+    else:
+        demo_tenant_id = demo_tenant["id"]
+    demo_accounts = [
+        {"email": "superadmin@spectra-metrics.com", "name": "Super Admin Demo", "role": "super_admin"},
+        {"email": "admin@spectra-metrics.com", "name": "Administrador Demo", "role": "tenant_admin"},
+        {"email": "operador@spectra-metrics.com", "name": "Operador Demo", "role": "operator"},
+        {"email": "visor@spectra-metrics.com", "name": "Visor Demo", "role": "viewer"},
+    ]
+    for acc in demo_accounts:
+        existing = await db.users.find_one({"email": acc["email"]})
+        if existing:
+            await db.users.update_one(
+                {"email": acc["email"]},
+                {"$set": {"password_hash": hash_password(demo_password), "role": acc["role"], "tenant_id": demo_tenant_id, "name": acc["name"], "updated_at": now_ts}},
+            )
+        else:
+            await db.users.insert_one({
+                "email": acc["email"], "password_hash": hash_password(demo_password),
+                "name": acc["name"], "role": acc["role"], "tenant_id": demo_tenant_id,
+                "created_at": now_ts,
+            })
+    logger.info("Demo users (4) synced to Spectra Demo tenant")
     # Ensure Pablo (production owner) exists as super_admin - self-heal on every startup
     pablo_email = "pablo@disruptive-sw.com"
     pablo_password = "Disruptive2026!"
     pablo = await db.users.find_one({"email": pablo_email})
-    now_ts = datetime.now(timezone.utc).isoformat()
     if pablo:
         # Always sync password + role to desired values on boot
         await db.users.update_one(
