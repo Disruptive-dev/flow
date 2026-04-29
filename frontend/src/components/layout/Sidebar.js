@@ -5,7 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import {
   LayoutDashboard, Search, Zap, Users, Mail, FileText,
   RefreshCw, BarChart3, Settings, LogOut, AtSign, ShieldCheck,
-  MessageCircle, Palette, Brain, DollarSign, FolderKanban, Heart
+  MessageCircle, Palette, Brain, DollarSign, FolderKanban, Heart, ExternalLink
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -144,26 +144,44 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {}, deskto
               </NavLink>
             </>
           )}
-          {/* Products — visible for ALL users */}
+          {/* Ecosistema — visible for ALL users */}
           <Separator className="my-2 bg-zinc-800" />
-          <p className="px-3 pt-3 pb-1.5 text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Productos</p>
-          <a href="https://inbox.optimia.disruptive-sw.com" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-emerald-400 hover:bg-zinc-800/60 transition-all duration-200"
-            data-testid="sidebar-nav-optimia">
-            <MessageCircle className="w-[18px] h-[18px] text-emerald-400" />
-            <span>OptimIA Bot</span>
-          </a>
-          <a href="https://content-ia.spectra-metrics.com" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-purple-400 hover:bg-zinc-800/60 transition-all duration-200"
-            data-testid="sidebar-nav-content-ia">
-            <Palette className="w-[18px] h-[18px] text-purple-400" />
-            <span>Spectra Content IA</span>
+          <p className="px-3 pt-3 pb-1.5 text-[10px] font-semibold text-zinc-500 uppercase tracking-widest">Ecosistema</p>
+          <a href="https://www.spectra-metrics.com" target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/60 transition-all duration-200 group"
+            data-testid="sidebar-nav-metrics">
+            <span className="flex items-center gap-3">
+              <Zap className="w-[18px] h-[18px] text-rose-500" />
+              <span className="text-rose-500 font-semibold">Spectra Metrics</span>
+            </span>
+            <ExternalLink className="w-3.5 h-3.5 text-rose-500/70 opacity-0 group-hover:opacity-100 transition-opacity" />
           </a>
           <a href="https://brain.spectra-metrics.com" target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:text-pink-400 hover:bg-zinc-800/60 transition-all duration-200"
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/60 transition-all duration-200 group"
             data-testid="sidebar-nav-brain">
-            <Brain className="w-[18px] h-[18px] text-pink-400" />
-            <span>Spectra Brain</span>
+            <span className="flex items-center gap-3">
+              <Brain className="w-[18px] h-[18px] text-pink-400" />
+              <span className="text-pink-400 font-semibold">Spectra Brain</span>
+            </span>
+            <ExternalLink className="w-3.5 h-3.5 text-pink-400/70 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
+          <a href="https://content-ia.spectra-metrics.com" target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/60 transition-all duration-200 group"
+            data-testid="sidebar-nav-content-ia">
+            <span className="flex items-center gap-3">
+              <Palette className="w-[18px] h-[18px] text-purple-400" />
+              <span className="text-purple-400 font-semibold">Spectra Content IA</span>
+            </span>
+            <ExternalLink className="w-3.5 h-3.5 text-purple-400/70 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </a>
+          <a href="https://inbox.optimia.disruptive-sw.com" target="_blank" rel="noopener noreferrer"
+            className="flex items-center justify-between px-3 py-2 rounded-lg text-sm font-medium text-zinc-400 hover:bg-zinc-800/60 transition-all duration-200 group"
+            data-testid="sidebar-nav-optimia">
+            <span className="flex items-center gap-3">
+              <MessageCircle className="w-[18px] h-[18px] text-emerald-400" />
+              <span className="text-emerald-400 font-semibold">OptimIA Bot</span>
+            </span>
+            <ExternalLink className="w-3.5 h-3.5 text-emerald-400/70 opacity-0 group-hover:opacity-100 transition-opacity" />
           </a>
         </nav>
       </ScrollArea>
