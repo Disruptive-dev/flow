@@ -83,7 +83,7 @@ const translations = {
     login: "Iniciar Sesion", register: "Registrarse", email: "Email",
     password: "Contrasena", name: "Nombre Completo", organization: "Nombre de Organizacion",
     welcome_back: "Bienvenido de nuevo", sign_in_continue: "Inicia sesion para continuar en Spectra Flow",
-    tagline_find: "Encuentra. Limpia. Activa. Convierte.",
+    tagline_find: "Encuentra. Clasifica. Activa. Convierte.",
     tagline_desc: "Spectra Flow encuentra, limpia, activa y convierte oportunidades de negocio desde una sola plataforma premium.",
     create_account: "Crea tu cuenta", no_account: "No tienes cuenta?",
     have_account: "Ya tienes cuenta?", sign_up: "Registrarse",

@@ -19,6 +19,7 @@ import GuideBanner from '@/components/GuideBanner';
 import LeadStatusGuide from '@/components/LeadStatusGuide';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { COUNTRIES, flagOf } from '@/lib/countries';
 
 const leadStatusLabels = {
   raw: "Sin procesar", cleaned: "Limpiado", scored: "Calificado",
@@ -548,7 +549,13 @@ export default function LeadsPage() {
               <div><Label>Email</Label><Input value={newLead.email} onChange={e => setNewLead(p => ({ ...p, email: e.target.value }))} placeholder="email@empresa.com" /></div>
               <div><Label>Telefono</Label><Input value={newLead.phone} onChange={e => setNewLead(p => ({ ...p, phone: e.target.value }))} placeholder="+54 11 1234-5678" /></div>
               <div><Label>WhatsApp</Label><Input value={newLead.whatsapp} onChange={e => setNewLead(p => ({ ...p, whatsapp: e.target.value }))} placeholder="+54 9 11 ..." /></div>
-              <div><Label>Pais</Label><Input value={newLead.country} onChange={e => setNewLead(p => ({ ...p, country: e.target.value }))} placeholder="Argentina" /></div>
+              <div><Label>Pais</Label>
+                <select value={newLead.country} onChange={e => setNewLead(p => ({ ...p, country: e.target.value }))} className="w-full h-9 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 text-sm" data-testid="new-lead-country">
+                  {[...COUNTRIES].sort((a, b) => a.es.localeCompare(b.es, 'es')).map(c => (
+                    <option key={c.c} value={c.es}>{flagOf(c.c)} {c.es}</option>
+                  ))}
+                </select>
+              </div>
               <div><Label>Provincia / Estado</Label><Input value={newLead.province} onChange={e => setNewLead(p => ({ ...p, province: e.target.value }))} placeholder="Buenos Aires" /></div>
               <div><Label>Ciudad</Label><Input value={newLead.city} onChange={e => setNewLead(p => ({ ...p, city: e.target.value }))} placeholder="CABA" /></div>
               <div><Label>Categoria</Label><Input value={newLead.category} onChange={e => setNewLead(p => ({ ...p, category: e.target.value }))} placeholder="Restaurantes" /></div>
