@@ -1683,15 +1683,36 @@ async def update_settings(request: Request, body: SettingsUpdate):
 async def get_integrations(request: Request):
     user = await get_current_user(request)
     integrations = await db.integration_configs.find({"tenant_id": user["tenant_id"]}, {"_id": 0}).to_list(20)
+    # Mask credentials for non-super_admin so only Pablo sees actual keys/urls
+    if user.get("role") != "super_admin":
+        for i in integrations:
+            ak = i.get("api_key") or ""
+            i["api_key"] = ("****" + ak[-4:]) if len(ak) >= 4 else ("****" if ak else "")
+            bu = i.get("base_url") or ""
+            if bu:
+                # Show only protocol + host short
+                try:
+                    from urllib.parse import urlparse
+                    p = urlparse(bu)
+                    i["base_url"] = f"{p.scheme}://{p.netloc}/****" if p.netloc else "****"
+                except Exception:
+                    i["base_url"] = "****"
+            i["managed_by_admin"] = True
     return integrations
 
 @api_router.put("/settings/integrations/{name}")
 async def update_integration(request: Request, name: str, body: IntegrationUpdate):
     user = await get_current_user(request)
+    # Only super_admin can edit credentials. Tenant clients can only toggle enabled.
     now = datetime.now(timezone.utc).isoformat()
-    update_data = {k: v for k, v in body.model_dump().items() if v is not None}
-    update_data["updated_at"] = now
-    await db.integration_configs.update_one({"tenant_id": user["tenant_id"], "name": name}, {"$set": update_data})
+    incoming = {k: v for k, v in body.model_dump().items() if v is not None}
+    if user.get("role") != "super_admin":
+        # Strip credential fields silently
+        incoming = {k: v for k, v in incoming.items() if k not in ("base_url", "api_key")}
+        if not incoming:
+            raise HTTPException(status_code=403, detail="Las credenciales son gestionadas por el administrador")
+    incoming["updated_at"] = now
+    await db.integration_configs.update_one({"tenant_id": user["tenant_id"], "name": name}, {"$set": incoming})
     updated = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": name}, {"_id": 0})
     return updated
 
@@ -2780,7 +2801,31 @@ async def get_tenant_detail(request: Request, tenant_id: str):
     contact_count = await db.crm_contacts.count_documents({"tenant_id": tenant_id})
     deal_count = await db.crm_deals.count_documents({"tenant_id": tenant_id})
     campaign_count = await db.campaigns.count_documents({"tenant_id": tenant_id})
-    return {**tenant, "users": users, "stats": {"leads": lead_count, "contacts": contact_count, "deals": deal_count, "campaigns": campaign_count}}
+    integrations = await db.integration_configs.find({"tenant_id": tenant_id}, {"_id": 0}).to_list(20)
+    return {**tenant, "users": users, "stats": {"leads": lead_count, "contacts": contact_count, "deals": deal_count, "campaigns": campaign_count}, "integrations": integrations}
+
+@api_router.put("/admin/tenants/{tenant_id}/integrations/{name}")
+async def admin_update_tenant_integration(request: Request, tenant_id: str, name: str, body: Dict[str, Any] = {}):
+    """Super admin: configure integration credentials (n8n/dify/resend/apify) for a specific tenant.
+    Tenant clients only see masked status, never the keys."""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    if name not in ("n8n", "dify", "resend", "apify"):
+        raise HTTPException(status_code=400, detail="Integration name invalid")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    for k in ("base_url", "api_key", "enabled", "status"):
+        if k in body:
+            update[k] = body[k]
+    if "enabled" in update:
+        update["status"] = "configured" if update["enabled"] else "not_configured"
+    await db.integration_configs.update_one(
+        {"tenant_id": tenant_id, "name": name},
+        {"$set": update},
+        upsert=True,
+    )
+    cfg = await db.integration_configs.find_one({"tenant_id": tenant_id, "name": name}, {"_id": 0})
+    return cfg
 
 # ==================== BULK DEAL ACTIONS ====================
 

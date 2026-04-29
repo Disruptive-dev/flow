@@ -280,10 +280,42 @@ export default function SettingsPage() {
               <Button onClick={saveBranding} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-branding-button">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />} Guardar
               </Button>
+
+              {/* Tenant ID widget */}
+              <div className="mt-8 pt-6 border-t border-zinc-200">
+                <h3 className="font-heading font-medium text-zinc-900 text-sm mb-1">Tu ID de Empresa (Tenant ID)</h3>
+                <p className="text-xs text-zinc-500 mb-3">Necesitás este ID al configurar el webhook de Chatwoot u otros servicios externos. Pegalo en la URL <code className="px-1 bg-zinc-100 rounded text-[11px]">/api/webhooks/chatwoot/lead/{'{tenant_id}'}</code>.</p>
+                <div className="flex items-center gap-2 max-w-xl" data-testid="tenant-id-widget">
+                  <Input value={user?.tenant_id || ''} readOnly className="font-mono text-xs bg-zinc-50" />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { navigator.clipboard.writeText(user?.tenant_id || ''); toast.success('ID copiado'); }}
+                    data-testid="copy-tenant-id-button"
+                    className="shrink-0"
+                  >
+                    <Check className="w-3.5 h-3.5 mr-1" /> Copiar
+                  </Button>
+                </div>
+              </div>
+
               {(user?.role === 'super_admin' || user?.role === 'tenant_admin') && (
                 <div className="mt-8 pt-6 border-t border-red-200">
-                  <h3 className="font-heading font-medium text-red-700 text-sm mb-1">Zona peligrosa</h3>
-                  <p className="text-xs text-zinc-500 mb-3">Elimina unicamente los datos creados por el modo Demo (prospect jobs, leads, campanas marcadas como demo). No afecta datos reales.</p>
+                  <h3 className="font-heading font-medium text-red-700 text-sm mb-1 flex items-center gap-2">
+                    <Trash2 className="w-4 h-4" /> Zona peligrosa · Resetear datos demo
+                  </h3>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900 space-y-1.5 mb-3">
+                    <p className="font-semibold">¿Qué hace este botón?</p>
+                    <p>Tu tenant viene precargado con <strong>datos de prueba</strong> (leads, campañas, jobs y contactos del CRM marcados como <code className="px-1 bg-white rounded">is_demo: true</code>) para que puedas explorar la plataforma sin tener que esperar a tu primer scraping real.</p>
+                    <p>Al apretar <strong>Resetear datos demo</strong>:</p>
+                    <ul className="list-disc pl-4 space-y-0.5">
+                      <li><strong>Se borran</strong> únicamente los registros marcados como demo.</li>
+                      <li><strong>NO se tocan</strong> los datos reales que ya cargaste vos, importaste por Excel, recibiste por bot/webhook, ni los que vinieron de un Job real.</li>
+                      <li>Todos los nuevos registros que crees después serán reales por defecto.</li>
+                    </ul>
+                    <p className="pt-1">Recomendado hacerlo apenas estés listo para empezar a usar el sistema en producción. <strong>Esta acción no se puede deshacer.</strong></p>
+                  </div>
                   <Button onClick={resetDemoData} variant="outline" className="border-red-300 text-red-700 hover:bg-red-50" data-testid="reset-demo-data-button">
                     <Trash2 className="w-4 h-4 mr-2" /> Resetear datos demo
                   </Button>

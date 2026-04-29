@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ShieldCheck, Plus, Users, Target, Mail, Building2, Pencil, Loader2, DollarSign, TrendingUp } from 'lucide-react';
+import { ShieldCheck, Plus, Users, Target, Mail, Building2, Pencil, Loader2, DollarSign, TrendingUp, Eye, Copy, Save, Settings as SettingsIcon } from 'lucide-react';
 import { toast } from 'sonner';
 
 const planColors = {
@@ -27,6 +27,9 @@ export default function TenantAdminPage() {
   const [editTenant, setEditTenant] = useState(null);
   const [funnel, setFunnel] = useState(null);
   const [form, setForm] = useState({ name: '', admin_email: '', admin_password: '', admin_name: '', plan: 'starter', price: 0, modules: { ...defaultModules } });
+  const [detailTenant, setDetailTenant] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [savingIntegration, setSavingIntegration] = useState('');
 
   const fetchTenants = async () => {
     try {
@@ -77,6 +80,30 @@ export default function TenantAdminPage() {
 
   const toggleCreateModule = (mod) => {
     setForm(prev => ({ ...prev, modules: { ...prev.modules, [mod]: !prev.modules[mod] } }));
+  };
+
+  const openDetail = async (tenantId) => {
+    setDetailLoading(true);
+    setDetailTenant({ id: tenantId, loading: true });
+    try {
+      const { data } = await api.get(`/admin/tenants/${tenantId}`);
+      setDetailTenant(data);
+    } catch (err) { toast.error('Error cargando detalle'); setDetailTenant(null); }
+    setDetailLoading(false);
+  };
+
+  const updateTenantIntegration = async (name, patch) => {
+    if (!detailTenant) return;
+    setSavingIntegration(name);
+    try {
+      const { data } = await api.put(`/admin/tenants/${detailTenant.id}/integrations/${name}`, patch);
+      setDetailTenant(prev => ({
+        ...prev,
+        integrations: (prev.integrations || []).map(i => i.name === name ? data : i),
+      }));
+      toast.success(`${name} actualizado`);
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error guardando'); }
+    setSavingIntegration('');
   };
 
   const moduleList = [
@@ -207,9 +234,14 @@ export default function TenantAdminPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setEditTenant({ ...t })} data-testid={`edit-tenant-${i}`}>
-                      <Pencil className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => openDetail(t.id)} data-testid={`view-tenant-${i}`} title="Ver detalle, usuarios e integraciones">
+                        <Eye className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setEditTenant({ ...t })} data-testid={`edit-tenant-${i}`} title="Editar">
+                        <Pencil className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -335,6 +367,129 @@ export default function TenantAdminPage() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTenant(null)}>Cancelar</Button>
             <Button onClick={handleUpdate} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="confirm-edit-tenant">Guardar Cambios</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Tenant Detail Dialog: users + integrations (super_admin only) */}
+      <Dialog open={!!detailTenant} onOpenChange={(o) => !o && setDetailTenant(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5" /> {detailTenant?.name || 'Detalle del cliente'}
+            </DialogTitle>
+          </DialogHeader>
+          {detailLoading || detailTenant?.loading ? (
+            <div className="py-12 flex justify-center"><Loader2 className="w-6 h-6 animate-spin text-blue-600" /></div>
+          ) : detailTenant && (
+            <div className="space-y-6">
+              {/* IDs and stats */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="bg-zinc-50 rounded-lg p-3">
+                  <p className="text-[11px] uppercase text-zinc-500 mb-1">Tenant ID</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-xs font-mono text-zinc-800 truncate flex-1">{detailTenant.id}</code>
+                    <Button size="sm" variant="ghost" className="h-7 px-2" onClick={() => { navigator.clipboard.writeText(detailTenant.id); toast.success('Copiado'); }}>
+                      <Copy className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+                <div className="bg-zinc-50 rounded-lg p-3 grid grid-cols-4 gap-2 text-center">
+                  <div><p className="text-base font-semibold text-zinc-900">{detailTenant.stats?.leads || 0}</p><p className="text-[10px] text-zinc-500">Leads</p></div>
+                  <div><p className="text-base font-semibold text-zinc-900">{detailTenant.stats?.contacts || 0}</p><p className="text-[10px] text-zinc-500">Contactos</p></div>
+                  <div><p className="text-base font-semibold text-zinc-900">{detailTenant.stats?.deals || 0}</p><p className="text-[10px] text-zinc-500">Deals</p></div>
+                  <div><p className="text-base font-semibold text-zinc-900">{detailTenant.stats?.campaigns || 0}</p><p className="text-[10px] text-zinc-500">Camp.</p></div>
+                </div>
+              </div>
+
+              {/* Users */}
+              <div>
+                <h3 className="text-sm font-heading font-semibold mb-2 flex items-center gap-2"><Users className="w-4 h-4" /> Usuarios del cliente ({detailTenant.users?.length || 0})</h3>
+                <div className="border border-zinc-200 rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-zinc-50 hover:bg-zinc-50">
+                        <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase">Nombre</TableHead>
+                        <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase">Email</TableHead>
+                        <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase">Rol</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(detailTenant.users || []).map((u) => {
+                        const roleLabel = { super_admin: 'Super Administrador', tenant_admin: 'Administrador', operator: 'Operador', viewer: 'Visor' }[u.role] || u.role;
+                        return (
+                          <TableRow key={u.id || u.email}>
+                            <TableCell className="text-sm font-medium">{u.name}</TableCell>
+                            <TableCell className="text-sm text-zinc-600">{u.email}</TableCell>
+                            <TableCell><Badge variant="secondary" className="text-[11px]">{roleLabel}</Badge></TableCell>
+                          </TableRow>
+                        );
+                      })}
+                      {(!detailTenant.users || detailTenant.users.length === 0) && (
+                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-xs text-zinc-400">Sin usuarios</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+
+              {/* Integrations (super_admin only — credentials hidden from clients) */}
+              <div>
+                <h3 className="text-sm font-heading font-semibold mb-1 flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Integraciones (solo Super Admin)</h3>
+                <p className="text-[11px] text-zinc-500 mb-3">Configurás las credenciales acá. El cliente verá solo el estado (activado/desactivado) sin las claves.</p>
+                <div className="space-y-3">
+                  {['n8n', 'dify', 'resend', 'apify'].map((name) => {
+                    const intg = (detailTenant.integrations || []).find(i => i.name === name) || { name, base_url: '', api_key: '', enabled: false };
+                    const labels = { n8n: 'n8n (Workflows)', dify: 'Dify (AI Scoring)', resend: 'Resend (Emails)', apify: 'Apify (LinkedIn)' };
+                    const placeholders = {
+                      n8n: 'https://n8n.tudominio.com/webhook/spectra-prospect',
+                      dify: 'https://api.dify.ai/v1',
+                      resend: 'https://api.resend.com',
+                      apify: 'https://api.apify.com/v2',
+                    };
+                    return (
+                      <div key={name} className="border border-zinc-200 rounded-lg p-3 bg-white">
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-sm font-semibold">{labels[name]}</p>
+                          <Switch
+                            checked={!!intg.enabled}
+                            onCheckedChange={(v) => updateTenantIntegration(name, { enabled: v })}
+                            data-testid={`toggle-${name}`}
+                          />
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <div>
+                            <Label className="text-[10px] text-zinc-500 mb-1 block">Base URL / Webhook URL</Label>
+                            <Input
+                              defaultValue={intg.base_url || ''}
+                              placeholder={placeholders[name]}
+                              data-testid={`url-${name}`}
+                              onBlur={(e) => e.target.value !== (intg.base_url || '') && updateTenantIntegration(name, { base_url: e.target.value })}
+                              className="h-8 text-xs font-mono"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[10px] text-zinc-500 mb-1 block">API Key / Token</Label>
+                            <Input
+                              type="password"
+                              defaultValue={intg.api_key || ''}
+                              placeholder="sk_xxx..."
+                              data-testid={`key-${name}`}
+                              onBlur={(e) => e.target.value !== (intg.api_key || '') && updateTenantIntegration(name, { api_key: e.target.value })}
+                              className="h-8 text-xs font-mono"
+                            />
+                          </div>
+                        </div>
+                        {savingIntegration === name && <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Guardando...</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailTenant(null)}>Cerrar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
