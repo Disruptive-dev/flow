@@ -14,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Building2, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package, Pencil, Eye, EyeOff, Sliders, Download, Clock, Trash2 } from 'lucide-react';
+import { Building2, User, Link, Users, Plus, Loader2, Check, ExternalLink, Bot, Globe, Package, Pencil, Eye, EyeOff, Sliders, Download, Clock, Trash2, GitBranch, X, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from 'sonner';
 import DomainsPage from '@/pages/DomainsPage';
 
@@ -199,6 +199,7 @@ export default function SettingsPage() {
           <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
           {user?.role === 'super_admin' && <TabsTrigger value="modules" data-testid="settings-tab-modules"><Package className="w-4 h-4 mr-1.5" />Modulos</TabsTrigger>}
           <TabsTrigger value="scoring" data-testid="settings-tab-scoring"><Sliders className="w-4 h-4 mr-1.5" />Scoring</TabsTrigger>
+          <TabsTrigger value="pipeline" data-testid="settings-tab-pipeline"><GitBranch className="w-4 h-4 mr-1.5" />Pipeline CRM</TabsTrigger>
           <TabsTrigger value="products" data-testid="settings-tab-products"><Package className="w-4 h-4 mr-1.5" />Productos</TabsTrigger>
           {user?.role === 'super_admin' && <TabsTrigger value="activity" data-testid="settings-tab-activity"><Clock className="w-4 h-4 mr-1.5" />Actividad</TabsTrigger>}
         </TabsList>
@@ -486,6 +487,11 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
+        {/* PIPELINE CRM TAB */}
+        <TabsContent value="pipeline">
+          <PipelineConfig role={user?.role} />
+        </TabsContent>
+
         {/* PRODUCTS TAB */}
         <TabsContent value="products">
           <ProductsConfig />
@@ -499,5 +505,105 @@ export default function SettingsPage() {
         )}
       </Tabs>
     </div>
+  );
+}
+
+// ==================== PIPELINE CRM CONFIG ====================
+function PipelineConfig({ role }) {
+  const [stages, setStages] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const isAdmin = role === 'super_admin' || role === 'tenant_admin';
+
+  useEffect(() => {
+    api.get('/tenant/pipeline-stages').then(r => setStages(r.data || [])).catch(() => {});
+  }, []);
+
+  const colors = ['blue', 'indigo', 'purple', 'violet', 'pink', 'red', 'orange', 'amber', 'lime', 'emerald', 'teal', 'cyan', 'slate'];
+
+  const addStage = () => setStages([...stages, { key: `etapa_${stages.length + 1}`, label: `Nueva etapa ${stages.length + 1}`, color: 'blue' }]);
+  const updateStage = (i, field, val) => {
+    const next = [...stages];
+    next[i] = { ...next[i], [field]: val };
+    if (field === 'label') next[i].key = val.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    setStages(next);
+  };
+  const removeStage = (i) => { if (stages.length <= 1) return toast.error('Debe haber al menos una etapa'); setStages(stages.filter((_, idx) => idx !== i)); };
+  const moveStage = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= stages.length) return;
+    const next = [...stages];
+    [next[i], next[j]] = [next[j], next[i]];
+    setStages(next);
+  };
+  const resetDefault = () => {
+    if (!window.confirm('Restaurar las 9 etapas por defecto? (Diagnostico, Reunion, Propuesta, Negociacion, Aprobada, Ganada, Perdida, Pausada)')) return;
+    setStages([
+      { key: 'diagnostico', label: 'Diagnostico', color: 'blue' },
+      { key: 'reunion', label: 'Reunion agendada', color: 'indigo' },
+      { key: 'propuesta_preparar', label: 'Propuesta a preparar', color: 'purple' },
+      { key: 'propuesta_enviada', label: 'Propuesta enviada', color: 'violet' },
+      { key: 'negociacion', label: 'Negociacion', color: 'amber' },
+      { key: 'aprobada', label: 'Aprobada', color: 'lime' },
+      { key: 'ganada', label: 'Ganada', color: 'emerald' },
+      { key: 'perdida', label: 'Perdida', color: 'red' },
+      { key: 'pausada', label: 'Pausada', color: 'slate' },
+    ]);
+  };
+  const save = async () => {
+    if (!stages.length) return toast.error('Agrega al menos una etapa');
+    setSaving(true);
+    try {
+      await api.put('/tenant/pipeline-stages', { stages });
+      toast.success('Pipeline guardado');
+      window.dispatchEvent(new Event('pipeline-updated'));
+    } catch (e) { toast.error(e.response?.data?.detail || 'Error al guardar'); }
+    setSaving(false);
+  };
+
+  return (
+    <Card className="border-zinc-200 rounded-xl">
+      <CardContent className="p-6 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <h3 className="font-heading font-medium text-zinc-900 text-lg flex items-center gap-2"><GitBranch className="w-5 h-5 text-blue-600" /> Etapas del Pipeline CRM</h3>
+            <p className="text-xs text-zinc-500 mt-1">Define las etapas que aparecen en el Kanban y la lista de oportunidades. Cambialas cuando quieras.</p>
+          </div>
+          {isAdmin && (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={resetDefault} size="sm" data-testid="pipeline-reset-default">Restaurar default</Button>
+              <Button variant="outline" onClick={addStage} size="sm" data-testid="pipeline-add-stage"><Plus className="w-4 h-4 mr-1" /> Agregar etapa</Button>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          {stages.map((s, i) => (
+            <div key={i} className="flex items-center gap-2 p-2 bg-zinc-50 rounded-lg border border-zinc-200" data-testid={`pipeline-stage-row-${i}`}>
+              <div className="flex flex-col gap-0.5">
+                <button onClick={() => moveStage(i, -1)} disabled={!isAdmin || i === 0} className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30" title="Subir"><ArrowUp className="w-3 h-3" /></button>
+                <button onClick={() => moveStage(i, 1)} disabled={!isAdmin || i === stages.length - 1} className="text-zinc-400 hover:text-zinc-700 disabled:opacity-30" title="Bajar"><ArrowDown className="w-3 h-3" /></button>
+              </div>
+              <span className="text-xs font-mono text-zinc-400 w-6 text-center">{i + 1}</span>
+              <Input value={s.label} onChange={e => updateStage(i, 'label', e.target.value)} disabled={!isAdmin} placeholder="Nombre de la etapa" className="flex-1 h-8 text-sm" />
+              <select value={s.color} onChange={e => updateStage(i, 'color', e.target.value)} disabled={!isAdmin} className="h-8 rounded-md border border-zinc-200 px-2 text-xs">
+                {colors.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <span className={`px-2 py-1 rounded-md text-xs bg-${s.color}-50 text-${s.color}-700 border border-${s.color}-200 hidden sm:inline`}>preview</span>
+              <button onClick={() => removeStage(i)} disabled={!isAdmin} className="p-1 text-red-500 hover:bg-red-50 rounded disabled:opacity-30" title="Eliminar"><X className="w-4 h-4" /></button>
+            </div>
+          ))}
+          {!stages.length && <p className="text-center text-sm text-zinc-400 py-8">Sin etapas definidas. Click en "Agregar etapa" para empezar.</p>}
+        </div>
+
+        {isAdmin && (
+          <div className="pt-3 border-t border-zinc-200 flex justify-end">
+            <Button onClick={save} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="pipeline-save">
+              {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />} Guardar pipeline
+            </Button>
+          </div>
+        )}
+        {!isAdmin && <p className="text-xs text-zinc-500">Solo administradores pueden modificar el pipeline.</p>}
+      </CardContent>
+    </Card>
   );
 }

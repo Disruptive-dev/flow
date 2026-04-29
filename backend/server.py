@@ -790,19 +790,25 @@ async def create_lead_manual(request: Request, body: Dict[str, Any] = {}):
     lead = {
         "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"], "job_id": "",
         "business_name": bname,
+        "contact_name": body.get("contact_name", ""),
         "raw_category": body.get("category", ""),
         "normalized_category": body.get("category", "Manual"),
+        "country": body.get("country", "Argentina"),
         "province": body.get("province", ""),
         "city": body.get("city", ""),
         "website": body.get("website", ""),
+        "linkedin": body.get("linkedin", ""),
+        "instagram": body.get("instagram", ""),
         "email": body.get("email", ""),
         "phone": body.get("phone", ""),
+        "whatsapp": body.get("whatsapp", ""),
         "ai_score": 0, "quality_level": "unscored",
         "recommendation": body.get("notes", ""),
         "recommended_first_line": "",
         "source": body.get("source", "manual"),
         "tags": body.get("tags", []),
-        "status": "raw",
+        "status": body.get("status", "nuevo"),
+        "conversations": [],
         "created_at": now, "updated_at": now
     }
     await db.leads.insert_one(lead)
@@ -840,7 +846,7 @@ async def update_lead_fields(request: Request, lead_id: str, body: Dict[str, Any
     """Update editable fields on a lead (notes, channel, etc)"""
     user = await get_current_user(request)
     now = datetime.now(timezone.utc).isoformat()
-    allowed = {"recommendation", "channel", "normalized_category", "city", "province", "website", "email", "phone", "business_name"}
+    allowed = {"recommendation", "channel", "normalized_category", "city", "province", "country", "website", "linkedin", "instagram", "email", "phone", "whatsapp", "business_name", "contact_name", "source", "status", "tags", "notes"}
     update = {k: v for k, v in body.items() if k in allowed}
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")
@@ -2346,6 +2352,48 @@ async def get_tenant_modules(request: Request):
     user = await get_current_user(request)
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
     return tenant.get("modules", {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False, "finance": False, "project_management": False, "fidelity": False}) if tenant else {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False, "finance": False, "project_management": False, "fidelity": False}
+
+DEFAULT_PIPELINE_STAGES = [
+    {"key": "diagnostico", "label": "Diagnostico", "color": "blue"},
+    {"key": "reunion", "label": "Reunion agendada", "color": "indigo"},
+    {"key": "propuesta_preparar", "label": "Propuesta a preparar", "color": "purple"},
+    {"key": "propuesta_enviada", "label": "Propuesta enviada", "color": "violet"},
+    {"key": "negociacion", "label": "Negociacion", "color": "amber"},
+    {"key": "aprobada", "label": "Aprobada", "color": "lime"},
+    {"key": "ganada", "label": "Ganada", "color": "emerald"},
+    {"key": "perdida", "label": "Perdida", "color": "red"},
+    {"key": "pausada", "label": "Pausada", "color": "slate"},
+]
+
+@api_router.get("/tenant/pipeline-stages")
+async def get_pipeline_stages(request: Request):
+    user = await get_current_user(request)
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    if not tenant or not tenant.get("crm_pipeline_stages"):
+        return DEFAULT_PIPELINE_STAGES
+    return tenant["crm_pipeline_stages"]
+
+@api_router.put("/tenant/pipeline-stages")
+async def update_pipeline_stages(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    if user["role"] not in ("super_admin", "tenant_admin"):
+        raise HTTPException(status_code=403, detail="Solo administradores")
+    stages = body.get("stages", [])
+    if not isinstance(stages, list) or not stages:
+        raise HTTPException(status_code=400, detail="stages debe ser una lista no vacia")
+    cleaned = []
+    seen_keys = set()
+    for s in stages:
+        key = (s.get("key") or "").strip().lower().replace(" ", "_")
+        label = (s.get("label") or "").strip()
+        if not key or not label or key in seen_keys:
+            continue
+        seen_keys.add(key)
+        cleaned.append({"key": key, "label": label, "color": s.get("color", "blue")})
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="ninguna etapa valida")
+    await db.tenants.update_one({"id": user["tenant_id"]}, {"$set": {"crm_pipeline_stages": cleaned, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"stages": cleaned}
 
 @api_router.get("/tenant/status")
 async def get_tenant_status(request: Request):

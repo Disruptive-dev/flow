@@ -33,9 +33,16 @@ const stageColors = {
   negociacion: { bg: "bg-amber-50", text: "text-amber-800", border: "border-amber-300", header: "bg-amber-200", card: "border-l-4 border-l-amber-500" },
   ganado: { bg: "bg-emerald-50", text: "text-emerald-800", border: "border-emerald-300", header: "bg-emerald-300", card: "border-l-4 border-l-emerald-600" },
   perdido: { bg: "bg-red-50", text: "text-red-800", border: "border-red-300", header: "bg-red-200", card: "border-l-4 border-l-red-500" },
+  diagnostico: { bg: "bg-blue-50", text: "text-blue-800", border: "border-blue-300", header: "bg-blue-200", card: "border-l-4 border-l-blue-500" },
+  reunion: { bg: "bg-indigo-50", text: "text-indigo-800", border: "border-indigo-300", header: "bg-indigo-200", card: "border-l-4 border-l-indigo-500" },
+  propuesta_preparar: { bg: "bg-purple-50", text: "text-purple-800", border: "border-purple-300", header: "bg-purple-200", card: "border-l-4 border-l-purple-500" },
+  propuesta_enviada: { bg: "bg-violet-50", text: "text-violet-800", border: "border-violet-300", header: "bg-violet-200", card: "border-l-4 border-l-violet-500" },
+  aprobada: { bg: "bg-lime-50", text: "text-lime-800", border: "border-lime-300", header: "bg-lime-200", card: "border-l-4 border-l-lime-500" },
+  ganada: { bg: "bg-emerald-50", text: "text-emerald-800", border: "border-emerald-300", header: "bg-emerald-300", card: "border-l-4 border-l-emerald-600" },
+  pausada: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-300", header: "bg-slate-200", card: "border-l-4 border-l-slate-400" },
 };
-const stageLabels = { nuevo: "Nuevo", contactado: "Contactado", propuesta: "Propuesta", negociacion: "Negociacion", ganado: "Ganado", perdido: "Perdido" };
-const stages = ["nuevo", "contactado", "propuesta", "negociacion", "ganado", "perdido"];
+const DEFAULT_STAGE_LABELS = { nuevo: "Nuevo", contactado: "Contactado", propuesta: "Propuesta", negociacion: "Negociacion", ganado: "Ganado", perdido: "Perdido" };
+const DEFAULT_STAGES = ["nuevo", "contactado", "propuesta", "negociacion", "ganado", "perdido"];
 
 export default function CrmPage() {
   const [contacts, setContacts] = useState([]);
@@ -67,6 +74,21 @@ export default function CrmPage() {
   const [newTag, setNewTag] = useState('');
   const [pipelineView, setPipelineView] = useState('kanban'); // 'kanban' | 'list'
   const [selectedDeals, setSelectedDeals] = useState([]);
+  const [pipelineStages, setPipelineStages] = useState(null);
+
+  // Load pipeline stages from tenant config (or fallback to defaults)
+  useEffect(() => {
+    api.get('/tenant/pipeline-stages').then(r => setPipelineStages(r.data)).catch(() => setPipelineStages(null));
+    const onUpdate = () => api.get('/tenant/pipeline-stages').then(r => setPipelineStages(r.data)).catch(() => {});
+    window.addEventListener('pipeline-updated', onUpdate);
+    return () => window.removeEventListener('pipeline-updated', onUpdate);
+  }, []);
+
+  // Build dynamic stages/stageLabels from config (with fallbacks for legacy data)
+  const stages = pipelineStages?.length ? pipelineStages.map(s => s.key) : DEFAULT_STAGES;
+  const stageLabels = pipelineStages?.length
+    ? Object.fromEntries(pipelineStages.map(s => [s.key, s.label]))
+    : DEFAULT_STAGE_LABELS;
 
   const fetchData = async () => {
     try {

@@ -140,7 +140,7 @@ export default function LeadsPage() {
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef(null);
   const [createOpen, setCreateOpen] = useState(false);
-  const [newLead, setNewLead] = useState({ business_name: '', email: '', phone: '', city: '', category: '', website: '', notes: '' });
+  const [newLead, setNewLead] = useState({ business_name: '', contact_name: '', email: '', phone: '', whatsapp: '', city: '', province: '', country: 'Argentina', category: '', website: '', linkedin: '', instagram: '', source: 'manual', status: 'nuevo', notes: '' });
   const [rescoring, setRescoring] = useState(false);
 
   const handleImport = async (e) => {
@@ -164,7 +164,7 @@ export default function LeadsPage() {
       await api.post('/leads', newLead);
       toast.success('Lead creado');
       setCreateOpen(false);
-      setNewLead({ business_name: '', email: '', phone: '', city: '', category: '', website: '', notes: '' });
+      setNewLead({ business_name: '', contact_name: '', email: '', phone: '', whatsapp: '', city: '', province: '', country: 'Argentina', category: '', website: '', linkedin: '', instagram: '', source: 'manual', status: 'nuevo', notes: '' });
       fetchLeads();
     } catch (err) { toast.error(err.response?.data?.detail || 'Error al crear lead'); }
   };
@@ -528,14 +528,30 @@ export default function LeadsPage() {
           <div className="space-y-3">
             <div><Label>Empresa *</Label><Input value={newLead.business_name} onChange={e => setNewLead(p => ({ ...p, business_name: e.target.value }))} placeholder="Nombre de la empresa" data-testid="new-lead-name" /></div>
             <div className="grid grid-cols-2 gap-3">
+              <div><Label>Contacto principal</Label><Input value={newLead.contact_name} onChange={e => setNewLead(p => ({ ...p, contact_name: e.target.value }))} placeholder="Juan Perez" /></div>
               <div><Label>Email</Label><Input value={newLead.email} onChange={e => setNewLead(p => ({ ...p, email: e.target.value }))} placeholder="email@empresa.com" /></div>
               <div><Label>Telefono</Label><Input value={newLead.phone} onChange={e => setNewLead(p => ({ ...p, phone: e.target.value }))} placeholder="+54 11 1234-5678" /></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label>Ciudad</Label><Input value={newLead.city} onChange={e => setNewLead(p => ({ ...p, city: e.target.value }))} placeholder="Buenos Aires" /></div>
+              <div><Label>WhatsApp</Label><Input value={newLead.whatsapp} onChange={e => setNewLead(p => ({ ...p, whatsapp: e.target.value }))} placeholder="+54 9 11 ..." /></div>
+              <div><Label>Pais</Label><Input value={newLead.country} onChange={e => setNewLead(p => ({ ...p, country: e.target.value }))} placeholder="Argentina" /></div>
+              <div><Label>Provincia / Estado</Label><Input value={newLead.province} onChange={e => setNewLead(p => ({ ...p, province: e.target.value }))} placeholder="Buenos Aires" /></div>
+              <div><Label>Ciudad</Label><Input value={newLead.city} onChange={e => setNewLead(p => ({ ...p, city: e.target.value }))} placeholder="CABA" /></div>
               <div><Label>Categoria</Label><Input value={newLead.category} onChange={e => setNewLead(p => ({ ...p, category: e.target.value }))} placeholder="Restaurantes" /></div>
+              <div><Label>Sitio web</Label><Input value={newLead.website} onChange={e => setNewLead(p => ({ ...p, website: e.target.value }))} placeholder="www.empresa.com" /></div>
+              <div><Label>LinkedIn</Label><Input value={newLead.linkedin} onChange={e => setNewLead(p => ({ ...p, linkedin: e.target.value }))} placeholder="linkedin.com/company/..." /></div>
+              <div><Label>Instagram</Label><Input value={newLead.instagram} onChange={e => setNewLead(p => ({ ...p, instagram: e.target.value }))} placeholder="@empresa" /></div>
+              <div>
+                <Label>Fuente</Label>
+                <select value={newLead.source} onChange={e => setNewLead(p => ({ ...p, source: e.target.value }))} className="w-full h-9 rounded-md border border-zinc-200 px-2 text-sm">
+                  {['manual','bot_ia','spectra_prospection','formulario_web','landing_page','email_marketing','meta_ads','google_ads','linkedin','whatsapp','instagram','facebook','referido','evento','base_importada','outbound','google_maps','llamada_entrante','cliente_actual','partner','otro'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                </select>
+              </div>
+              <div>
+                <Label>Estado</Label>
+                <select value={newLead.status} onChange={e => setNewLead(p => ({ ...p, status: e.target.value }))} className="w-full h-9 rounded-md border border-zinc-200 px-2 text-sm">
+                  {['nuevo','sin_contactar','intento_contacto','contactado','en_conversacion','calificado','reunion_agendada','oportunidad','propuesta_futura','ganado','perdido','no_responde','mal_momento'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                </select>
+              </div>
             </div>
-            <div><Label>Website</Label><Input value={newLead.website} onChange={e => setNewLead(p => ({ ...p, website: e.target.value }))} placeholder="www.empresa.com" /></div>
             <div><Label>Notas</Label><Input value={newLead.notes} onChange={e => setNewLead(p => ({ ...p, notes: e.target.value }))} placeholder="Informacion adicional" /></div>
           </div>
           <DialogFooter>
