@@ -1723,7 +1723,11 @@ async def list_users(request: Request):
     user = await get_current_user(request)
     if user["role"] not in ["super_admin", "tenant_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
-    pipeline = [{"$match": {"tenant_id": user["tenant_id"]}}, {"$project": {"password_hash": 0}}, {"$addFields": {"id": {"$toString": "$_id"}}}, {"$project": {"_id": 0}}]
+    match = {"tenant_id": user["tenant_id"]}
+    # Tenant admins must NEVER see super_admin accounts (cross-org owners).
+    if user["role"] == "tenant_admin":
+        match["role"] = {"$ne": "super_admin"}
+    pipeline = [{"$match": match}, {"$project": {"password_hash": 0}}, {"$addFields": {"id": {"$toString": "$_id"}}}, {"$project": {"_id": 0}}]
     users = await db.users.aggregate(pipeline).to_list(100)
     return users
 
@@ -1756,6 +1760,9 @@ async def update_user(request: Request, user_id: str, body: Dict[str, Any] = {})
     # Tenant admin only within their tenant
     if user["role"] == "tenant_admin" and target.get("tenant_id") != user["tenant_id"]:
         raise HTTPException(status_code=403, detail="Cannot edit users from other tenants")
+    # Tenant admin cannot touch super_admin accounts at all
+    if user["role"] == "tenant_admin" and target.get("role") == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot edit super_admin accounts")
     # Tenant admin cannot promote to super_admin
     new_role = body.get("role")
     if user["role"] == "tenant_admin" and new_role == "super_admin":
@@ -3606,7 +3613,7 @@ async def seed_data():
     for t in templates_data:
         await db.templates.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, **t, "plain_text": "", "signature": "", "created_at": now, "updated_at": now})
 
-    await db.domains.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, "domain": "spectra-metrics.com", "subdomain": "spectra-metrics.com", "resend_domain_id": "", "status": "dns_pending", "dns_records": [{"type": "TXT", "name": "spectra-metrics.com", "value": "v=spf1 include:_spf.resend.com ~all", "verified": False, "status": "pending"}, {"type": "CNAME", "name": "resend._domainkey.spectra-metrics.com", "value": "resend.domainkey.resend.com", "verified": False, "status": "pending"}, {"type": "MX", "name": "spectra-metrics.com", "value": "feedback-smtp.resend.com", "verified": False, "status": "pending"}], "sender_name": "Spectra Flow", "sender_email": "noreply@spectra-metrics.com", "reply_to": "contacto@spectra-metrics.com", "signature": "El equipo de Spectra Flow", "warmup_status": "not_started", "created_at": now, "updated_at": now})
+    # Domain seed removed: tenants come "virgin" so each client configures own domain
 
     integrations = [
         {"name": "n8n", "display_name": "n8n Orchestration", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "last_sync": None, "description": "Workflow orchestration and job execution"},
@@ -3658,6 +3665,44 @@ app.mount("/api/uploads", StaticFiles(directory=str(ROOT_DIR / "uploads")), name
 
 # ==================== TRIAL EXPIRY MIDDLEWARE ====================
 TRIAL_EXEMPT_PATHS = ("/api/auth/", "/api/tenant/status", "/api/tenant/request-upgrade", "/api/tenant/track-event", "/api/admin/", "/api/uploads/", "/api/public/")
+
+# Paths viewer/operator are NOT allowed to write — except their own profile/avatar/password
+RBAC_SELF_PATHS = ("/api/auth/profile", "/api/auth/change-password", "/api/auth/avatar", "/api/auth/logout", "/api/auth/refresh", "/api/tenant/track-event")
+
+@app.middleware("http")
+async def enforce_rbac(request: Request, call_next):
+    """Global RBAC: viewer = read-only; operator cannot delete or access /api/admin/."""
+    path = request.url.path
+    method = request.method
+    if not path.startswith("/api/") or method in ("OPTIONS", "GET", "HEAD") or any(path.startswith(p) for p in ("/api/auth/login", "/api/auth/register", "/api/auth/forgot-password", "/api/auth/reset-password", "/api/public/")):
+        return await call_next(request)
+    token = request.cookies.get("access_token") or ""
+    auth_header = request.headers.get("Authorization", "")
+    if not token and auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+    if not token:
+        return await call_next(request)
+    try:
+        payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            return await call_next(request)
+        user = await db.users.find_one({"_id": ObjectId(payload["sub"])}, {"role": 1})
+        if not user:
+            return await call_next(request)
+        role = user.get("role", "")
+        # Allow self-management endpoints regardless of role
+        if any(path.startswith(p) for p in RBAC_SELF_PATHS):
+            return await call_next(request)
+        if role == "viewer":
+            return JSONResponse(status_code=403, content={"detail": "Visor: solo permisos de lectura"})
+        if role == "operator":
+            if method == "DELETE":
+                return JSONResponse(status_code=403, content={"detail": "Operador: no puede eliminar"})
+            if path.startswith("/api/admin/") or path.startswith("/api/users") or path.startswith("/api/settings/integrations"):
+                return JSONResponse(status_code=403, content={"detail": "Operador: accion solo para administradores"})
+    except Exception:
+        pass
+    return await call_next(request)
 
 @app.middleware("http")
 async def enforce_trial_expiry(request: Request, call_next):

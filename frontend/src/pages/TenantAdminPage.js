@@ -246,10 +246,10 @@ export default function TenantAdminPage() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => openDetail(t.id)} data-testid={`view-tenant-${i}`} title="Ver detalle, usuarios e integraciones">
-                        <Eye className="w-4 h-4" />
+                      <Button variant="outline" size="sm" className="h-8 gap-1 text-xs" onClick={() => openDetail(t.id)} data-testid={`view-tenant-${i}`} title="Ver detalle, usuarios e integraciones">
+                        <Eye className="w-3.5 h-3.5" /> Configurar
                       </Button>
-                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setEditTenant({ ...t })} data-testid={`edit-tenant-${i}`} title="Editar">
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setEditTenant({ ...t })} data-testid={`edit-tenant-${i}`} title="Editar plan/módulos">
                         <Pencil className="w-4 h-4" />
                       </Button>
                     </div>
@@ -417,7 +417,15 @@ export default function TenantAdminPage() {
               <div>
                 <h3 className="text-sm font-heading font-semibold mb-2 flex items-center gap-2"><Users className="w-4 h-4" /> Usuarios del cliente ({detailTenant.users?.length || 0})</h3>
                 <div className="border border-zinc-200 rounded-lg overflow-hidden">
-                  <Table>
+                  {/* Quick access banner: lead super_admin to integrations modal */}
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 mb-4 text-xs text-blue-900 flex items-start gap-2">
+                <SettingsIcon className="w-4 h-4 mt-0.5 shrink-0" />
+                <div>
+                  <p className="font-semibold mb-0.5">¿Cómo cargar las credenciales (n8n, Dify, Resend, Apify) de un cliente?</p>
+                  <p>Hacé click en el ícono <Eye className="w-3 h-3 inline mb-0.5" /> <strong>Configurar / Ver detalle</strong> de la fila del tenant. En el modal vas a encontrar la sección <strong>Integraciones (solo Super Admin)</strong> donde cargás Base URL y API Key. El cliente final NO ve esos valores, solo el estado activado/desactivado.</p>
+                </div>
+              </div>
+              <Table>
                     <TableHeader>
                       <TableRow className="bg-zinc-50 hover:bg-zinc-50">
                         <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase">Nombre</TableHead>

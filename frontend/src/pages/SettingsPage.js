@@ -351,7 +351,8 @@ export default function SettingsPage() {
                 <TableBody>
                   {users.map((u, i) => {
                     const roleLabel = { super_admin: 'Super Administrador', tenant_admin: 'Administrador', operator: 'Operador', viewer: 'Visor' }[u.role] || u.role;
-                    const canManage = (user?.role === 'super_admin' || user?.role === 'tenant_admin') && u.id !== user?.id;
+                    const isSuperAdmin = u.role === 'super_admin';
+                    const canManage = (user?.role === 'super_admin' || (user?.role === 'tenant_admin' && !isSuperAdmin)) && u.id !== user?.id;
                     return (
                       <TableRow key={u.id || i} data-testid={`user-row-${i}`}>
                         <TableCell className="font-medium text-zinc-900 text-sm">{u.name}</TableCell>
