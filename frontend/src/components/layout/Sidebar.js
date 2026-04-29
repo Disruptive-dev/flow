@@ -5,7 +5,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import {
   LayoutDashboard, Search, Zap, Users, Mail, FileText,
   RefreshCw, BarChart3, Settings, LogOut, AtSign, ShieldCheck,
-  MessageCircle, Palette, Brain
+  MessageCircle, Palette, Brain, DollarSign, FolderKanban, Heart
 } from 'lucide-react';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -31,11 +31,20 @@ const navSections = [
   { title: 'Spectra CRM', module: 'crm', items: [
     { key: 'crm_sync', label: 'Spectra CRM', path: '/crm-sync', icon: RefreshCw },
   ]},
-  { title: 'Spectra Web', module: 'web', items: [
-    { key: 'landing_pages', label: 'Landing Pages', path: '/landing-pages', icon: LayoutDashboard, badge: 'soon' },
+  { title: 'Spectra Fidelity', module: 'fidelity', items: [
+    { key: 'fidelity', label: 'Fidelity', path: '/fidelity', icon: Heart, badge: 'soon' },
   ]},
   { title: 'Spectra Performance', module: 'performance', items: [
     { key: 'performance', label: 'Performance', path: '/performance', icon: BarChart3, badge: 'soon' },
+  ]},
+  { title: 'Spectra Web', module: 'web', items: [
+    { key: 'landing_pages', label: 'Landing Pages', path: '/landing-pages', icon: LayoutDashboard, badge: 'soon' },
+  ]},
+  { title: 'Spectra Finance', module: 'finance', items: [
+    { key: 'finance', label: 'Finance', path: '/finance', icon: DollarSign, badge: 'soon' },
+  ]},
+  { title: 'Spectra Project Management', module: 'project_management', items: [
+    { key: 'project_management', label: 'Project Management', path: '/project-management', icon: FolderKanban, badge: 'soon' },
   ]},
   { title: null, items: [
     { key: 'analytics', label: 'Analisis', path: '/analytics', icon: BarChart3 },

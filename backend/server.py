@@ -216,7 +216,7 @@ async def register(response: Response, body: RegisterRequest):
     tenant_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc).isoformat()
     trial_end = (datetime.now(timezone.utc) + timedelta(days=15)).isoformat()
-    tenant = {"id": tenant_id, "name": body.tenant_name or f"{body.name}'s Organization", "branding": {"company_name": body.tenant_name or f"{body.name}'s Organization", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "sender_defaults": {"name": body.tenant_name or body.name, "email": "no-reply@spectra-metrics.com"}, "modules": {"prospeccion": False, "leads": True, "crm": True, "email_marketing": False, "web": False, "performance": False}, "plan": "trial", "price": 0, "active": True, "trial_ends_at": trial_end, "created_at": now}
+    tenant = {"id": tenant_id, "name": body.tenant_name or f"{body.name}'s Organization", "branding": {"company_name": body.tenant_name or f"{body.name}'s Organization", "logo_url": "", "primary_color": "#1D4ED8", "secondary_color": "#6366F1"}, "sender_defaults": {"name": body.tenant_name or body.name, "email": "no-reply@spectra-metrics.com"}, "modules": {"prospeccion": False, "leads": True, "crm": True, "email_marketing": False, "web": False, "performance": False, "finance": False, "project_management": False, "fidelity": False}, "plan": "trial", "price": 0, "active": True, "trial_ends_at": trial_end, "created_at": now}
     await db.tenants.insert_one(tenant)
     user_doc = {"email": email, "password_hash": hash_password(body.password), "name": body.name, "role": "tenant_admin", "tenant_id": tenant_id, "created_at": now}
     result = await db.users.insert_one(user_doc)
@@ -2345,7 +2345,7 @@ async def ai_help(request: Request, body: Dict[str, Any] = {}):
 async def get_tenant_modules(request: Request):
     user = await get_current_user(request)
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
-    return tenant.get("modules", {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False}) if tenant else {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False}
+    return tenant.get("modules", {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False, "finance": False, "project_management": False, "fidelity": False}) if tenant else {"prospeccion": True, "leads": True, "crm": True, "email_marketing": True, "web": False, "performance": False, "finance": False, "project_management": False, "fidelity": False}
 
 @api_router.get("/tenant/status")
 async def get_tenant_status(request: Request):

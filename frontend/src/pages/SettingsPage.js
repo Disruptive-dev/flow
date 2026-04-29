@@ -399,15 +399,18 @@ export default function SettingsPage() {
                 { key: 'leads', label: 'Leads', desc: 'Centro de leads (prospeccion, bot, LinkedIn)', color: 'bg-indigo-50 text-indigo-700' },
                 { key: 'email_marketing', label: 'Spectra Email Marketing', desc: 'Listas, Campanas de Email, Plantillas', color: 'bg-purple-50 text-purple-700' },
                 { key: 'crm', label: 'Spectra CRM', desc: 'Contactos, Pipeline de Oportunidades, Notas', color: 'bg-emerald-50 text-emerald-700' },
+                { key: 'fidelity', label: 'Spectra Fidelity', desc: 'Fidelizacion, beneficios, retencion (Proximamente)', color: 'bg-pink-50 text-pink-700' },
                 { key: 'web', label: 'Spectra Web', desc: 'Landing Pages, Formularios', color: 'bg-orange-50 text-orange-700' },
                 { key: 'performance', label: 'Spectra Performance', desc: 'Meta Ads, Google Ads, TikTok, SEO, GEO', color: 'bg-red-50 text-red-700' },
+                { key: 'finance', label: 'Spectra Finance', desc: 'Control financiero, caja, rentabilidad (Proximamente)', color: 'bg-emerald-50 text-emerald-700' },
+                { key: 'project_management', label: 'Spectra Project Management', desc: 'Proyectos, tableros, tareas (Proximamente)', color: 'bg-blue-50 text-blue-700' },
               ].map(({ key, label, desc, color }) => (
                 <div key={key} className="flex items-center justify-between p-4 border border-zinc-200 rounded-xl" data-testid={`module-${key}`}>
                   <div className="flex items-center gap-4">
                     <Badge className={color}>{label}</Badge>
                     <p className="text-sm text-zinc-500">{desc}</p>
                   </div>
-                  <Switch checked={modules[key] ?? true} onCheckedChange={v => toggleModule(key, v)} data-testid={`module-toggle-${key}`} />
+                  <Switch checked={modules[key] ?? false} onCheckedChange={v => toggleModule(key, v)} data-testid={`module-toggle-${key}`} />
                 </div>
               ))}
             </CardContent>

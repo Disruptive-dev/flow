@@ -68,7 +68,7 @@ export default function FlowBotButton({ section }) {
       </Button>
 
       {open && (
-        <Card className="absolute right-0 top-12 w-[420px] z-50 shadow-2xl border-blue-200 animate-fade-in" data-testid="flow-bot-panel">
+        <Card className="absolute right-0 top-12 w-[min(92vw,520px)] z-50 shadow-2xl border-blue-200 animate-fade-in" data-testid="flow-bot-panel">
           <CardContent className="p-0">
             <div className="flex items-center justify-between px-4 py-3 border-b border-zinc-200 bg-zinc-50 rounded-t-xl">
               <div className="flex items-center gap-2">
@@ -78,7 +78,7 @@ export default function FlowBotButton({ section }) {
               <button onClick={() => setOpen(false)} className="text-zinc-400 hover:text-zinc-600"><X className="w-4 h-4" /></button>
             </div>
 
-            <div className="max-h-[320px] overflow-y-auto p-4 space-y-3">
+            <div className="h-[min(60vh,480px)] overflow-y-auto p-4 space-y-3">
               {messages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                   <div className={`max-w-[90%] px-3 py-2 rounded-xl text-sm leading-relaxed ${
