@@ -94,6 +94,8 @@ export default function SettingsPage() {
   const [branding, setBranding] = useState({ company_name: '', industry: '', phone: '', address: '', website: '', tax_id: '', country: '', description: '' });
   const [userDialogOpen, setUserDialogOpen] = useState(false);
   const [newUser, setNewUser] = useState({ email: '', password: '', name: '', role: 'operator' });
+  const [editUser, setEditUser] = useState(null);
+  const [editUserOpen, setEditUserOpen] = useState(false);
   const [modules, setModules] = useState({ prospeccion: true, crm: true, email_marketing: true });
   const [editingIntegration, setEditingIntegration] = useState(null);
   const [editValues, setEditValues] = useState({ base_url: '', api_key: '' });
@@ -175,6 +177,33 @@ export default function SettingsPage() {
       setNewUser({ email: '', password: '', name: '', role: 'operator' });
       toast.success('Usuario creado');
     } catch (err) { toast.error(err.response?.data?.detail || 'Error al crear usuario'); }
+  };
+
+  const openEditUser = (u) => {
+    setEditUser({ id: u.id, name: u.name || '', role: u.role, password: '', email: u.email });
+    setEditUserOpen(true);
+  };
+
+  const saveEditUser = async () => {
+    if (!editUser?.name) return toast.error('El nombre es obligatorio');
+    try {
+      const payload = { name: editUser.name, role: editUser.role };
+      if (editUser.password) payload.password = editUser.password;
+      const { data } = await api.put(`/users/${editUser.id}`, payload);
+      setUsers(prev => prev.map(u => (u.id === editUser.id ? { ...u, ...data } : u)));
+      setEditUserOpen(false);
+      setEditUser(null);
+      toast.success('Usuario actualizado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error al actualizar'); }
+  };
+
+  const deleteUser = async (u) => {
+    if (!window.confirm(`¿Eliminar a ${u.name} (${u.email})? Esta accion no se puede deshacer.`)) return;
+    try {
+      await api.delete(`/users/${u.id}`);
+      setUsers(prev => prev.filter(x => x.id !== u.id));
+      toast.success('Usuario eliminado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error al eliminar'); }
   };
 
   const resetDemoData = async () => {
@@ -282,16 +311,39 @@ export default function SettingsPage() {
                     <TableHead className="text-xs font-semibold text-zinc-500 uppercase">{t('name')}</TableHead>
                     <TableHead className="text-xs font-semibold text-zinc-500 uppercase">{t('email')}</TableHead>
                     <TableHead className="text-xs font-semibold text-zinc-500 uppercase">Rol</TableHead>
+                    {(user?.role === 'super_admin' || user?.role === 'tenant_admin') && (
+                      <TableHead className="text-xs font-semibold text-zinc-500 uppercase text-right">Acciones</TableHead>
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {users.map((u, i) => (
-                    <TableRow key={u.id || i} data-testid={`user-row-${i}`}>
-                      <TableCell className="font-medium text-zinc-900 text-sm">{u.name}</TableCell>
-                      <TableCell className="text-sm text-zinc-600">{u.email}</TableCell>
-                      <TableCell><Badge variant="secondary" className="text-xs capitalize">{u.role?.replace('_', ' ')}</Badge></TableCell>
-                    </TableRow>
-                  ))}
+                  {users.map((u, i) => {
+                    const roleLabel = { super_admin: 'Super Administrador', tenant_admin: 'Administrador', operator: 'Operador', viewer: 'Visor' }[u.role] || u.role;
+                    const canManage = (user?.role === 'super_admin' || user?.role === 'tenant_admin') && u.id !== user?.id;
+                    return (
+                      <TableRow key={u.id || i} data-testid={`user-row-${i}`}>
+                        <TableCell className="font-medium text-zinc-900 text-sm">{u.name}</TableCell>
+                        <TableCell className="text-sm text-zinc-600">{u.email}</TableCell>
+                        <TableCell><Badge variant="secondary" className="text-xs">{roleLabel}</Badge></TableCell>
+                        {(user?.role === 'super_admin' || user?.role === 'tenant_admin') && (
+                          <TableCell className="text-right">
+                            {canManage ? (
+                              <div className="flex items-center justify-end gap-1">
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => openEditUser(u)} data-testid={`edit-user-${i}`} title="Editar">
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </Button>
+                                <Button size="sm" variant="ghost" className="h-8 w-8 p-0 text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => deleteUser(u)} data-testid={`delete-user-${i}`} title="Eliminar">
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <span className="text-xs text-zinc-400">{u.id === user?.id ? 'Tú' : '—'}</span>
+                            )}
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </CardContent>
@@ -310,7 +362,7 @@ export default function SettingsPage() {
                     <SelectTrigger data-testid="new-user-role"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {user?.role === 'super_admin' && <SelectItem value="super_admin">Super Administrador</SelectItem>}
-                      <SelectItem value="tenant_admin">Admin del Tenant</SelectItem>
+                      <SelectItem value="tenant_admin">Administrador</SelectItem>
                       <SelectItem value="operator">Operador</SelectItem>
                       <SelectItem value="viewer">Visor</SelectItem>
                     </SelectContent>
@@ -318,6 +370,39 @@ export default function SettingsPage() {
                 </div>
                 <Button onClick={createUser} className="w-full bg-blue-600 hover:bg-blue-700 text-white" data-testid="create-user-button">Crear Usuario</Button>
               </div>
+            </DialogContent>
+          </Dialog>
+
+          {/* Edit User Dialog */}
+          <Dialog open={editUserOpen} onOpenChange={setEditUserOpen}>
+            <DialogContent>
+              <DialogHeader><DialogTitle className="font-heading">Editar Usuario</DialogTitle></DialogHeader>
+              {editUser && (
+                <div className="space-y-4 mt-4">
+                  <div><Label className="text-sm mb-1.5 block">Email</Label><Input value={editUser.email} disabled /></div>
+                  <div><Label className="text-sm mb-1.5 block">Nombre</Label><Input data-testid="edit-user-name" value={editUser.name} onChange={e => setEditUser(u => ({ ...u, name: e.target.value }))} /></div>
+                  <div>
+                    <Label className="text-sm mb-1.5 block">Rol</Label>
+                    <Select value={editUser.role} onValueChange={v => setEditUser(u => ({ ...u, role: v }))}>
+                      <SelectTrigger data-testid="edit-user-role"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {user?.role === 'super_admin' && <SelectItem value="super_admin">Super Administrador</SelectItem>}
+                        <SelectItem value="tenant_admin">Administrador</SelectItem>
+                        <SelectItem value="operator">Operador</SelectItem>
+                        <SelectItem value="viewer">Visor</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="text-sm mb-1.5 block">Nueva contrasena <span className="text-zinc-400 text-xs">(opcional)</span></Label>
+                    <Input data-testid="edit-user-password" type="password" placeholder="Dejar vacio para no cambiar" value={editUser.password} onChange={e => setEditUser(u => ({ ...u, password: e.target.value }))} />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setEditUserOpen(false)} className="flex-1">Cancelar</Button>
+                    <Button onClick={saveEditUser} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white" data-testid="save-edit-user">Guardar cambios</Button>
+                  </div>
+                </div>
+              )}
             </DialogContent>
           </Dialog>
         </TabsContent>

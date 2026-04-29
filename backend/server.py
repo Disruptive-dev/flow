@@ -1720,6 +1720,59 @@ async def create_user(request: Request, body: UserCreate):
     result = await db.users.insert_one(user_doc)
     return {"id": str(result.inserted_id), "email": email, "name": body.name, "role": body.role}
 
+@api_router.put("/users/{user_id}")
+async def update_user(request: Request, user_id: str, body: Dict[str, Any] = {}):
+    """Update user (name, role, password). Tenant admin can edit users in own tenant only."""
+    user = await get_current_user(request)
+    if user["role"] not in ["super_admin", "tenant_admin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    try:
+        target = await db.users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    # Tenant admin only within their tenant
+    if user["role"] == "tenant_admin" and target.get("tenant_id") != user["tenant_id"]:
+        raise HTTPException(status_code=403, detail="Cannot edit users from other tenants")
+    # Tenant admin cannot promote to super_admin
+    new_role = body.get("role")
+    if user["role"] == "tenant_admin" and new_role == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot promote to super_admin")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.get("name"):
+        update["name"] = body["name"].strip()
+    if new_role in ("super_admin", "tenant_admin", "operator", "viewer"):
+        update["role"] = new_role
+    if body.get("password"):
+        if len(body["password"]) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 chars")
+        update["password_hash"] = hash_password(body["password"])
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
+    updated = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    return {"id": str(updated["_id"]), "email": updated["email"], "name": updated["name"], "role": updated["role"]}
+
+@api_router.delete("/users/{user_id}")
+async def delete_user(request: Request, user_id: str):
+    """Delete user. Tenant admin only within own tenant. Cannot delete self."""
+    user = await get_current_user(request)
+    if user["role"] not in ["super_admin", "tenant_admin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    if str(user["_id"]) == user_id:
+        raise HTTPException(status_code=400, detail="No puedes eliminarte a ti mismo")
+    try:
+        target = await db.users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid user id")
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if user["role"] == "tenant_admin" and target.get("tenant_id") != user["tenant_id"]:
+        raise HTTPException(status_code=403, detail="Cannot delete users from other tenants")
+    if user["role"] == "tenant_admin" and target.get("role") == "super_admin":
+        raise HTTPException(status_code=403, detail="Cannot delete super_admin")
+    await db.users.delete_one({"_id": ObjectId(user_id)})
+    return {"message": "Usuario eliminado"}
+
 # ==================== CRM BULK CONTACT ACTIONS ====================
 
 class BulkContactAction(BaseModel):
