@@ -429,8 +429,10 @@ export default function CrmPage() {
           {pipelineView === 'kanban' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="crm-pipeline">
             {stages.map(stage => {
-              const stageDeals = deals.filter(d => d.stage === stage);
-              const sc = stageColors[stage];
+              // Match deals by stage; if no exact match in any stage, orphan deals get bucketed in the FIRST column
+              const isFirst = stage === stages[0];
+              const stageDeals = deals.filter(d => d.stage === stage || (isFirst && !stages.includes(d.stage)));
+              const sc = stageColors[stage] || { bg: 'bg-zinc-50', text: 'text-zinc-700', border: 'border-zinc-200', header: 'bg-zinc-100', card: 'border-l-4 border-l-zinc-400' };
               const isOver = dragOverStage === stage;
               const stageValue = stageDeals.reduce((sum, d) => sum + (d.value || 0), 0);
               return (

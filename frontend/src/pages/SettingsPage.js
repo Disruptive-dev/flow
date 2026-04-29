@@ -200,9 +200,8 @@ export default function SettingsPage() {
           <span className="w-px h-6 bg-zinc-300 mx-1 self-center hidden sm:inline-block" aria-hidden />
           {/* Modulos de producto */}
           <TabsTrigger value="leads" data-testid="settings-tab-leads"><Users className="w-4 h-4 mr-1.5" />Leads</TabsTrigger>
-          <TabsTrigger value="pipeline" data-testid="settings-tab-pipeline"><GitBranch className="w-4 h-4 mr-1.5" />Pipeline CRM</TabsTrigger>
+          <TabsTrigger value="crm" data-testid="settings-tab-crm"><GitBranch className="w-4 h-4 mr-1.5" />CRM</TabsTrigger>
           <TabsTrigger value="scoring" data-testid="settings-tab-scoring"><Sliders className="w-4 h-4 mr-1.5" />Scoring</TabsTrigger>
-          <TabsTrigger value="products" data-testid="settings-tab-products"><Package className="w-4 h-4 mr-1.5" />Productos</TabsTrigger>
           <span className="w-px h-6 bg-zinc-300 mx-1 self-center hidden sm:inline-block" aria-hidden />
           {/* Conexiones */}
           {user?.role === 'super_admin' && <TabsTrigger value="integrations" data-testid="settings-tab-integrations"><Link className="w-4 h-4 mr-1.5" />{t('integrations')}</TabsTrigger>}
@@ -493,9 +492,9 @@ export default function SettingsPage() {
           </Card>
         </TabsContent>
 
-        {/* PIPELINE CRM TAB */}
-        <TabsContent value="pipeline">
-          <PipelineConfig role={user?.role} />
+        {/* CRM TAB - subsecciones */}
+        <TabsContent value="crm">
+          <CrmSettingsPanel role={user?.role} />
         </TabsContent>
 
         {/* LEADS TAB */}
@@ -503,10 +502,7 @@ export default function SettingsPage() {
           <LeadsTaxonomiesConfig role={user?.role} />
         </TabsContent>
 
-        {/* PRODUCTS TAB */}
-        <TabsContent value="products">
-          <ProductsConfig />
-        </TabsContent>
+        {/* PRODUCTS TAB - REMOVED, ahora dentro de CRM */}
 
         {/* ACTIVITY LOG TAB */}
         {user?.role === 'super_admin' && (
@@ -723,3 +719,52 @@ function EditableTagList({ title, description, placeholder, items, onChange, dis
   );
 }
 
+
+// ==================== CRM SETTINGS PANEL (sub-tabs internos) ====================
+function CrmSettingsPanel({ role }) {
+  const [active, setActive] = useState('pipeline');
+  const subs = [
+    { key: 'pipeline', label: 'Pipeline', icon: GitBranch },
+    { key: 'products', label: 'Productos', icon: Package },
+    { key: 'budgets', label: 'Presupuestos', icon: Package, soon: true },
+    { key: 'invoicing', label: 'Facturacion', icon: Package, soon: true },
+  ];
+  return (
+    <div className="space-y-3" data-testid="crm-settings-panel">
+      <div className="flex flex-wrap gap-1.5 border-b border-zinc-200 pb-3">
+        {subs.map(s => {
+          const Icon = s.icon;
+          const isActive = active === s.key;
+          return (
+            <button key={s.key} onClick={() => setActive(s.key)} data-testid={`crm-subtab-${s.key}`}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1.5 transition-colors ${isActive ? 'bg-zinc-900 text-white' : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'}`}>
+              <Icon className="w-3.5 h-3.5" /> {s.label}
+              {s.soon && <span className="text-[9px] bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded-full ml-1">Pronto</span>}
+            </button>
+          );
+        })}
+      </div>
+      {active === 'pipeline' && <PipelineConfig role={role} />}
+      {active === 'products' && <ProductsConfig />}
+      {active === 'budgets' && <ComingSoonCard title="Presupuestos" subtitle="Creacion, envio y seguimiento de presupuestos comerciales conectados con clientes y oportunidades." />}
+      {active === 'invoicing' && <ComingSoonCard title="Facturacion" subtitle="Gestion de facturas, ventas emitidas y conexion futura con Spectra Finance." />}
+    </div>
+  );
+}
+
+function ComingSoonCard({ title, subtitle }) {
+  return (
+    <Card className="border-2 border-dashed border-amber-200 rounded-xl bg-amber-50/30">
+      <CardContent className="p-10 text-center space-y-3">
+        <div className="w-14 h-14 mx-auto rounded-2xl bg-amber-100 flex items-center justify-center">
+          <Clock className="w-7 h-7 text-amber-600" />
+        </div>
+        <h3 className="text-xl font-heading font-semibold text-zinc-900">{title}</h3>
+        <p className="text-sm text-zinc-600 max-w-md mx-auto">{subtitle}</p>
+        <div className="inline-flex items-center gap-2 bg-amber-100 text-amber-700 px-4 py-2 rounded-full text-sm font-medium">
+          Este modulo estara disponible proximamente
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

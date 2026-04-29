@@ -5,6 +5,7 @@ import { DemoProvider } from '@/contexts/DemoContext';
 import { Toaster } from '@/components/ui/sonner';
 import AppLayout from '@/components/layout/AppLayout';
 import HelpBot from '@/components/HelpBot';
+import ScrollToTop from '@/components/ScrollToTop';
 import LoginPage from '@/pages/LoginPage';
 import ResetPasswordPage from '@/pages/ResetPasswordPage';
 import DashboardPage from '@/pages/DashboardPage';
@@ -46,6 +47,7 @@ function AppRoutes() {
 
   return (
     <>
+      <ScrollToTop />
       <Routes>
         <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
