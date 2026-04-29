@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Sidebar from '@/components/layout/Sidebar';
 import { useAuth } from '@/contexts/AuthContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useDemo } from '@/contexts/DemoContext';
 import { Outlet, useNavigate } from 'react-router-dom';
-import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle, Pencil, Menu } from 'lucide-react';
+import { Globe, User, Zap, Loader2, LogOut, KeyRound, UserCircle, Pencil, Menu, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +29,11 @@ export default function AppLayout() {
   const [avatarUrl, setAvatarUrl] = useState(user?.avatar_url || '');
   const [pwForm, setPwForm] = useState({ current_password: '', new_password: '', confirm: '' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [desktopHidden, setDesktopHidden] = useState(() => localStorage.getItem('sf_sidebar_hidden') === '1');
+
+  useEffect(() => {
+    localStorage.setItem('sf_sidebar_hidden', desktopHidden ? '1' : '0');
+  }, [desktopHidden]);
 
   const saveProfile = async () => {
     try {
@@ -105,8 +110,8 @@ export default function AppLayout() {
 
   return (
     <div className="min-h-screen bg-zinc-50">
-      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
-      <div className="lg:ml-[260px] min-h-screen">
+      <Sidebar mobileOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} desktopHidden={desktopHidden} />
+      <div className={`min-h-screen transition-[margin] duration-300 ${desktopHidden ? 'lg:ml-0' : 'lg:ml-[260px]'}`}>
         {/* Top Header */}
         <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm border-b border-zinc-200 px-4 sm:px-8 py-3">
           <div className="flex items-center justify-between gap-3">
@@ -117,6 +122,15 @@ export default function AppLayout() {
               aria-label="Abrir menu"
             >
               <Menu className="w-5 h-5" />
+            </button>
+            <button
+              onClick={() => setDesktopHidden(v => !v)}
+              className="hidden lg:flex p-1.5 rounded-md hover:bg-zinc-100 text-zinc-600 items-center gap-1.5"
+              data-testid="sidebar-desktop-toggle"
+              aria-label={desktopHidden ? 'Mostrar menu' : 'Ocultar menu'}
+              title={desktopHidden ? 'Mostrar menu' : 'Ocultar menu'}
+            >
+              {desktopHidden ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
             </button>
             <div className="flex items-center justify-end gap-2 sm:gap-3 flex-1">
             {/* Demo Button - solo admins */}

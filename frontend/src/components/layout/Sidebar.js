@@ -30,6 +30,8 @@ const navSections = [
   ]},
   { title: 'Spectra CRM', module: 'crm', items: [
     { key: 'crm_sync', label: 'Spectra CRM', path: '/crm-sync', icon: RefreshCw },
+    { key: 'crm_budgets', label: 'Presupuestos', path: '/crm/budgets', icon: FileText, badge: 'soon' },
+    { key: 'crm_invoicing', label: 'Facturacion', path: '/crm/invoicing', icon: FileText, badge: 'soon' },
   ]},
   { title: 'Spectra Fidelity', module: 'fidelity', items: [
     { key: 'fidelity', label: 'Fidelity', path: '/fidelity', icon: Heart, badge: 'soon' },
@@ -54,7 +56,7 @@ const navSections = [
 
 const superAdminSection = { key: 'tenants', label: 'Admin Tenants', path: '/admin/tenants', icon: ShieldCheck };
 
-export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
+export default function Sidebar({ mobileOpen = false, onClose = () => {}, desktopHidden = false }) {
   const { user, logout } = useAuth();
   const { t } = useLanguage();
   const location = useLocation();
@@ -78,7 +80,7 @@ export default function Sidebar({ mobileOpen = false, onClose = () => {} }) {
     <>
       {/* Mobile overlay */}
       {mobileOpen && <div className="fixed inset-0 bg-black/60 z-40 lg:hidden" onClick={onClose} data-testid="sidebar-overlay" />}
-      <aside data-testid="sidebar" className={`fixed left-0 top-0 h-screen w-[260px] bg-zinc-950 text-white flex flex-col z-50 transition-transform duration-300 lg:translate-x-0 ${mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`} onClick={(e) => e.stopPropagation()}>
+      <aside data-testid="sidebar" className={`fixed left-0 top-0 h-screen w-[260px] bg-zinc-950 text-white flex flex-col z-50 transition-transform duration-300 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${desktopHidden ? 'lg:-translate-x-full' : 'lg:translate-x-0'}`} onClick={(e) => e.stopPropagation()}>
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6 border-b border-zinc-800">
         <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center">

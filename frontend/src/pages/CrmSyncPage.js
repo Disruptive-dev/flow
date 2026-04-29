@@ -427,7 +427,7 @@ export default function CrmPage() {
           </div>
 
           {pipelineView === 'kanban' ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3" data-testid="crm-pipeline">
+          <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory" data-testid="crm-pipeline" style={{ scrollbarWidth: 'thin' }}>
             {stages.map(stage => {
               // Match deals by stage; if no exact match in any stage, orphan deals get bucketed in the FIRST column
               const isFirst = stage === stages[0];
@@ -436,7 +436,7 @@ export default function CrmPage() {
               const isOver = dragOverStage === stage;
               const stageValue = stageDeals.reduce((sum, d) => sum + (d.value || 0), 0);
               return (
-                <div key={stage} className={`rounded-xl border transition-all ${isOver ? `${sc.border} border-2 shadow-md` : 'border-zinc-200'}`}
+                <div key={stage} className={`shrink-0 w-[260px] sm:w-[230px] md:w-[210px] xl:w-[200px] snap-start rounded-xl border transition-all ${isOver ? `${sc.border} border-2 shadow-md` : 'border-zinc-200'}`}
                   onDragOver={(e) => handleDragOver(e, stage)} onDragLeave={handleDragLeave} onDrop={(e) => handleDrop(e, stage)} data-testid={`pipeline-stage-${stage}`}>
                   <div className={`px-3 py-2.5 rounded-t-xl ${sc.header} border-b ${sc.border}`}>
                     <div className="flex items-center justify-between">

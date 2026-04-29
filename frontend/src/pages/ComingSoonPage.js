@@ -1,7 +1,33 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { Rocket, DollarSign, FolderKanban, Heart } from 'lucide-react';
+import { Rocket, DollarSign, FolderKanban, Heart, FileText, Receipt } from 'lucide-react';
 
 const PRESETS = {
+  budgets: {
+    icon: FileText,
+    title: 'Presupuestos',
+    subtitle: 'Creacion, envio y seguimiento de presupuestos comerciales conectados con clientes y oportunidades.',
+    bullets: [
+      'Plantillas de presupuestos personalizables',
+      'Envio por email con tracking de apertura',
+      'Aprobacion online con firma digital',
+      'Conversion automatica a oportunidad ganada',
+      'Reporting de tasa de conversion',
+    ],
+    color: 'blue',
+  },
+  invoicing: {
+    icon: Receipt,
+    title: 'Facturacion',
+    subtitle: 'Gestion de facturas, ventas emitidas y conexion futura con Spectra Finance.',
+    bullets: [
+      'Emision de facturas A, B y C',
+      'Integracion con AFIP / facturacion electronica',
+      'Recordatorios automaticos de cobro',
+      'Conexion con Spectra Finance para conciliacion',
+      'Reportes de IVA y libro de ventas',
+    ],
+    color: 'emerald',
+  },
   finance: {
     icon: DollarSign,
     title: 'Spectra Finance',

@@ -70,6 +70,8 @@ function AppRoutes() {
           <Route path="/finance" element={<ComingSoonPage preset="finance" />} />
           <Route path="/project-management" element={<ComingSoonPage preset="project_management" />} />
           <Route path="/fidelity" element={<ComingSoonPage preset="fidelity" />} />
+          <Route path="/crm/budgets" element={<ComingSoonPage preset="budgets" />} />
+          <Route path="/crm/invoicing" element={<ComingSoonPage preset="invoicing" />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
