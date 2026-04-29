@@ -15,6 +15,8 @@ import {
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import FlowBotButton from '@/components/FlowBotButton';
+import { COUNTRIES, flagOf } from '@/lib/countries';
+import { Link } from 'react-router-dom';
 
 const allKpis = [
   { key: 'jobs_this_month', icon: Briefcase, color: 'text-blue-600', bg: 'bg-blue-50', label: 'Trabajos' },
@@ -323,6 +325,46 @@ export default function DashboardPage() {
             </CardContent>
           </Card>
         )}
+
+        {/* Top 5 paises por leads */}
+        <Card className="border-zinc-200 rounded-xl" data-testid="leads-by-country-widget">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-heading font-medium text-zinc-900">Leads por pais</h3>
+              <Badge variant="secondary" className="text-[10px]">Top 5</Badge>
+            </div>
+            {(() => {
+              const list = stats?.leads_by_country || [];
+              if (!list.length) return <p className="text-sm text-zinc-400">Aun no hay leads geolocalizados.</p>;
+              const max = Math.max(...list.map(x => x.count), 1);
+              return (
+                <div className="space-y-3">
+                  {list.map((row, i) => {
+                    const meta = COUNTRIES.find(c => c.es === row.country || c.en === row.country);
+                    const pct = (row.count / max) * 100;
+                    return (
+                      <Link
+                        key={row.country}
+                        to={`/leads?country=${encodeURIComponent(row.country)}`}
+                        className="block group"
+                        data-testid={`country-row-${i}`}
+                      >
+                        <div className="flex items-center gap-3 text-sm">
+                          <span className="text-xl leading-none w-7" aria-hidden>{meta ? flagOf(meta.c) : '\u{1F310}'}</span>
+                          <span className="flex-1 text-zinc-700 group-hover:text-blue-600 transition-colors truncate">{row.country}</span>
+                          <span className="text-xs font-semibold text-zinc-900 tabular-nums">{row.count}</span>
+                        </div>
+                        <div className="mt-1.5 h-1.5 rounded-full bg-zinc-100 overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-blue-500 to-indigo-600" style={{ width: `${pct}%` }} />
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

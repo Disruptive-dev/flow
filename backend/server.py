@@ -461,12 +461,21 @@ async def get_dashboard_stats(request: Request, from_date: Optional[str] = None,
     es = email_stats[0] if email_stats else {}
     crm_synced = await db.crm_sync_logs.count_documents({"tenant_id": tid, **date_filter, "status": "synced"})
     recent = await db.audit_logs.find({"tenant_id": tid}, {"_id": 0}).sort("created_at", -1).limit(10).to_list(10)
+    # Top 5 countries by lead count
+    by_country_pipe = [
+        {"$match": {**lead_filter, "country": {"$nin": [None, ""]}}},
+        {"$group": {"_id": "$country", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 5},
+    ]
+    by_country = [{"country": d["_id"], "count": d["count"]} async for d in db.leads.aggregate(by_country_pipe)]
     return {
         "jobs_this_month": jobs_count, "raw_leads": raw_leads, "qualified_leads": qualified,
         "total_leads": total_leads, "emails_sent": es.get("sent", 0), "opens": es.get("opens", 0),
         "clicks": es.get("clicks", 0), "replies": es.get("replies", 0),
         "interested": es.get("interested", 0), "leads_sent_to_crm": crm_synced,
-        "opportunities": es.get("crm", 0), "active_campaigns": campaigns_active, "recent_activity": recent
+        "opportunities": es.get("crm", 0), "active_campaigns": campaigns_active, "recent_activity": recent,
+        "leads_by_country": by_country,
     }
 
 # ==================== PROSPECT JOBS ====================

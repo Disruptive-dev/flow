@@ -119,6 +119,7 @@ export default function LeadsPage() {
   const { t } = useLanguage();
   const [searchParams] = typeof window !== 'undefined' ? [new URLSearchParams(window.location.search)] : [new URLSearchParams()];
   const jobIdFromUrl = searchParams.get('job_id') || '';
+  const countryFromUrl = searchParams.get('country') || '';
   const [leads, setLeads] = useState([]);
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState({ scored: 0, rejected: 0, approved: 0, contacted: 0 });
@@ -131,7 +132,7 @@ export default function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [cityFilter, setCityFilter] = useState('');
-  const [countryFilter, setCountryFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState(countryFromUrl);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
