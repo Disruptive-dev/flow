@@ -16,6 +16,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Users, Briefcase, Plus, Search, Loader2, Building2, Mail, Phone, MapPin, TrendingUp, Send, GripVertical, DollarSign, Download, Upload, Trash2, X, MoreHorizontal, Tag, Clock, FileText, CheckCircle2, Calendar, Pencil, Package, History, Rocket } from 'lucide-react';
 import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
+import { COUNTRIES, flagOf } from '@/lib/countries';
 
 const taskTypes = [
   { value: 'llamada', label: 'Llamar' },
@@ -50,6 +51,7 @@ export default function CrmPage() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
   const [selectedContact, setSelectedContact] = useState(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [newNote, setNewNote] = useState('');
@@ -346,6 +348,22 @@ export default function CrmPage() {
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                 <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar contactos..." className="pl-10 h-10" data-testid="crm-search" />
               </form>
+              <select
+                value={countryFilter}
+                onChange={e => setCountryFilter(e.target.value)}
+                className="h-10 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 text-sm w-[180px]"
+                data-testid="crm-country-filter"
+              >
+                <option value="">{`\u{1F310} Todos los paises`}</option>
+                {[...COUNTRIES].sort((a, b) => a.es.localeCompare(b.es, 'es')).map(c => (
+                  <option key={c.c} value={c.es}>{flagOf(c.c)} {c.es}</option>
+                ))}
+              </select>
+              {countryFilter && (
+                <Button variant="ghost" size="sm" className="text-zinc-500 h-10" onClick={() => setCountryFilter('')}>
+                  <X className="w-3.5 h-3.5 mr-1" /> Limpiar
+                </Button>
+              )}
               {selectedContacts.length > 0 && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -379,7 +397,7 @@ export default function CrmPage() {
                   <TableBody>
                     {contacts.length === 0 ? (
                       <TableRow><TableCell colSpan={8} className="text-center py-12 text-zinc-400">No hay contactos. Crea uno manualmente, importa desde Excel, o envia leads desde el modulo de Leads.</TableCell></TableRow>
-                    ) : contacts.map((c, i) => (
+                    ) : contacts.filter(c => !countryFilter || c.country === countryFilter).map((c, i) => (
                       <TableRow key={c.id} className="hover:bg-zinc-50/80" data-testid={`crm-contact-${i}`}>
                         <TableCell><Checkbox checked={selectedContacts.includes(c.id)} onCheckedChange={() => toggleSelect(c.id)} /></TableCell>
                         <TableCell className="font-medium text-zinc-900 text-sm cursor-pointer hover:text-blue-600" onClick={() => openContact(c.id)}>{c.business_name}</TableCell>

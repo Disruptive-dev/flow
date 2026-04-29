@@ -131,6 +131,7 @@ export default function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [cityFilter, setCityFilter] = useState('');
+  const [countryFilter, setCountryFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [sortBy, setSortBy] = useState('created_at');
@@ -208,6 +209,7 @@ export default function LeadsPage() {
       if (sourceFilter) params.source = sourceFilter;
       if (categoryFilter) params.category = categoryFilter;
       if (cityFilter) params.city = cityFilter;
+      if (countryFilter) params.country = countryFilter;
       if (dateFrom) params.date_from = dateFrom;
       if (dateTo) params.date_to = dateTo;
       const { data } = await api.get('/leads', { params });
@@ -222,7 +224,7 @@ export default function LeadsPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchLeads(); }, [page, statusFilter, jobFilter, sourceFilter, categoryFilter, cityFilter, dateFrom, dateTo, sortBy, sortDir]);
+  useEffect(() => { fetchLeads(); }, [page, statusFilter, jobFilter, sourceFilter, categoryFilter, cityFilter, countryFilter, dateFrom, dateTo, sortBy, sortDir]);
 
   const toggleSort = (field) => {
     if (sortBy === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -320,14 +322,25 @@ export default function LeadsPage() {
             </SelectContent>
           </Select>
           <Input value={categoryFilter} onChange={e => { setCategoryFilter(e.target.value); setPage(1); }} placeholder="Categoria..." className="w-[140px] h-9" data-testid="leads-category-filter" />
+          <select
+            value={countryFilter}
+            onChange={e => { setCountryFilter(e.target.value); setPage(1); }}
+            className="h-9 rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 px-2 text-sm w-[170px]"
+            data-testid="leads-country-filter"
+          >
+            <option value="">{`\u{1F310} Todos los paises`}</option>
+            {[...COUNTRIES].sort((a, b) => a.es.localeCompare(b.es, 'es')).map(c => (
+              <option key={c.c} value={c.es}>{flagOf(c.c)} {c.es}</option>
+            ))}
+          </select>
           <Input value={cityFilter} onChange={e => { setCityFilter(e.target.value); setPage(1); }} placeholder="Ciudad..." className="w-[140px] h-9" data-testid="leads-city-filter" />
           <div className="flex items-center gap-1.5">
             <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} className="w-[130px] h-9 text-xs" data-testid="leads-date-from" />
             <span className="text-zinc-400 text-xs">a</span>
             <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} className="w-[130px] h-9 text-xs" data-testid="leads-date-to" />
           </div>
-          {(sourceFilter || categoryFilter || cityFilter || dateFrom || dateTo || statusFilter || jobFilter) && (
-            <Button variant="ghost" size="sm" className="text-zinc-400 h-9" onClick={() => { setSourceFilter(''); setCategoryFilter(''); setCityFilter(''); setDateFrom(''); setDateTo(''); setStatusFilter(''); setJobFilter(''); setPage(1); }}>
+          {(sourceFilter || categoryFilter || cityFilter || countryFilter || dateFrom || dateTo || statusFilter || jobFilter) && (
+            <Button variant="ghost" size="sm" className="text-zinc-400 h-9" onClick={() => { setSourceFilter(''); setCategoryFilter(''); setCityFilter(''); setCountryFilter(''); setDateFrom(''); setDateTo(''); setStatusFilter(''); setJobFilter(''); setPage(1); }}>
               <X className="w-3.5 h-3.5 mr-1" /> Limpiar
             </Button>
           )}

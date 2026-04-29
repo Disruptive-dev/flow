@@ -800,7 +800,7 @@ async def leads_stats(request: Request, job_id: Optional[str] = None):
     return {"total": sum(stats.values()), "scored": stats.get("scored", 0), "approved": stats.get("approved", 0), "rejected": stats.get("rejected", 0), "contacted": stats.get("contacted", 0), "sent_to_crm": stats.get("sent_to_crm", 0), "cleaned": stats.get("cleaned", 0)}
 
 @api_router.get("/leads")
-async def list_leads(request: Request, status: Optional[str] = None, job_id: Optional[str] = None, search: Optional[str] = None, source: Optional[str] = None, category: Optional[str] = None, city: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, sort_by: Optional[str] = "created_at", sort_dir: Optional[str] = "desc", page: int = 1, limit: int = 50):
+async def list_leads(request: Request, status: Optional[str] = None, job_id: Optional[str] = None, search: Optional[str] = None, source: Optional[str] = None, category: Optional[str] = None, city: Optional[str] = None, country: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, sort_by: Optional[str] = "created_at", sort_dir: Optional[str] = "desc", page: int = 1, limit: int = 50):
     user = await get_current_user(request)
     query = {"tenant_id": user["tenant_id"]}
     if status:
@@ -813,6 +813,8 @@ async def list_leads(request: Request, status: Optional[str] = None, job_id: Opt
         query["normalized_category"] = {"$regex": category, "$options": "i"}
     if city:
         query["city"] = {"$regex": city, "$options": "i"}
+    if country:
+        query["country"] = country
     if date_from or date_to:
         date_filter = {}
         if date_from:
