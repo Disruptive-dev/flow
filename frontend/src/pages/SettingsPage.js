@@ -192,15 +192,21 @@ export default function SettingsPage() {
       <h1 className="text-3xl font-heading font-semibold text-zinc-900 tracking-tight">{t('settings')}</h1>
 
       <Tabs defaultValue="branding">
-        <TabsList className="bg-zinc-100">
+        <TabsList className="bg-zinc-100 flex flex-wrap h-auto gap-1 p-1">
+          {/* General */}
           <TabsTrigger value="branding" data-testid="settings-tab-branding"><Building2 className="w-4 h-4 mr-1.5" />Empresa</TabsTrigger>
           <TabsTrigger value="users" data-testid="settings-tab-users"><Users className="w-4 h-4 mr-1.5" />{t('user_management')}</TabsTrigger>
+          {user?.role === 'super_admin' && <TabsTrigger value="modules" data-testid="settings-tab-modules"><Package className="w-4 h-4 mr-1.5" />Modulos</TabsTrigger>}
+          <span className="w-px h-6 bg-zinc-300 mx-1 self-center hidden sm:inline-block" aria-hidden />
+          {/* Modulos de producto */}
+          <TabsTrigger value="leads" data-testid="settings-tab-leads"><Users className="w-4 h-4 mr-1.5" />Leads</TabsTrigger>
+          <TabsTrigger value="pipeline" data-testid="settings-tab-pipeline"><GitBranch className="w-4 h-4 mr-1.5" />Pipeline CRM</TabsTrigger>
+          <TabsTrigger value="scoring" data-testid="settings-tab-scoring"><Sliders className="w-4 h-4 mr-1.5" />Scoring</TabsTrigger>
+          <TabsTrigger value="products" data-testid="settings-tab-products"><Package className="w-4 h-4 mr-1.5" />Productos</TabsTrigger>
+          <span className="w-px h-6 bg-zinc-300 mx-1 self-center hidden sm:inline-block" aria-hidden />
+          {/* Conexiones */}
           {user?.role === 'super_admin' && <TabsTrigger value="integrations" data-testid="settings-tab-integrations"><Link className="w-4 h-4 mr-1.5" />{t('integrations')}</TabsTrigger>}
           <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
-          {user?.role === 'super_admin' && <TabsTrigger value="modules" data-testid="settings-tab-modules"><Package className="w-4 h-4 mr-1.5" />Modulos</TabsTrigger>}
-          <TabsTrigger value="scoring" data-testid="settings-tab-scoring"><Sliders className="w-4 h-4 mr-1.5" />Scoring</TabsTrigger>
-          <TabsTrigger value="pipeline" data-testid="settings-tab-pipeline"><GitBranch className="w-4 h-4 mr-1.5" />Pipeline CRM</TabsTrigger>
-          <TabsTrigger value="products" data-testid="settings-tab-products"><Package className="w-4 h-4 mr-1.5" />Productos</TabsTrigger>
           {user?.role === 'super_admin' && <TabsTrigger value="activity" data-testid="settings-tab-activity"><Clock className="w-4 h-4 mr-1.5" />Actividad</TabsTrigger>}
         </TabsList>
 
@@ -492,6 +498,11 @@ export default function SettingsPage() {
           <PipelineConfig role={user?.role} />
         </TabsContent>
 
+        {/* LEADS TAB */}
+        <TabsContent value="leads">
+          <LeadsTaxonomiesConfig role={user?.role} />
+        </TabsContent>
+
         {/* PRODUCTS TAB */}
         <TabsContent value="products">
           <ProductsConfig />
@@ -607,3 +618,108 @@ function PipelineConfig({ role }) {
     </Card>
   );
 }
+
+// ==================== LEADS TAXONOMIES CONFIG ====================
+function LeadsTaxonomiesConfig({ role }) {
+  const [data, setData] = useState({ sources: [], statuses: [], categories: [], channels: [], provinces: [], cities: [] });
+  const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const isAdmin = role === 'super_admin' || role === 'tenant_admin';
+
+  useEffect(() => {
+    api.get('/tenant/lead-taxonomies').then(r => setData({ sources: [], statuses: [], categories: [], channels: [], provinces: [], cities: [], ...r.data })).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try { await api.put('/tenant/lead-taxonomies', data); toast.success('Configuracion de Leads guardada'); }
+    catch { toast.error('Error al guardar'); }
+    setSaving(false);
+  };
+
+  const lists = [
+    { key: 'sources', label: 'Fuentes', desc: 'Origen del lead (manual, formulario, ads, referido, etc.)', placeholder: 'Ej: meta_ads' },
+    { key: 'statuses', label: 'Estados', desc: 'Estado actual del lead en el funnel', placeholder: 'Ej: calificado' },
+    { key: 'categories', label: 'Categorias / Industrias', desc: 'Sector o vertical del lead', placeholder: 'Ej: gastronomia' },
+    { key: 'channels', label: 'Canales de origen', desc: 'Canal por el que llego (whatsapp, web, etc.)', placeholder: 'Ej: instagram' },
+    { key: 'provinces', label: 'Provincias / Estados', desc: 'Provincias frecuentes para autocompletar', placeholder: 'Ej: Tucuman' },
+    { key: 'cities', label: 'Ciudades', desc: 'Ciudades frecuentes para autocompletar', placeholder: 'Ej: San Miguel de Tucuman' },
+  ];
+
+  if (loading) return <div className="flex items-center gap-2 text-zinc-400 py-8"><Loader2 className="w-4 h-4 animate-spin" /> Cargando...</div>;
+
+  return (
+    <div className="space-y-3" data-testid="leads-config">
+      <Card className="border-zinc-200 rounded-xl bg-blue-50/50">
+        <CardContent className="p-4 flex items-start gap-3">
+          <Users className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-heading font-medium text-zinc-900 text-sm">Configuracion de Leads</h3>
+            <p className="text-xs text-zinc-600 mt-0.5">Personaliza las opciones que aparecen al crear o editar leads. Los cambios se reflejan en toda la app.</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {lists.map(({ key, label, desc, placeholder }) => (
+        <EditableTagList
+          key={key}
+          title={label}
+          description={desc}
+          placeholder={placeholder}
+          items={data[key] || []}
+          onChange={(items) => setData(d => ({ ...d, [key]: items }))}
+          disabled={!isAdmin}
+          testId={`leads-config-${key}`}
+        />
+      ))}
+
+      {isAdmin && (
+        <div className="flex justify-end pt-2">
+          <Button onClick={save} disabled={saving} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="leads-config-save">
+            {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Check className="w-4 h-4 mr-2" />} Guardar configuracion de Leads
+          </Button>
+        </div>
+      )}
+      {!isAdmin && <p className="text-xs text-zinc-500">Solo administradores pueden modificar la configuracion de Leads.</p>}
+    </div>
+  );
+}
+
+function EditableTagList({ title, description, placeholder, items, onChange, disabled, testId }) {
+  const [input, setInput] = useState('');
+  const add = () => {
+    const v = input.trim();
+    if (!v || items.includes(v)) { setInput(''); return; }
+    onChange([...items, v]);
+    setInput('');
+  };
+  const remove = (i) => onChange(items.filter((_, idx) => idx !== i));
+  return (
+    <Card className="border-zinc-200 rounded-xl" data-testid={testId}>
+      <CardContent className="p-4 space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h4 className="font-heading font-medium text-zinc-900 text-sm">{title} <span className="text-xs text-zinc-400 font-normal">({items.length})</span></h4>
+            <p className="text-xs text-zinc-500 mt-0.5">{description}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {items.length === 0 && <p className="text-xs text-zinc-400 italic">Sin opciones cargadas. Agrega la primera abajo.</p>}
+          {items.map((it, i) => (
+            <span key={i} className="inline-flex items-center gap-1 bg-zinc-100 text-zinc-700 text-xs px-2 py-1 rounded-md border border-zinc-200">
+              {it}
+              {!disabled && <button onClick={() => remove(i)} className="text-zinc-400 hover:text-red-600" aria-label="Eliminar"><X className="w-3 h-3" /></button>}
+            </span>
+          ))}
+        </div>
+        {!disabled && (
+          <div className="flex gap-2">
+            <Input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), add())} placeholder={placeholder} className="h-8 text-sm" />
+            <Button onClick={add} variant="outline" size="sm" disabled={!input.trim()}><Plus className="w-3.5 h-3.5" /></Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+

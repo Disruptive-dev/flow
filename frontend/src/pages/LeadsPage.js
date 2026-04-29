@@ -143,6 +143,22 @@ export default function LeadsPage() {
   const [newLead, setNewLead] = useState({ business_name: '', contact_name: '', email: '', phone: '', whatsapp: '', city: '', province: '', country: 'Argentina', category: '', website: '', linkedin: '', instagram: '', source: 'manual', status: 'nuevo', notes: '' });
   const [rescoring, setRescoring] = useState(false);
 
+  // Lead taxonomies (custom per tenant)
+  const FALLBACK_SOURCES = ['manual','bot_ia','spectra_prospection','formulario_web','landing_page','email_marketing','meta_ads','google_ads','linkedin','whatsapp','instagram','facebook','referido','evento','base_importada','outbound','google_maps','llamada_entrante','cliente_actual','partner','otro'];
+  const FALLBACK_STATUSES = ['nuevo','sin_contactar','intento_contacto','contactado','en_conversacion','calificado','reunion_agendada','oportunidad','propuesta_futura','ganado','perdido','no_responde','mal_momento'];
+  const [taxonomies, setTaxonomies] = useState({ sources: FALLBACK_SOURCES, statuses: FALLBACK_STATUSES, categories: [], channels: [], provinces: [], cities: [] });
+  useEffect(() => {
+    api.get('/tenant/lead-taxonomies').then(r => {
+      const d = r.data || {};
+      setTaxonomies({
+        sources: (d.sources && d.sources.length) ? d.sources : FALLBACK_SOURCES,
+        statuses: (d.statuses && d.statuses.length) ? d.statuses : FALLBACK_STATUSES,
+        categories: d.categories || [], channels: d.channels || [], provinces: d.provinces || [], cities: d.cities || [],
+      });
+    }).catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -542,13 +558,13 @@ export default function LeadsPage() {
               <div>
                 <Label>Fuente</Label>
                 <select value={newLead.source} onChange={e => setNewLead(p => ({ ...p, source: e.target.value }))} className="w-full h-9 rounded-md border border-zinc-200 px-2 text-sm">
-                  {['manual','bot_ia','spectra_prospection','formulario_web','landing_page','email_marketing','meta_ads','google_ads','linkedin','whatsapp','instagram','facebook','referido','evento','base_importada','outbound','google_maps','llamada_entrante','cliente_actual','partner','otro'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                  {taxonomies.sources.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
                 </select>
               </div>
               <div>
                 <Label>Estado</Label>
                 <select value={newLead.status} onChange={e => setNewLead(p => ({ ...p, status: e.target.value }))} className="w-full h-9 rounded-md border border-zinc-200 px-2 text-sm">
-                  {['nuevo','sin_contactar','intento_contacto','contactado','en_conversacion','calificado','reunion_agendada','oportunidad','propuesta_futura','ganado','perdido','no_responde','mal_momento'].map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                  {taxonomies.statuses.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
                 </select>
               </div>
             </div>

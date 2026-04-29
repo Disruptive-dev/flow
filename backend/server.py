@@ -2395,6 +2395,44 @@ async def update_pipeline_stages(request: Request, body: Dict[str, Any] = {}):
     await db.tenants.update_one({"id": user["tenant_id"]}, {"$set": {"crm_pipeline_stages": cleaned, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"stages": cleaned}
 
+DEFAULT_LEAD_TAXONOMIES = {
+    "sources": ["manual", "bot_ia", "spectra_prospection", "formulario_web", "landing_page", "email_marketing", "meta_ads", "google_ads", "linkedin", "whatsapp", "instagram", "facebook", "referido", "evento", "base_importada", "outbound", "google_maps", "llamada_entrante", "cliente_actual", "partner", "otro"],
+    "statuses": ["nuevo", "sin_contactar", "intento_contacto", "contactado", "en_conversacion", "calificado", "reunion_agendada", "oportunidad", "propuesta_futura", "ganado", "perdido", "no_responde", "mal_momento"],
+    "categories": [],
+    "channels": ["whatsapp", "web", "instagram", "facebook", "email", "telefono", "otro"],
+    "provinces": [],
+    "cities": [],
+}
+
+@api_router.get("/tenant/lead-taxonomies")
+async def get_lead_taxonomies(request: Request):
+    user = await get_current_user(request)
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0, "lead_taxonomies": 1})
+    saved = (tenant or {}).get("lead_taxonomies", {}) or {}
+    # Merge with defaults so missing keys are filled
+    return {k: (saved.get(k) if isinstance(saved.get(k), list) and saved.get(k) is not None else v) for k, v in DEFAULT_LEAD_TAXONOMIES.items()}
+
+@api_router.put("/tenant/lead-taxonomies")
+async def update_lead_taxonomies(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    if user["role"] not in ("super_admin", "tenant_admin"):
+        raise HTTPException(status_code=403, detail="Solo administradores")
+    valid_keys = set(DEFAULT_LEAD_TAXONOMIES.keys())
+    cleaned = {}
+    for k, v in body.items():
+        if k in valid_keys and isinstance(v, list):
+            seen = set()
+            cleaned[k] = []
+            for item in v:
+                s = str(item).strip()
+                if s and s not in seen:
+                    seen.add(s)
+                    cleaned[k].append(s)
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="No taxonomies provided")
+    await db.tenants.update_one({"id": user["tenant_id"]}, {"$set": {f"lead_taxonomies.{k}": v for k, v in cleaned.items()} | {"updated_at": datetime.now(timezone.utc).isoformat()}})
+    return cleaned
+
 @api_router.get("/tenant/status")
 async def get_tenant_status(request: Request):
     """Trial countdown + plan info for banner."""
