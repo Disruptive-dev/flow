@@ -249,7 +249,7 @@ async def forgot_password(body: Dict[str, Any] = {}):
     frontend_url = os.environ.get("FRONTEND_URL", os.environ.get("REACT_APP_BACKEND_URL", ""))
     reset_link = f"{frontend_url}/reset-password?token={token}"
     try:
-        resend.emails.send({"from": "no-reply@spectra-metrics.com", "to": [email], "subject": "Restablecer password - Spectra Flow", "html": f"<h2>Restablecer password</h2><p>Haz click en el siguiente enlace para restablecer tu password:</p><p><a href='{reset_link}' style='color:#1D4ED8;font-weight:bold;'>Restablecer password</a></p><p>Este enlace expira en 1 hora.</p><p>Si no solicitaste esto, ignora este email.</p>"})
+        resend.Emails.send({"from": "no-reply@spectra-metrics.com", "to": [email], "subject": "Restablecer password - Spectra Flow", "html": f"<h2>Restablecer password</h2><p>Haz click en el siguiente enlace para restablecer tu password:</p><p><a href='{reset_link}' style='color:#1D4ED8;font-weight:bold;'>Restablecer password</a></p><p>Este enlace expira en 1 hora.</p><p>Si no solicitaste esto, ignora este email.</p>"})
     except Exception as e:
         logger.error(f"Error sending reset email: {e}")
     return {"message": "Si el email existe, recibiras un enlace para restablecer tu password"}
@@ -268,6 +268,65 @@ async def reset_password(body: Dict[str, Any] = {}):
         return {"message": "Password restablecida exitosamente"}
     except:
         raise HTTPException(status_code=400, detail="Token invalido o expirado")
+
+@api_router.post("/public/contact")
+async def public_landing_contact(body: Dict[str, Any] = {}):
+    """Public landing page contact form. Sends email via Resend to info@spectra-metrics.com.
+    No auth required."""
+    name = (body.get("name") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    phone = (body.get("phone") or "").strip()
+    if not name or not email or not phone:
+        raise HTTPException(status_code=400, detail="Nombre, email y telefono son obligatorios")
+    company = (body.get("company") or "").strip()
+    industry = (body.get("industry") or "").strip()
+    employees = (body.get("employees") or "").strip()
+    country = (body.get("country") or "").strip()
+    city = (body.get("city") or "").strip()
+    notes = (body.get("notes") or "").strip()
+    now_iso = datetime.now(timezone.utc).isoformat()
+    # Persist submission
+    try:
+        await db.landing_submissions.insert_one({
+            "id": str(uuid.uuid4()), "name": name, "email": email, "phone": phone,
+            "company": company, "industry": industry, "employees": employees,
+            "country": country, "city": city, "notes": notes, "created_at": now_iso,
+        })
+    except Exception as e:
+        logger.error(f"Error saving landing submission: {e}")
+    # Send email via Resend
+    rows = "".join([
+        f"<tr><td style='padding:6px 10px;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;'>{label}</td><td style='padding:6px 10px;color:#0f172a;font-weight:500;'>{value or '-'}</td></tr>"
+        for label, value in [
+            ("Nombre", name), ("Email", email), ("Telefono", phone),
+            ("Empresa", company), ("Rubro", industry), ("Empleados", employees),
+            ("Pais", country), ("Ciudad", city), ("Notas", notes),
+        ]
+    ])
+    html = f"""
+    <div style='font-family:Inter,Arial,sans-serif;max-width:600px;margin:0 auto;background:#f8fafc;padding:24px;'>
+      <div style='background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;'>
+        <div style='background:linear-gradient(135deg,#1d4ed8,#4f46e5);padding:24px;color:white;'>
+          <h2 style='margin:0;font-size:20px;'>Nueva solicitud de demo</h2>
+          <p style='margin:6px 0 0;opacity:0.85;font-size:13px;'>Spectra Flow Landing Page</p>
+        </div>
+        <table style='width:100%;border-collapse:collapse;'>{rows}</table>
+        <div style='padding:16px 20px;background:#f1f5f9;color:#64748b;font-size:11px;'>Recibido: {now_iso}</div>
+      </div>
+    </div>
+    """
+    try:
+        resend.Emails.send({
+            "from": "no-reply@spectra-metrics.com",
+            "to": ["info@spectra-metrics.com"],
+            "reply_to": email,
+            "subject": f"[Landing] Nueva solicitud de demo - {name}{' / ' + company if company else ''}",
+            "html": html,
+        })
+    except Exception as e:
+        logger.error(f"Error sending landing contact email: {e}")
+        raise HTTPException(status_code=500, detail="No se pudo enviar el mensaje")
+    return {"message": "ok"}
 
 @api_router.post("/admin/reset-demo-data")
 async def reset_demo_data(request: Request):

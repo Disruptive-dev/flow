@@ -1,67 +1,53 @@
 # Spectra Flow - PRD
 
-## Architecture
-React 19 + FastAPI + MongoDB + Resend + Emergent LLM + Dify + n8n + Apify (PWA)
+## Original Problem Statement
+Premium multi-tenant SaaS "Spectra Flow" (Growth OS): AI prospecting, CRM, Email Marketing, Analytics, multi-tenancy, RBAC. Pre-launch hardening (15-day trial middleware, forgot password, dynamic CRM stages and lead taxonomies, dark/light theme, collapsible sidebar, "Próximamente" placeholders, public landing at `/landing` with contact form to `info@spectra-metrics.com`).
 
-## Navigation (8 Sections)
-1. Spectra Prospeccion: Buscador (B2B + LinkedIn), Flow IA
-2. Leads: Central hub with filters, sorting, editable fields, source tracking
-3. Spectra Email Marketing: Plantillas, Listas, Segmentos, Campanas, Formularios(Pronto)
-4. Spectra CRM: Pipeline (Kanban + Lista + bulk actions), Contactos, Tareas, Notas, Productos, Etiquetas, Historial
-5. Spectra Web: Landing Pages (Pronto)
-6. Spectra Performance: Meta Ads, Google Ads, TikTok, SEO, GEO (Pronto)
-7. Analisis + Configuracion
-8. Super Admin + Productos (OptimIA, Content IA, Brain)
+## Stack
+React + FastAPI + MongoDB. Tailwind dark mode (class strategy). Resend for transactional email. Emergent LLM key for IA. n8n/Chatwoot webhook ingestion. JWT auth.
 
-## Auth & Onboarding
-- Login/Register with JWT cookies
-- Forgot password (email via Resend) + Reset password via JWT token link
-- New tenant registration: plan=trial, trial_ends_at=+15 days, only leads+crm modules active
-- Role hierarchy: super_admin > tenant_admin > operator
-- Super Admin: "Resetear datos demo" button in Configuracion > Empresa (deletes tenant's leads, deals, contacts, tasks, notes, campaigns)
+## User
+Spanish-speaking, budget-conscious. Deploys via "Save to GitHub" → EasyPanel. Owner email: `info@spectra-metrics.com`.
 
-## CRM Detail Features
-- 6 tabs: Info, Notas, Tareas, Oportunidades, Productos, Historial
-- Tasks: llamar, email, reunion, seguimiento, whatsapp, tarea
-- Notes with timestamps and author
-- Products linked to deals with auto-total
-- Tags on deals with filtering
-- Activity log auto-tracking
-- Pipeline: Kanban and Lista view toggle + bulk move/delete
-- Presupuestos placeholder (Pronto)
+## Implemented (Done)
+- Auth (login/register/forgot/reset password) — JWT + bcrypt
+- 15-day trial expiry middleware + countdown banner
+- Conversion funnel tracking + analytics widget
+- "Reset Demo Data" gated by `is_demo=true`
+- Dynamic CRM pipeline stages (per tenant)
+- Dynamic lead taxonomies (sources, categories, statuses, channels, provinces, cities)
+- Responsive Kanban scaling by stage count
+- Sidebar reorder + 5 "Próximamente" placeholders + desktop expand/collapse + Ecosistema links
+- Dark/Light theme toggle, login Spanish translations
+- n8n/Chatwoot webhook ingestion endpoints
+- Public Landing Page `/landing` (premium dark UI, métricas, productos, ecosistema, contact form)
+- `POST /api/public/contact` → Resend email to `info@spectra-metrics.com` + persist in `landing_submissions` (Feb 2026)
+- Resend SDK upgrade fix: `resend.Emails.send` (was `resend.emails.send`, broken)
 
-## Settings
-- Empresa, Usuarios, Integraciones(admin), Dominios, Modulos(admin), Scoring, Productos, Actividad(admin)
-- 6 toggleable modules: prospeccion, leads, email_marketing, crm, web, performance
+## Roadmap (Pending)
+- P1: Spectra Finance Module (Income, Expenses, Costs, Suppliers, Business Units, Cashflow, Dashboards) — deferred by user (credits)
+- P1: Refactor `/app/backend/server.py` (>3450 lines) → routers/ architecture
+- P2: Email Marketing Automations (workflow builder)
+- P2: Spectra Performance / Project Management / Fidelity modules (currently `ComingSoonPage`)
+- P2: Presupuestos & Facturación inside CRM
 
-## Responsive / PWA
-- Sidebar: fixed on lg+, hidden/slide-in drawer on <lg with hamburger menu
-- Main content: px-4 sm:px-6 lg:px-8
+## Mocked / Placeholder
+Finance, Performance, Fidelity, Project Management, Budgets, Invoicing → routed to `ComingSoonPage`.
 
-## Integrations
-- Resend: transactional email (no-reply@spectra-metrics.com)
-- Apify: LinkedIn scraper via apify~google-search-scraper actor
-- Dify: AI scoring
-- n8n: webhook-based prospecting flows
-- Emergent LLM Key: Flow IA (Claude/GPT/Gemini)
+## Key Endpoints
+- `POST /api/auth/login|register|forgot-password|reset-password`
+- `POST /api/public/contact` — public landing form (no auth, exempt from trial middleware)
+- `GET /api/tenant/status` — trial countdown
+- `POST /api/admin/reset-demo-data`
+- `POST /api/webhooks/chatwoot/lead/{tenant_token}`
+- `POST /api/webhooks/n8n/job-result/{job_id}`
 
-## Changelog
-- 2026-02 (iter 10): Forgot/reset password + 15-day trial + reset demo data + CRM Lista view + mobile sidebar (PASSED 10/10 backend + UI tests)
-- 2026-02 (iter 11): Trial expiry middleware (402 on expired) + trial countdown banner + upgrade request flow to info@spectra-metrics.com
-- 2026-02 (iter 12): Conversion funnel tracking (trial_banner_shown, upgrade_dialog_opened, upgrade_requested) + Super Admin funnel widget on /admin/tenants + i18n "soon/coming_soon" keys + Performance sidebar "Pronto" badge + full product docs at /app/SPECTRA_FLOW_DOCUMENTACION_COMPLETA.txt
+## DB Collections
+`tenants`, `users`, `leads`, `crm_deals`, `crm_tasks`, `crm_notes`, `crm_products`, `campaigns`, `templates`, `landing_submissions` (new).
 
-## Backlog
-- P1: Refactor server.py (>3200 lines) into routes/
-- P1: Rate limiting on /api/auth/forgot-password
-- P1: Dedicated short-lived reset-password JWT token type (15-60min)
-- P2: Performance connectors (Meta/Google/TikTok APIs)
-- P2: Landing Pages builder
-- P2: Formularios de captura
-- P2: Presupuestos funcionales
-uth/forgot-password
-- P1: Dedicated short-lived reset-password JWT token type (15-60min)
-- P1: Trial expiry middleware (block tenants after trial_ends_at)
-- P2: Performance connectors (Meta/Google/TikTok APIs)
-- P2: Landing Pages builder
-- P2: Formularios de captura
-- P2: Presupuestos funcionales
+## Critical Notes for Next Agent
+- SPANISH ONLY responses
+- Budget-constrained: prefer parallel calls, small targeted edits
+- Resend SDK 2.27 → use `resend.Emails.send` (capital E)
+- `/api/public/*` and `/api/auth/*` exempt from trial middleware
+- Owner credentials in `/app/memory/test_credentials.md`
