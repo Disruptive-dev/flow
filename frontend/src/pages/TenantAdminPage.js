@@ -457,14 +457,21 @@ export default function TenantAdminPage() {
                 <h3 className="text-sm font-heading font-semibold mb-1 flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Integraciones (solo Super Admin)</h3>
                 <p className="text-[11px] text-zinc-500 mb-3">Configurás las credenciales acá. El cliente verá solo el estado (activado/desactivado) sin las claves.</p>
                 <div className="space-y-3">
-                  {['n8n', 'dify', 'resend', 'apify'].map((name) => {
+                  {['n8n', 'n8n_bot', 'outscraper', 'dify', 'resend'].map((name) => {
                     const intg = (detailTenant.integrations || []).find(i => i.name === name) || { name, base_url: '', api_key: '', enabled: false };
-                    const labels = { n8n: 'n8n (Workflows)', dify: 'Dify (AI Scoring)', resend: 'Resend (Emails)', apify: 'Apify (LinkedIn)' };
+                    const labels = {
+                      n8n: 'n8n Prospección (Scraping con Outscraper)',
+                      n8n_bot: 'n8n Bot Optimia (Chatwoot)',
+                      outscraper: 'Outscraper API (Google Maps / LinkedIn)',
+                      dify: 'Dify AI (Cerebro del bot + scoring)',
+                      resend: 'Resend (Emails transaccionales)',
+                    };
                     const placeholders = {
-                      n8n: 'https://n8n.tudominio.com/webhook/spectra-prospect',
-                      dify: 'https://api.dify.ai/v1',
+                      n8n: 'https://n8n.tudominio.com/webhook/spectra-prospect-<cliente>',
+                      n8n_bot: 'https://n8n.tudominio.com/webhook/optimia-bot-<cliente>',
+                      outscraper: 'https://api.outscraper.com',
+                      dify: 'http://dify.tudominio.com/v1',
                       resend: 'https://api.resend.com',
-                      apify: 'https://api.apify.com/v2',
                     };
                     return (
                       <div key={name} className="border border-zinc-200 rounded-lg p-3 bg-white">

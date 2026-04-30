@@ -1679,6 +1679,61 @@ async def update_settings(request: Request, body: SettingsUpdate):
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
     return tenant
 
+@api_router.post("/settings/integrations/request-connect")
+async def request_connect(request: Request, body: Dict[str, Any] = {}):
+    """Cliente solicita conexion de una integracion. Envia email a info@spectra-metrics.com
+    y guarda el pedido para que super_admin lo vea."""
+    user = await get_current_user(request)
+    name = (body.get("name") or "").strip()
+    note = (body.get("note") or "").strip()[:500]
+    allowed = {"n8n", "n8n_bot", "outscraper", "dify", "resend", "apify"}
+    if name not in allowed:
+        raise HTTPException(status_code=400, detail="Integracion no valida")
+    now_iso = datetime.now(timezone.utc).isoformat()
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0, "name": 1})
+    doc = {
+        "id": str(uuid.uuid4()), "tenant_id": user["tenant_id"],
+        "tenant_name": (tenant or {}).get("name", ""),
+        "user_email": user.get("email", ""), "user_name": user.get("name", ""),
+        "integration": name, "note": note, "status": "pending", "created_at": now_iso,
+    }
+    await db.integration_requests.insert_one(doc)
+    try:
+        resend.Emails.send({
+            "from": "no-reply@spectra-metrics.com",
+            "to": ["info@spectra-metrics.com"],
+            "reply_to": user.get("email", ""),
+            "subject": f"[Spectra Flow] Solicitud de conexion {name} - {doc['tenant_name']}",
+            "html": f"<h3>Nueva solicitud de conexion</h3>"
+                    f"<p><b>Cliente:</b> {doc['tenant_name']}<br/>"
+                    f"<b>Usuario:</b> {doc['user_name']} ({doc['user_email']})<br/>"
+                    f"<b>Integracion:</b> {name}<br/>"
+                    f"<b>Tenant ID:</b> <code>{user['tenant_id']}</code></p>"
+                    f"<p><b>Nota:</b><br/>{note or '(sin nota)'}</p>"
+                    f"<p>Entra a <a href='https://flow.spectra-metrics.com/admin/tenants'>Admin Tenants</a> para configurar.</p>",
+        })
+    except Exception as e:
+        logger.error(f"Email request-connect fallo: {e}")
+    return {"ok": True, "message": "Solicitud enviada. Nos pondremos en contacto en breve."}
+
+@api_router.get("/admin/integration-requests")
+async def list_integration_requests(request: Request):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    items = await db.integration_requests.find({}, {"_id": 0}).sort("created_at", -1).limit(100).to_list(100)
+    return items
+
+@api_router.put("/admin/integration-requests/{req_id}")
+async def update_integration_request(request: Request, req_id: str, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    status = body.get("status", "done")
+    await db.integration_requests.update_one({"id": req_id}, {"$set": {"status": status, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True}
+
+
 @api_router.get("/settings/integrations")
 async def get_integrations(request: Request):
     user = await get_current_user(request)
@@ -2766,10 +2821,11 @@ async def create_tenant(request: Request, body: TenantCreate):
     await db.users.insert_one(admin_user)
     # Seed integration configs for new tenant
     for ic in [
-        {"name": "n8n", "display_name": "n8n Orchestration", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Workflow orchestration"},
-        {"name": "dify", "display_name": "Dify AI", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "AI scoring"},
-        {"name": "resend", "display_name": "Resend Email", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Email sending"},
-        {"name": "apify", "display_name": "Apify (LinkedIn)", "enabled": False, "base_url": "https://api.apify.com/v2", "api_key": "", "status": "not_configured", "description": "LinkedIn scraping"},
+        {"name": "n8n", "display_name": "n8n Prospección", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Workflow n8n que dispara el scraping con Outscraper"},
+        {"name": "n8n_bot", "display_name": "n8n Bot (Optimia)", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Workflow n8n del bot de conversación Optimia"},
+        {"name": "outscraper", "display_name": "Outscraper API", "enabled": False, "base_url": "https://api.outscraper.com", "api_key": "", "status": "not_configured", "description": "API de scraping Google Maps / LinkedIn"},
+        {"name": "dify", "display_name": "Dify AI", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Cerebro IA para scoring y bot"},
+        {"name": "resend", "display_name": "Resend Email", "enabled": False, "base_url": "", "api_key": "", "status": "not_configured", "description": "Envío de emails transaccionales"},
     ]:
         await db.integration_configs.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, **ic, "last_sync": None, "created_at": now, "updated_at": now})
     return {**{k: v for k, v in tenant.items() if k != "_id"}, "admin_email": body.admin_email}
@@ -2818,7 +2874,7 @@ async def admin_update_tenant_integration(request: Request, tenant_id: str, name
     user = await get_current_user(request)
     if user["role"] != "super_admin":
         raise HTTPException(status_code=403, detail="Solo super_admin")
-    if name not in ("n8n", "dify", "resend", "apify"):
+    if name not in ("n8n", "n8n_bot", "dify", "resend", "apify", "outscraper"):
         raise HTTPException(status_code=400, detail="Integration name invalid")
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
     for k in ("base_url", "api_key", "enabled", "status"):
@@ -2880,6 +2936,21 @@ async def admin_test_tenant_integration(request: Request, tenant_id: str, name: 
                 if r.status_code == 401:
                     return {"ok": False, "status_code": 401, "message": "Token invalido"}
                 return {"ok": False, "status_code": r.status_code, "message": f"Apify respondio HTTP {r.status_code}"}
+            if name == "outscraper":
+                if not api_key:
+                    return {"ok": False, "message": "Falta API Key de Outscraper"}
+                r = await cl.get("https://api.outscraper.com/profile", headers={"X-API-KEY": api_key})
+                if r.status_code == 200:
+                    return {"ok": True, "status_code": 200, "message": "API Key de Outscraper valida"}
+                if r.status_code in (401, 403):
+                    return {"ok": False, "status_code": r.status_code, "message": "API Key invalida"}
+                return {"ok": False, "status_code": r.status_code, "message": f"Outscraper respondio HTTP {r.status_code}"}
+            if name == "n8n_bot":
+                if not base_url:
+                    return {"ok": False, "message": "Falta URL del webhook n8n del bot"}
+                r = await cl.post(base_url, json={"_probe": True})
+                ok = r.status_code < 500
+                return {"ok": ok, "status_code": r.status_code, "message": "Webhook bot responde" if ok else f"n8n bot no responde (HTTP {r.status_code})"}
     except Exception as e:
         return {"ok": False, "message": f"Error de red: {str(e)[:120]}"}
     return {"ok": False, "message": "Test no implementado para esta integracion"}

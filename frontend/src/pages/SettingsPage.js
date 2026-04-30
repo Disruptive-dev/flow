@@ -206,6 +206,13 @@ export default function SettingsPage() {
     } catch (err) { toast.error(err.response?.data?.detail || 'Error al eliminar'); }
   };
 
+  const requestConnect = async (name, note) => {
+    try {
+      await api.post('/settings/integrations/request-connect', { name, note: note || '' });
+      toast.success('Solicitud enviada. Te contactaremos en breve.');
+    } catch (err) { toast.error(err.response?.data?.detail || 'No se pudo enviar la solicitud'); }
+  };
+
   const resetDemoData = async () => {
     if (!window.confirm('Estas seguro? Se eliminaran UNICAMENTE los datos creados por el modo Demo (leads, jobs y campanas marcadas como demo). Los datos reales NO se tocan. Esta accion no se puede deshacer.')) return;
     try {
@@ -234,9 +241,55 @@ export default function SettingsPage() {
           <span className="w-px h-6 bg-zinc-300 mx-1 self-center hidden sm:inline-block" aria-hidden />
           {/* Conexiones */}
           {user?.role === 'super_admin' && <TabsTrigger value="integrations" data-testid="settings-tab-integrations"><Link className="w-4 h-4 mr-1.5" />{t('integrations')}</TabsTrigger>}
+          {user?.role === 'tenant_admin' && <TabsTrigger value="connections" data-testid="settings-tab-connections"><Link className="w-4 h-4 mr-1.5" />Conexiones</TabsTrigger>}
           <TabsTrigger value="domains" data-testid="settings-tab-domains"><Globe className="w-4 h-4 mr-1.5" />Dominios</TabsTrigger>
           {user?.role === 'super_admin' && <TabsTrigger value="activity" data-testid="settings-tab-activity"><Clock className="w-4 h-4 mr-1.5" />Actividad</TabsTrigger>}
         </TabsList>
+
+        {/* Connections (cliente tenant_admin) - solo estado + solicitar conexion */}
+        <TabsContent value="connections">
+          <Card className="border-zinc-200 rounded-xl">
+            <CardContent className="p-6">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 mb-5 text-xs text-blue-900">
+                <p className="font-semibold mb-1">Gestión de conexiones externas</p>
+                <p>Las credenciales de n8n, Outscraper, Dify y Resend son <strong>gestionadas por el equipo Spectra</strong> para garantizar seguridad. Podés solicitar la activación de cada servicio y lo configuramos en horas.</p>
+              </div>
+              <div className="space-y-3">
+                {[
+                  { name: 'n8n', label: 'n8n Prospección', desc: 'Workflow que dispara el scraping de Google Maps / LinkedIn con Outscraper.' },
+                  { name: 'n8n_bot', label: 'n8n Bot Optimia', desc: 'Workflow del bot de Chatwoot que conversa y califica leads.' },
+                  { name: 'outscraper', label: 'Outscraper API', desc: 'Servicio de scraping oficial usado por el workflow de prospección.' },
+                  { name: 'dify', label: 'Dify AI', desc: 'Cerebro de IA para scoring de leads y respuestas del bot.' },
+                  { name: 'resend', label: 'Resend Emails', desc: 'Envío de emails transaccionales y campañas con dominio propio.' },
+                ].map(({ name, label, desc }) => {
+                  const intg = integrations.find(i => i.name === name);
+                  const active = !!intg?.enabled;
+                  return (
+                    <div key={name} className="border border-zinc-200 rounded-lg p-4 bg-white" data-testid={`connection-row-${name}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h4 className="font-heading font-medium text-zinc-900 text-sm">{label}</h4>
+                            <Badge className={active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600'}>{active ? 'Conectado' : 'Sin conectar'}</Badge>
+                          </div>
+                          <p className="text-xs text-zinc-500">{desc}</p>
+                          {active && intg?.api_key && (
+                            <p className="text-[11px] text-zinc-400 mt-1 font-mono">Key: {intg.api_key} · URL: {intg.base_url || 'configurada'}</p>
+                          )}
+                        </div>
+                        {!active && (
+                          <Button size="sm" variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-50" onClick={() => requestConnect(name)} data-testid={`request-connect-${name}`}>
+                            Solicitar conexión
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Company Info */}
         <TabsContent value="branding">
