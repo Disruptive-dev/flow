@@ -457,17 +457,15 @@ export default function TenantAdminPage() {
                 <h3 className="text-sm font-heading font-semibold mb-1 flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Integraciones (solo Super Admin)</h3>
                 <p className="text-[11px] text-zinc-500 mb-3">Configurás las credenciales acá. El cliente verá solo el estado (activado/desactivado) sin las claves.</p>
                 <div className="space-y-3">
-                  {['n8n', 'n8n_bot', 'outscraper', 'dify', 'resend'].map((name) => {
-                    const intg = (detailTenant.integrations || []).find(i => i.name === name) || { name, base_url: '', api_key: '', enabled: false };
+                  {['n8n_bot', 'outscraper', 'dify', 'resend'].map((name) => {
+                    const intg = (detailTenant.integrations || []).find(i => i.name === name) || { name, base_url: '', api_key: '', enabled: false, drive_url: '' };
                     const labels = {
-                      n8n: 'n8n Prospección (Scraping con Outscraper)',
-                      n8n_bot: 'n8n Bot Optimia (Chatwoot)',
-                      outscraper: 'Outscraper API (Google Maps / LinkedIn)',
-                      dify: 'Dify AI (Cerebro del bot + scoring)',
-                      resend: 'Resend (Emails transaccionales)',
+                      n8n_bot: 'OptimIA BOT (Chatwoot)',
+                      outscraper: 'Spectra Prospection (Outscraper API)',
+                      dify: 'Entrenamiento Bot Optimia (Dify + Drive)',
+                      resend: 'Spectra Email Marketing (Resend)',
                     };
                     const placeholders = {
-                      n8n: 'https://n8n.tudominio.com/webhook/spectra-prospect-<cliente>',
                       n8n_bot: 'https://n8n.tudominio.com/webhook/optimia-bot-<cliente>',
                       outscraper: 'https://api.outscraper.com',
                       dify: 'http://dify.tudominio.com/v1',
@@ -519,6 +517,19 @@ export default function TenantAdminPage() {
                             />
                           </div>
                         </div>
+                        {name === 'dify' && (
+                          <div className="mt-2">
+                            <Label className="text-[10px] text-zinc-500 mb-1 block">Google Drive folder URL (visible para el cliente)</Label>
+                            <Input
+                              defaultValue={intg.drive_url || ''}
+                              placeholder="https://drive.google.com/drive/folders/XXXXX"
+                              data-testid={`drive-${name}`}
+                              onBlur={(e) => e.target.value !== (intg.drive_url || '') && updateTenantIntegration(name, { drive_url: e.target.value })}
+                              className="h-8 text-xs font-mono"
+                            />
+                            <p className="text-[10px] text-zinc-400 mt-1">Cliente ve un botón "Subir materiales a mi Drive" que abre este link.</p>
+                          </div>
+                        )}
                         {savingIntegration === name && <p className="text-[10px] text-blue-600 mt-1 flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Guardando...</p>}
                       </div>
                     );

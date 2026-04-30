@@ -256,14 +256,14 @@ export default function SettingsPage() {
               </div>
               <div className="space-y-3">
                 {[
-                  { name: 'n8n', label: 'n8n Prospección', desc: 'Workflow que dispara el scraping de Google Maps / LinkedIn con Outscraper.' },
-                  { name: 'n8n_bot', label: 'n8n Bot Optimia', desc: 'Workflow del bot de Chatwoot que conversa y califica leads.' },
-                  { name: 'outscraper', label: 'Outscraper API', desc: 'Servicio de scraping oficial usado por el workflow de prospección.' },
-                  { name: 'dify', label: 'Dify AI', desc: 'Cerebro de IA para scoring de leads y respuestas del bot.' },
-                  { name: 'resend', label: 'Resend Emails', desc: 'Envío de emails transaccionales y campañas con dominio propio.' },
+                  { name: 'n8n_bot', label: 'OptimIA BOT', desc: 'Workflow n8n que corre el bot de Chatwoot (WhatsApp + web widget), conversa con prospectos y los califica.' },
+                  { name: 'outscraper', label: 'Spectra Prospection', desc: 'Motor oficial de scraping Google Maps / LinkedIn. Activalo para poder lanzar búsquedas masivas de empresas.' },
+                  { name: 'dify', label: 'Entrenamiento Bot Optimia', desc: 'Cerebro IA de tu bot. Cargá tus materiales (FAQ, catálogo, tono de marca) en tu carpeta Drive privada y nosotros entrenamos al bot.' },
+                  { name: 'resend', label: 'Spectra Email Marketing', desc: 'Envío de campañas y emails transaccionales con tu dominio propio verificado.' },
                 ].map(({ name, label, desc }) => {
                   const intg = integrations.find(i => i.name === name);
                   const active = !!intg?.enabled;
+                  const driveUrl = intg?.drive_url || '';
                   return (
                     <div key={name} className="border border-zinc-200 rounded-lg p-4 bg-white" data-testid={`connection-row-${name}`}>
                       <div className="flex items-start justify-between gap-3">
@@ -273,8 +273,13 @@ export default function SettingsPage() {
                             <Badge className={active ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-zinc-100 text-zinc-600'}>{active ? 'Conectado' : 'Sin conectar'}</Badge>
                           </div>
                           <p className="text-xs text-zinc-500">{desc}</p>
-                          {active && intg?.api_key && (
-                            <p className="text-[11px] text-zinc-400 mt-1 font-mono">Key: {intg.api_key} · URL: {intg.base_url || 'configurada'}</p>
+                          {name === 'dify' && driveUrl && (
+                            <a href={driveUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 mt-2 text-xs font-medium text-blue-700 hover:text-blue-800 hover:underline" data-testid={`drive-link-${name}`}>
+                              <ExternalLink className="w-3 h-3" /> Subir materiales a mi Drive de entrenamiento
+                            </a>
+                          )}
+                          {name === 'dify' && !driveUrl && active && (
+                            <p className="text-[11px] text-amber-700 mt-1">Tu carpeta Drive aún no fue asignada. Te la enviaremos a tu email en breve.</p>
                           )}
                         </div>
                         {!active && (

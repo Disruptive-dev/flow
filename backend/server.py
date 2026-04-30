@@ -1752,6 +1752,7 @@ async def get_integrations(request: Request):
                     i["base_url"] = f"{p.scheme}://{p.netloc}/****" if p.netloc else "****"
                 except Exception:
                     i["base_url"] = "****"
+            # drive_url is intentionally exposed to clients (it's a share link, not a secret)
             i["managed_by_admin"] = True
     return integrations
 
@@ -2877,7 +2878,7 @@ async def admin_update_tenant_integration(request: Request, tenant_id: str, name
     if name not in ("n8n", "n8n_bot", "dify", "resend", "apify", "outscraper"):
         raise HTTPException(status_code=400, detail="Integration name invalid")
     update = {"updated_at": datetime.now(timezone.utc).isoformat()}
-    for k in ("base_url", "api_key", "enabled", "status"):
+    for k in ("base_url", "api_key", "enabled", "status", "drive_url"):
         if k in body:
             update[k] = body[k]
     if "enabled" in update:
