@@ -252,14 +252,14 @@ export default function SettingsPage() {
             <CardContent className="p-6">
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 mb-5 text-xs text-blue-900">
                 <p className="font-semibold mb-1">Gestión de conexiones externas</p>
-                <p>Las credenciales de n8n, Outscraper, Dify y Resend son <strong>gestionadas por el equipo Spectra</strong> para garantizar seguridad. Podés solicitar la activación de cada servicio y lo configuramos en horas.</p>
+                <p>Las conexiones externas son gestionadas <strong>exclusivamente por nuestro equipo</strong> para garantizar seguridad, estabilidad y actualización continua. Podés solicitar la activación de cada servicio y lo configuramos en horas.</p>
               </div>
               <div className="space-y-3">
                 {[
-                  { name: 'n8n_bot', label: 'OptimIA BOT', desc: 'Workflow n8n que corre el bot de Chatwoot (WhatsApp + web widget), conversa con prospectos y los califica.' },
-                  { name: 'outscraper', label: 'Spectra Prospection', desc: 'Motor oficial de scraping Google Maps / LinkedIn. Activalo para poder lanzar búsquedas masivas de empresas.' },
-                  { name: 'dify', label: 'Entrenamiento Bot Optimia', desc: 'Cerebro IA de tu bot. Cargá tus materiales (FAQ, catálogo, tono de marca) en tu carpeta Drive privada y nosotros entrenamos al bot.' },
-                  { name: 'resend', label: 'Spectra Email Marketing', desc: 'Envío de campañas y emails transaccionales con tu dominio propio verificado.' },
+                  { name: 'n8n_bot', label: 'OptimIA BOT', desc: 'Motor de conversación automática para WhatsApp y chat web. Atiende a tus prospectos 24/7, responde preguntas frecuentes y califica leads antes de pasarlos a tu equipo.' },
+                  { name: 'outscraper', label: 'Spectra Prospection', desc: 'Motor oficial de prospección masiva. Te permite lanzar búsquedas de empresas por rubro, ubicación y palabras clave, y recibir los contactos listos en tu Leads Hub.' },
+                  { name: 'dify', label: 'Entrenamiento Bot Optimia', desc: 'Cerebro inteligente del bot. Cargá tus materiales (FAQ, catálogo, tono de marca, audios) en tu carpeta privada y lo entrenamos con tu estilo.' },
+                  { name: 'resend', label: 'Spectra Email Marketing', desc: 'Envío de campañas y emails transaccionales con tu dominio propio verificado (SPF/DKIM) para máxima entregabilidad.' },
                 ].map(({ name, label, desc }) => {
                   const intg = integrations.find(i => i.name === name);
                   const active = !!intg?.enabled;

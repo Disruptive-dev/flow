@@ -421,7 +421,7 @@ export default function TenantAdminPage() {
               <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 mb-4 text-xs text-blue-900 flex items-start gap-2">
                 <SettingsIcon className="w-4 h-4 mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-semibold mb-0.5">¿Cómo cargar las credenciales (n8n, Dify, Resend, Apify) de un cliente?</p>
+                  <p className="font-semibold mb-0.5">¿Cómo cargar las credenciales de cada cliente?</p>
                   <p>Hacé click en el ícono <Eye className="w-3 h-3 inline mb-0.5" /> <strong>Configurar / Ver detalle</strong> de la fila del tenant. En el modal vas a encontrar la sección <strong>Integraciones (solo Super Admin)</strong> donde cargás Base URL y API Key. El cliente final NO ve esos valores, solo el estado activado/desactivado.</p>
                 </div>
               </div>
@@ -460,16 +460,16 @@ export default function TenantAdminPage() {
                   {['n8n_bot', 'outscraper', 'dify', 'resend'].map((name) => {
                     const intg = (detailTenant.integrations || []).find(i => i.name === name) || { name, base_url: '', api_key: '', enabled: false, drive_url: '' };
                     const labels = {
-                      n8n_bot: 'OptimIA BOT (Chatwoot)',
-                      outscraper: 'Spectra Prospection (Outscraper API)',
-                      dify: 'Entrenamiento Bot Optimia (Dify + Drive)',
-                      resend: 'Spectra Email Marketing (Resend)',
+                      n8n_bot: 'OptimIA BOT',
+                      outscraper: 'Spectra Prospection',
+                      dify: 'Entrenamiento Bot Optimia',
+                      resend: 'Spectra Email Marketing',
                     };
                     const placeholders = {
-                      n8n_bot: 'https://n8n.tudominio.com/webhook/optimia-bot-<cliente>',
-                      outscraper: 'https://api.outscraper.com',
-                      dify: 'http://dify.tudominio.com/v1',
-                      resend: 'https://api.resend.com',
+                      n8n_bot: 'URL del webhook del bot',
+                      outscraper: 'URL base del motor de prospección',
+                      dify: 'URL base del motor de entrenamiento',
+                      resend: 'URL base del servicio de email',
                     };
                     return (
                       <div key={name} className="border border-zinc-200 rounded-lg p-3 bg-white">

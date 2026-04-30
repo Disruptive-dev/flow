@@ -1716,6 +1716,21 @@ async def request_connect(request: Request, body: Dict[str, Any] = {}):
         logger.error(f"Email request-connect fallo: {e}")
     return {"ok": True, "message": "Solicitud enviada. Nos pondremos en contacto en breve."}
 
+@api_router.get("/admin/n8n-templates/{name}")
+async def download_n8n_template(request: Request, name: str):
+    """Super admin only: download a ready-to-import n8n workflow template."""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    allowed = {"prospeccion": "Spectra_Prospeccion_TEMPLATE.json", "optimia": "OptimIA_BOT_TEMPLATE.json"}
+    if name not in allowed:
+        raise HTTPException(status_code=404, detail="Template no encontrado")
+    path = f"/app/n8n_templates/{allowed[name]}"
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Archivo no generado")
+    from fastapi.responses import FileResponse
+    return FileResponse(path, filename=allowed[name], media_type="application/json")
+
 @api_router.get("/admin/integration-requests")
 async def list_integration_requests(request: Request):
     user = await get_current_user(request)
