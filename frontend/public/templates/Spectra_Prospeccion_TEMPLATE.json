@@ -1,0 +1,319 @@
+{
+  "name": "Spectra Flow - Prospección [TEMPLATE]",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "spectra-prospect",
+        "options": {}
+      },
+      "id": "06ca25cf-e93a-4ad5-b0f2-20314e0972d7",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        5376,
+        3312
+      ],
+      "webhookId": "spectra-prospect"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Flatten webhook body to root level\nconst body = $input.first().json.body || $input.first().json;\nreturn [{ json: { ...body } }];"
+      },
+      "id": "862e3812-b4f8-48c2-81a3-cc190fc8135e",
+      "name": "Preparar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5648,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.progress_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\"stage\": \"scraping\", \"status\": \"completed\"}",
+        "options": {}
+      },
+      "id": "5cf57dba-a658-4ff0-be04-601b4a2956a8",
+      "name": "Notificar Inicio",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5808,
+        3168
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.outscraper.com/maps/search-v3",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "query",
+              "value": "={{ $json.category }} en {{ $json.city }}, {{ $json.province }}, {{ $json.country }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $json.quantity }}"
+            },
+            {
+              "name": "async",
+              "value": "false"
+            },
+            {
+              "name": "language",
+              "value": "es"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-KEY",
+              "value": "{{OUTSCRAPER_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "6b1b0620-f2f0-4c1b-adce-6762c7f7a19b",
+      "name": "Outscraper Buscar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        5808,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extraer los resultados de Outscraper y guardar contexto del webhook\nconst webhookData = $('Webhook').first().json;\nconst prepData = $('Preparar Datos').first().json;\nconst outscraper = $input.first().json;\n\nlet businesses = [];\nif (outscraper.data && Array.isArray(outscraper.data) && outscraper.data.length > 0) {\n  businesses = Array.isArray(outscraper.data[0]) ? outscraper.data[0] : outscraper.data;\n}\n\nconst results = businesses.map(biz => ({\n  json: {\n    name: biz.name || '',\n    full_address: biz.full_address || biz.address || '',\n    phone: biz.phone || '',\n    site: biz.site || biz.website || '',\n    email_1: biz.email_1 || biz.email_2 || '',\n    rating: biz.rating || 0,\n    reviews: biz.reviews || 0,\n    category: biz.category || biz.type || '',\n    city: biz.city || prepData.city || '',\n    state: biz.state || prepData.province || '',\n    callback_url: prepData.callback_url,\n    progress_url: prepData.progress_url,\n    api_key: prepData.api_key\n  }\n}));\n\nreturn results.length > 0 ? results : [{ json: { error: 'No results', callback_url: prepData.callback_url } }];"
+      },
+      "id": "fe53523c-0054-4625-b708-b3acc88712e6",
+      "name": "Extraer Negocios",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6048,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// =====================================================\n// SCORING IA - Llama a Dify para cada negocio y combina\n// los datos originales con el scoring\n// =====================================================\n\n// IMPORTANTE: Reemplaza estos valores con tus credenciales reales\nconst DIFY_URL = 'https://dify.optimia.disruptive-sw.com/v1/workflows/run';\nconst DIFY_KEY = 'TU-DIFY-APP-KEY';\n\nconst items = $input.all();\nconst prepData = $('Preparar Datos').first().json;\n\nconst allLeads = [];\n\nfor (let i = 0; i < items.length; i++) {\n  const biz = items[i].json;\n  \n  // Si hay error de Outscraper, saltar\n  if (biz.error) continue;\n  \n  const businessData = [\n    `Nombre: ${biz.name || ''}`,\n    `Direccion: ${biz.full_address || ''}`,\n    `Telefono: ${biz.phone || ''}`,\n    `Website: ${biz.site || ''}`,\n    `Email: ${biz.email_1 || ''}`,\n    `Rating: ${biz.rating || 0}`,\n    `Reviews: ${biz.reviews || 0}`,\n    `Categoria: ${biz.category || ''}`,\n    `Ciudad: ${biz.city || ''}`,\n    `Provincia: ${biz.state || ''}`\n  ].join('\\n');\n  \n  // Scoring por defecto si Dify falla\n  let scoring = {\n    ai_score: 50,\n    quality_level: 'average',\n    recommendation: 'Clasificacion automatica no disponible',\n    normalized_category: biz.category || '',\n    recommended_first_line: ''\n  };\n  \n  try {\n    const response = await fetch(DIFY_URL, {\n      method: 'POST',\n      headers: {\n        'Authorization': `Bearer ${DIFY_KEY}`,\n        'Content-Type': 'application/json'\n      },\n      body: JSON.stringify({\n        inputs: { business_data: businessData },\n        response_mode: 'blocking',\n        user: 'spectra-n8n'\n      })\n    });\n    \n    const data = await response.json();\n    const resultText = data?.data?.outputs?.result || data?.answer || '';\n    const jsonMatch = resultText.match(/\\{[\\s\\S]*\\}/);\n    if (jsonMatch) {\n      const parsed = JSON.parse(jsonMatch[0]);\n      scoring.ai_score = parseInt(parsed.ai_score) || scoring.ai_score;\n      scoring.quality_level = parsed.quality_level || scoring.quality_level;\n      scoring.recommendation = parsed.recommendation || scoring.recommendation;\n      scoring.normalized_category = parsed.normalized_category || scoring.normalized_category;\n      scoring.recommended_first_line = parsed.recommended_first_line || scoring.recommended_first_line;\n    }\n  } catch(e) {\n    // Usar scoring por defecto\n  }\n  \n  allLeads.push({\n    business_name: biz.name || '',\n    raw_category: biz.category || '',\n    normalized_category: scoring.normalized_category,\n    province: biz.state || prepData.province || '',\n    city: biz.city || prepData.city || '',\n    website: biz.site || '',\n    email: biz.email_1 || '',\n    phone: biz.phone || '',\n    address: biz.full_address || '',\n    rating: biz.rating || 0,\n    reviews_count: biz.reviews || 0,\n    ai_score: scoring.ai_score,\n    quality_level: scoring.quality_level,\n    recommendation: scoring.recommendation,\n    recommended_first_line: scoring.recommended_first_line\n  });\n  \n  // Pausa de 1s entre llamadas a Dify (rate limiting)\n  if (i < items.length - 1) {\n    await new Promise(resolve => setTimeout(resolve, 1000));\n  }\n}\n\n// Notificar progreso\ntry {\n  if (prepData.progress_url) {\n    await fetch(prepData.progress_url, {\n      method: 'POST',\n      headers: { 'Content-Type': 'application/json' },\n      body: JSON.stringify({ stage: 'scoring_completed', status: 'completed', raw_count: allLeads.length })\n    });\n  }\n} catch(e) {}\n\nreturn [{\n  json: {\n    leads: allLeads,\n    raw_count: allLeads.length,\n    callback_url: prepData.callback_url,\n    api_key: prepData.api_key\n  }\n}];"
+      },
+      "id": "b42be7c5-e1a2-4f6d-99b6-39c926e376d2",
+      "name": "Scoring IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6336,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Api-Key",
+              "value": "={{ $json.api_key }}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"leads\": {{ JSON.stringify($json.leads) }},\n  \"raw_count\": {{ $json.raw_count }}\n}",
+        "options": {}
+      },
+      "id": "34c7ecca-3c10-4144-a31b-aeb3da71441a",
+      "name": "Callback Spectra",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        6640,
+        3392
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 📋 Template: Prospección (Spectra Flow)\n\n**Uso:** duplicar este workflow por cada cliente nuevo.\n\n### Pasos para activar:\n1. Duplicar este workflow → renombrar a `Prospección - <Nombre Cliente>`.\n2. Abrir nodo **`Outscraper Buscar`** → Headers → reemplazar `{{OUTSCRAPER_API_KEY}}` por la API Key del cliente (o tu master key).\n3. Activar el workflow (switch superior derecho en n8n).\n4. Copiar la **URL del Webhook** (nodo `Webhook`, tab `Production URL`).\n5. Pegarla en Spectra Flow → `Admin Tenants` → Configurar cliente → **Spectra Prospection** → Base URL.\n\n### Datos que llegan por el webhook (ya dinámicos, NO tocar):\n- `job_id`, `category`, `city`, `country`, `quantity`\n- `callback_url`, `progress_url`, `api_key`\n\n⚠️ **NO cambiar nada más de los nodos** salvo la API key de Outscraper.",
+        "height": 320,
+        "width": 600,
+        "color": 5
+      },
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -380
+      ],
+      "id": "sticky-readme"
+    },
+    {
+      "parameters": {
+        "content": "## 🔗 Webhook (trigger)\n\nEsta URL es la que pegás en Spectra Flow → Admin Tenants → Configurar → **Spectra Prospection** → Base URL.\n\n**NO requiere cambios internos.**\n\nLos parámetros de búsqueda llegan en el body JSON del POST.",
+        "height": 180,
+        "width": 360,
+        "color": 4
+      },
+      "name": "Nota Webhook",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        80
+      ],
+      "id": "sticky-nota-webhook"
+    },
+    {
+      "parameters": {
+        "content": "## 🔑 Outscraper Buscar\n\n**ÚNICO nodo donde cambiás credenciales.**\n\nEn Headers:\n- `X-API-KEY`: reemplazar `{{OUTSCRAPER_API_KEY}}` por la key real.\n\nObtenela en: https://app.outscraper.com/profile",
+        "height": 180,
+        "width": 360,
+        "color": 3
+      },
+      "name": "Nota Outscraper",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        500,
+        80
+      ],
+      "id": "sticky-nota-outscraper"
+    },
+    {
+      "parameters": {
+        "content": "## 📤 Callback Spectra\n\nDevuelve los resultados a Spectra Flow.\n\n**NO modificar** — URL y auth llegan dinámicos en el payload del webhook:\n- `{{ $json.callback_url }}`\n- `{{ $json.api_key }}`",
+        "height": 180,
+        "width": 360,
+        "color": 6
+      },
+      "name": "Nota Callback",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1040,
+        80
+      ],
+      "id": "sticky-nota-callback"
+    },
+    {
+      "parameters": {
+        "content": "## 📡 Notificar Inicio\n\nAvisa al backend que el scraping arrancó (progress).\n\n**NO modificar** — URL dinámica `{{ $json.progress_url }}`.",
+        "height": 160,
+        "width": 340,
+        "color": 4
+      },
+      "name": "Nota Notificar Inicio",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ],
+      "id": "sticky-nota-notificar-inicio"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Preparar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Datos": {
+      "main": [
+        [
+          {
+            "node": "Notificar Inicio",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Outscraper Buscar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Outscraper Buscar": {
+      "main": [
+        [
+          {
+            "node": "Extraer Negocios",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Negocios": {
+      "main": [
+        [
+          {
+            "node": "Scoring IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Scoring IA": {
+      "main": [
+        [
+          {
+            "node": "Callback Spectra",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "dcaa6119-ce3f-41d2-bb78-563aa6cd2d7a",
+  "meta": {
+    "instanceId": "11baef16da47541ce1966eb2009a036543444bcddb67c4e8aecdda46714f4c95"
+  },
+  "id": "l9BrDYZ41bqLXiny",
+  "tags": []
+}

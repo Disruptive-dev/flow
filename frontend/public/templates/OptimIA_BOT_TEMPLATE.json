@@ -1,0 +1,855 @@
+{
+  "name": "OptimIA BOT [TEMPLATE]",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "00f6bf63-a78a-4b73-9659-6fb68f6827e9",
+              "leftValue": "={{ $node[\"Webhook Entrante1\"].json.body.message_type }}",
+              "rightValue": "incoming",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "35a200ea-dd69-42e8-af84-d24f6c13f802",
+              "leftValue": "={{ $node[\"Webhook Entrante1\"].json.body.event }}",
+              "rightValue": "message_created",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "d7975576-7b08-424b-a8a2-5b826153cbbe",
+              "leftValue": "={{ $node[\"Webhook Entrante1\"].json.body.conversation.assignee_id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9b8c05c-f803-40f0-af0f-94f3e4b6a539",
+      "name": "Filtro Cliente",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        736,
+        5984
+      ]
+    },
+    {
+      "parameters": {
+        "amount": "={{ Math.min($node[\"Cerebro Dify\"].json.answer.length * 0.05, 5) }}",
+        "unit": "seconds"
+      },
+      "id": "ebb44f96-bf24-4cb3-8728-ed2ff4ddadee",
+      "name": "Efecto Humano (Wait)",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        6416
+      ],
+      "webhookId": "f24e7707-de0e-44a5-981d-7cce617dbc7e"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"conversation\"][\"id\"] }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "content",
+              "value": "={{ $node[\"Cerebro Dify\"].json[\"answer\"] }}"
+            },
+            {
+              "name": "message_type",
+              "value": "outgoing"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "cc81f97c-0397-4941-9404-7c68f1d57609",
+      "name": "Enviar Respuesta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2176,
+        6416
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/contacts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"sender\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9bdf79ef-007d-4544-83a9-2d383b5cd225",
+      "name": "Datos del Cliente - Chatwoot",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        624,
+        5776
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://{{DIFY_HOST}}/v1/chat-messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer {{DIFY_APP_KEY}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "inputs",
+              "value": "={{ ({}) }}"
+            },
+            {
+              "name": "query",
+              "value": "={{ $node[\"Webhook Entrante1\"].json.body.conversation.messages[0].processed_message_content || $node[\"Webhook Entrante1\"].json.body.content || $node[\"Webhook Entrante1\"].json.body.message?.content }}"
+            },
+            {
+              "name": "response_mode",
+              "value": "blocking"
+            },
+            {
+              "name": "user",
+              "value": "={{ $json.payload.id }}"
+            },
+            {
+              "name": "nombre_chatwoot",
+              "value": "={{ $json.payload.name }}"
+            },
+            {
+              "name": "email_chatwoot",
+              "value": "={{ $json.payload.email }}"
+            },
+            {
+              "name": "conversation_id",
+              "value": "={{ $json.payload.custom_attributes.dify_id }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ae2f20a2-9cb1-4721-a950-dbb686f78011",
+      "name": "Cerebro Dify",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        848,
+        5696
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/contacts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"sender\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"custom_attributes\": {\n    \"dify_id\": \"{{ $node[\"Cerebro Dify\"].json.conversation_id }}\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1888,
+        5808
+      ],
+      "id": "3565a15d-7ad1-4e27-baa7-bbb4e736bdef",
+      "name": "Update Contact"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fd18b83b-eb00-4273-a9c8-fd9b8923bccd",
+              "leftValue": "={{ $node[\"Cerebro Dify\"].json.answer }}",
+              "rightValue": "[HUMAN_REQUEST]",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1440,
+        5584
+      ],
+      "id": "5f38c855-4b7b-4d25-a42a-a7a0205a667a",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"conversation\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"status\": \"open\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1680,
+        5616
+      ],
+      "id": "4e33c968-2f0f-4ab9-b467-c76d940642b4",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"conversation\"][\"id\"] }}/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"content\": \"¡Excelente decisión, {{ $node[\"Datos del Cliente - Chatwoot\"].json.payload.name }}! 🚀 He detectado que necesitás una atención personalizada. Acabo de avisar a mi equipo humano y te contactarán por aquí mismo en breve. ¡Aguardame un instante!\",\n  \"message_type\": \"outgoing\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2464,
+        5616
+      ],
+      "id": "50e0ed6b-9696-4839-885d-423b2241954f",
+      "name": "HTTP Request1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://{{SPECTRA_HOST}}/api/webhooks/chatwoot/lead/{{SPECTRA_TENANT_ID}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"business_name\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.name }}\",\n  \"contact_name\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.name }}\",\n  \"email\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.email }}\",\n  \"phone\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.phone_number }}\",\n  \"channel\": \"{{ $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::Whatsapp' ? 'whatsapp' : $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::WebWidget' ? 'web' : $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::FacebookPage' ? 'facebook' : $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.channel_type === 'Channel::Instagram' ? 'instagram' : 'otro' }}\",\n  \"city\": \"\",\n  \"message\": \"Lead desde {{ $('Datos del Cliente - Chatwoot').item.json.payload.contact_inboxes[0].inbox.name }}\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2176,
+        6016
+      ],
+      "id": "4cfad8f8-ca6e-41f0-882b-42cf415459ee",
+      "name": "Enviar a Spectra Flow"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "aead23c4-6f1f-4ead-908f-5a3777463080",
+        "options": {}
+      },
+      "id": "9e24860d-caa7-4f43-ab5a-9be8113dfda6",
+      "name": "Webhook Entrante1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        112,
+        6032
+      ],
+      "webhookId": "aead23c4-6f1f-4ead-908f-5a3777463080"
+    },
+    {
+      "parameters": {
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"conversation\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "4b3ef7be-258c-46da-bc4e-9d8c13ee72b3",
+      "name": "Leer Conversación Actual",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        352,
+        6032
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "38ccfb51-5e8f-477e-b22e-8cd07e68627e",
+              "leftValue": "={{ (($json.payload?.labels || $json.labels || []).includes('bot_pausado') || (($json.payload?.custom_attributes?.bot_status || $json.custom_attributes?.bot_status) === 'paused')) ? 'paused' : 'active' }}",
+              "rightValue": "paused",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "32646b75-875e-46b3-bbe6-e8a113cff627",
+      "name": "IF Bot Pausado",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        512,
+        6256
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const conv = $node[\"Leer Conversación Actual\"].json;\nconst currentLabels = conv.payload?.labels || conv.labels || [];\nconst labels = Array.from(new Set([...currentLabels, 'bot_pausado']));\nreturn [{ json: { labels } }];"
+      },
+      "id": "0d5abd98-2b10-4faa-bf1f-e15caaa38e28",
+      "name": "Preparar Label bot_pausado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1872,
+        5616
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"conversation\"][\"id\"] }}/labels",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { labels: $json.labels } }}",
+        "options": {}
+      },
+      "id": "754879da-b9fc-421c-9de6-b68398b049aa",
+      "name": "Aplicar Label bot_pausado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2064,
+        5616
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"conversation\"][\"id\"] }}/custom_attributes",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"custom_attributes\": {\n    \"bot_status\": \"paused\"\n  }\n}",
+        "options": {}
+      },
+      "id": "5c000b07-a667-42ed-a66b-0d403931ccb7",
+      "name": "Set bot_status paused",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2256,
+        5616
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://{{CHATWOOT_HOST}}/api/v1/accounts/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"account\"][\"id\"] }}/conversations/{{ $node[\"Webhook Entrante1\"].json[\"body\"][\"conversation\"][\"id\"] }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "api_access_token",
+              "value": "{{CHATWOOT_API_TOKEN}}"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "eb3dd777-08c8-463d-b0af-56706d31d17e",
+      "name": "Revisar Pausa Antes de Responder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1744,
+        6416
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6dea7b07-f2d0-4db1-b5f9-0e128db170a2",
+              "leftValue": "={{ (($json.payload?.labels || $json.labels || []).includes('bot_pausado') || (($json.payload?.custom_attributes?.bot_status || $json.custom_attributes?.bot_status) === 'paused') || !!($json.payload?.assignee_id || $json.assignee_id)) ? 'paused' : 'active' }}",
+              "rightValue": "paused",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "6b61659f-76ec-4e9e-aa8c-29077ed5a707",
+      "name": "IF Pausado Antes de Enviar",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1952,
+        6416
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 📋 Template: OptimIA BOT (Spectra Flow)\n\n**Uso:** duplicar este workflow por cada cliente nuevo.\n\n### ✅ Variables a reemplazar (search & replace global en el JSON):\n\n| Placeholder | Dónde obtenerlo |\n|---|---|\n| `{{CHATWOOT_HOST}}` | Dominio Chatwoot del cliente (ej: `chat.cliente.com`) |\n| `{{CHATWOOT_API_TOKEN}}` | Chatwoot → Profile Settings → Access Token |\n| `{{DIFY_HOST}}` | Host Dify del cliente (o compartido) |\n| `{{DIFY_APP_KEY}}` | Dify → App → API Access → `app-xxx` |\n| `{{SPECTRA_HOST}}` | `flow.spectra-metrics.com` o tu dominio Spectra |\n| `{{SPECTRA_TENANT_ID}}` | Admin Tenants → botón Copiar Tenant ID del cliente |\n\n### Pasos:\n1. Duplicar → renombrar `OptimIA BOT - <Cliente>`.\n2. Abrir el JSON y hacer search & replace de los 6 placeholders.\n3. Importar de vuelta en n8n.\n4. Activar el workflow.\n5. Copiar URL del nodo `Webhook Entrante1` → pegar en Chatwoot del cliente (Settings → Integrations → Webhook) **y** en Spectra → `Admin Tenants → OptimIA BOT → Base URL`.",
+        "height": 380,
+        "width": 660,
+        "color": 5
+      },
+      "name": "README",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        -450
+      ],
+      "id": "sticky-readme"
+    },
+    {
+      "parameters": {
+        "content": "## 🧠 Cerebro Dify (Entrenamiento Bot Optimia)\n\nEste nodo llama al motor de IA que responde al cliente.\n\n**Editar:**\n- URL: `http://{{DIFY_HOST}}/v1/chat-messages`\n- Header `Authorization`: `Bearer {{DIFY_APP_KEY}}`\n\nEl entrenamiento del bot se hace desde Dify con los materiales que el cliente subió al Drive compartido.",
+        "height": 220,
+        "width": 400,
+        "color": 3
+      },
+      "name": "Nota Cerebro Dify",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        600
+      ],
+      "id": "sticky-nota-cerebro-dify"
+    },
+    {
+      "parameters": {
+        "content": "## 💬 Chatwoot (9 nodos)\n\nTodos estos nodos usan la **misma cuenta Chatwoot** del cliente:\n- Datos del Cliente - Chatwoot\n- Enviar Respuesta\n- Update Contact\n- HTTP Request / HTTP Request1\n- Leer Conversación Actual\n- Aplicar Label bot_pausado\n- Set bot_status paused\n- Revisar Pausa Antes de Responder\n\n**Editar (por search & replace):**\n- Host: `{{CHATWOOT_HOST}}`\n- Token: `{{CHATWOOT_API_TOKEN}}`",
+        "height": 300,
+        "width": 440,
+        "color": 4
+      },
+      "name": "Nota Chatwoot",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        520,
+        600
+      ],
+      "id": "sticky-nota-chatwoot"
+    },
+    {
+      "parameters": {
+        "content": "## 🔗 Webhook Entrante1\n\nURL que pegás en Chatwoot → Integrations → Webhook,\n**y también** en Spectra Flow → Admin Tenants → **OptimIA BOT** → Base URL.\n\nNO modificar internamente.",
+        "height": 200,
+        "width": 380,
+        "color": 6
+      },
+      "name": "Nota Webhook Entrante",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -40,
+        300
+      ],
+      "id": "sticky-nota-webhook-entrante"
+    },
+    {
+      "parameters": {
+        "content": "## 📤 Enviar a Spectra Flow\n\nEnvía el lead a la plataforma Spectra del cliente.\n\n**Editar:**\n- URL: `https://{{SPECTRA_HOST}}/api/webhooks/chatwoot/lead/{{SPECTRA_TENANT_ID}}`\n\nEl Tenant ID lo copiás desde Admin Tenants → fila del cliente → botón Copiar.",
+        "height": 240,
+        "width": 400,
+        "color": 5
+      },
+      "name": "Nota Spectra Callback",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        920
+      ],
+      "id": "sticky-nota-spectra-callback"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Filtro Cliente": {
+      "main": [
+        [
+          {
+            "node": "Datos del Cliente - Chatwoot",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos del Cliente - Chatwoot": {
+      "main": [
+        [
+          {
+            "node": "Cerebro Dify",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cerebro Dify": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update Contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Preparar Label bot_pausado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Spectra Flow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Contact": {
+      "main": [
+        [
+          {
+            "node": "Efecto Humano (Wait)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Efecto Humano (Wait)": {
+      "main": [
+        [
+          {
+            "node": "Revisar Pausa Antes de Responder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar Respuesta": {
+      "main": [
+        [
+          {
+            "node": "Enviar a Spectra Flow",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Entrante1": {
+      "main": [
+        [
+          {
+            "node": "Leer Conversación Actual",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Conversación Actual": {
+      "main": [
+        [
+          {
+            "node": "IF Bot Pausado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Bot Pausado": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Filtro Cliente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Label bot_pausado": {
+      "main": [
+        [
+          {
+            "node": "Aplicar Label bot_pausado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aplicar Label bot_pausado": {
+      "main": [
+        [
+          {
+            "node": "Set bot_status paused",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set bot_status paused": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Revisar Pausa Antes de Responder": {
+      "main": [
+        [
+          {
+            "node": "IF Pausado Antes de Enviar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Pausado Antes de Enviar": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Enviar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "9b48dd91-81dd-4cd9-a464-551ba628e3c2",
+  "meta": {
+    "instanceId": "11baef16da47541ce1966eb2009a036543444bcddb67c4e8aecdda46714f4c95"
+  },
+  "id": "qJsrjlwKLu95rvSm",
+  "tags": [
+    {
+      "updatedAt": "2026-02-18T02:41:10.028Z",
+      "createdAt": "2026-02-18T02:41:10.028Z",
+      "id": "x6Lhwx8MiKCl6vtK",
+      "name": "OPTIMIA"
+    }
+  ]
+}
