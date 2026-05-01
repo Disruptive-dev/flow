@@ -1,53 +1,60 @@
-# Spectra Flow - PRD
+# Spectra Flow — PRD (Growth OS)
 
-## Original Problem Statement
-Premium multi-tenant SaaS "Spectra Flow" (Growth OS): AI prospecting, CRM, Email Marketing, Analytics, multi-tenancy, RBAC. Pre-launch hardening (15-day trial middleware, forgot password, dynamic CRM stages and lead taxonomies, dark/light theme, collapsible sidebar, "Próximamente" placeholders, public landing at `/landing` with contact form to `info@spectra-metrics.com`).
+## Problema original
+SaaS multi-tenant premium con IA para prospección, CRM, Email Marketing, Analytics y RBAC estricto, con Super Admin que centraliza integraciones (n8n, Outscraper, Dify, Resend, Apify) ocultas a los clientes.
 
 ## Stack
-React + FastAPI + MongoDB. Tailwind dark mode (class strategy). Resend for transactional email. Emergent LLM key for IA. n8n/Chatwoot webhook ingestion. JWT auth.
+React + FastAPI + MongoDB (Motor). JWT auth. Shadcn UI. i18n ES/EN. Dark/light mode. Emergent LLM Key para Neuro Flow IA.
 
-## User
-Spanish-speaking, budget-conscious. Deploys via "Save to GitHub" → EasyPanel. Owner email: `info@spectra-metrics.com`.
+## Personas / Roles (RBAC)
+- **super_admin**: cross-tenant, gestiona integraciones, precios, módulos, límites, tenants.
+- **tenant_admin**: full dentro de su tenant.
+- **operator**: CRUD sin DELETE ni settings.
+- **viewer**: read-only.
 
-## Implemented (Done)
-- Auth (login/register/forgot/reset password) — JWT + bcrypt
-- 15-day trial expiry middleware + countdown banner
-- Conversion funnel tracking + analytics widget
-- "Reset Demo Data" gated by `is_demo=true`
-- Dynamic CRM pipeline stages (per tenant)
-- Dynamic lead taxonomies (sources, categories, statuses, channels, provinces, cities)
-- Responsive Kanban scaling by stage count
-- Sidebar reorder + 5 "Próximamente" placeholders + desktop expand/collapse + Ecosistema links
-- Dark/Light theme toggle, login Spanish translations
-- n8n/Chatwoot webhook ingestion endpoints
-- Public Landing Page `/landing` (premium dark UI, métricas, productos, ecosistema, contact form)
-- `POST /api/public/contact` → Resend email to `info@spectra-metrics.com` + persist in `landing_submissions` (Feb 2026)
-- Resend SDK upgrade fix: `resend.Emails.send` (was `resend.emails.send`, broken)
+## Módulos implementados
+- Prospección (Outscraper + Apify + n8n + Demo Mode con data sintética)
+- Leads (tabla con filtros país/fecha, mini-widget por país)
+- CRM (contactos, embudo)
+- Email Marketing (Resend, campañas, plantillas)
+- Admin de Tenants (módulos, precios dinámicos, cupones, trial, 100% free, límites por módulo)
+- Integraciones Super Admin (masked para clientes, rename a marca propia: OptimIA Bot, Spectra Prospection, etc.)
+- Landing Page pública con formulario de contacto (Resend)
+- Flow IA (bot modal responsive)
 
-## Roadmap (Pending)
-- P1: Spectra Finance Module (Income, Expenses, Costs, Suppliers, Business Units, Cashflow, Dashboards) — deferred by user (credits)
-- P1: Refactor `/app/backend/server.py` (>3450 lines) → routers/ architecture
-- P2: Email Marketing Automations (workflow builder)
-- P2: Spectra Performance / Project Management / Fidelity modules (currently `ComingSoonPage`)
-- P2: Presupuestos & Facturación inside CRM
+## Completado en esta sesión (fork)
+- **2026-05-01**: Verificación de límites por módulo (`module_limits`) y reactivación Apify — OK vía curl.
+- **2026-05-01**: Documento técnico completo **Spectra Finance** generado en `/app/SPECTRA_FINANCE_SPEC.md` (para pasar a otra IA — no implementado aún).
 
-## Mocked / Placeholder
-Finance, Performance, Fidelity, Project Management, Budgets, Invoicing → routed to `ComingSoonPage`.
+## Backlog priorizado
+### P0 (bloqueantes)
+- Ninguno.
 
-## Key Endpoints
-- `POST /api/auth/login|register|forgot-password|reset-password`
-- `POST /api/public/contact` — public landing form (no auth, exempt from trial middleware)
-- `GET /api/tenant/status` — trial countdown
-- `POST /api/admin/reset-demo-data`
-- `POST /api/webhooks/chatwoot/lead/{tenant_token}`
-- `POST /api/webhooks/n8n/job-result/{job_id}`
+### P1
+- **Spectra Finance** — ver `/app/SPECTRA_FINANCE_SPEC.md` (spec completo listo).
+- Impersonation (Super Admin "Log in as").
+- Refactor `server.py` (>4000 líneas) → `/app/backend/routes/*`.
 
-## DB Collections
-`tenants`, `users`, `leads`, `crm_deals`, `crm_tasks`, `crm_notes`, `crm_products`, `campaigns`, `templates`, `landing_submissions` (new).
+### P2
+- Email Marketing Automations (workflow builder).
+- Spectra Performance (módulo pronto).
+- Spectra Project Management (pronto).
+- Spectra Fidelity (pronto).
+- Presupuestos + Facturación en CRM (parte integrada en Finance spec).
 
-## Critical Notes for Next Agent
-- SPANISH ONLY responses
-- Budget-constrained: prefer parallel calls, small targeted edits
-- Resend SDK 2.27 → use `resend.Emails.send` (capital E)
-- `/api/public/*` and `/api/auth/*` exempt from trial middleware
-- Owner credentials in `/app/memory/test_credentials.md`
+## Archivos clave
+- `/app/backend/server.py` (monolítico, P1 refactor)
+- `/app/frontend/src/pages/TenantAdminPage.js` (módulos + límites + pricing)
+- `/app/frontend/src/pages/SettingsPage.js`
+- `/app/frontend/src/components/FlowBotButton.js`
+- `/app/SPECTRA_FLOW_IA_PROMPT.md` (prompt maestro IA)
+- `/app/SPECTRA_N8N_INTEGRATIONS_GUIDE.md` (guía integraciones)
+- `/app/SPECTRA_FINANCE_SPEC.md` (nuevo — spec módulo Finance)
+- `/app/n8n_templates/Spectra_Prospeccion_TEMPLATE.json`
+- `/app/n8n_templates/OptimIA_BOT_TEMPLATE.json`
+
+## Restricciones de sesión
+- **Idioma**: Español.
+- **Créditos**: alto foco en ahorro. No ejecutar refactors grandes ni test suites masivos sin aprobación explícita.
+- **No compartir URLs de preview al usuario.**
+- **Integraciones**: solo Super Admin, clientes ven `****`.
