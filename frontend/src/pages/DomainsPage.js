@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import { Plus, Globe, CheckCircle2, XCircle, Clock, Shield, Loader2, AlertTriangle, ArrowRight, RefreshCw, Send, Copy } from 'lucide-react';
+import { Plus, Globe, CheckCircle2, XCircle, Clock, Shield, Loader2, AlertTriangle, ArrowRight, RefreshCw, Send, Copy, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const statusConfig = {
@@ -51,6 +51,16 @@ export default function DomainsPage() {
     } catch (err) { toast.error('Error al agregar dominio'); }
     setCreating(false);
   };
+
+  const handleDeleteDomain = async (domain) => {
+    if (!window.confirm(`Eliminar el dominio ${domain.domain || domain.subdomain}? Se borra definitivamente.`)) return;
+    try {
+      await api.delete(`/domains/${domain.id}`);
+      setDomains(prev => prev.filter(d => d.id !== domain.id));
+      toast.success('Dominio eliminado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
+  };
+
 
   const handleVerify = async (domainId) => {
     setVerifying(domainId);
@@ -207,6 +217,9 @@ export default function DomainsPage() {
                     <Button size="sm" variant="outline" onClick={() => handleVerify(domain.id)} disabled={verifying === domain.id} data-testid={`verify-domain-${i}`}>
                       {verifying === domain.id ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Shield className="w-3.5 h-3.5 mr-1" />}
                       Verificar DNS
+                    </Button>
+                    <Button size="sm" variant="outline" className="border-red-300 text-red-600 hover:bg-red-50" onClick={() => handleDeleteDomain(domain)} data-testid={`delete-domain-${i}`}>
+                      <Trash2 className="w-3.5 h-3.5 mr-1" /> Eliminar
                     </Button>
                     {isVerified && (
                       <>

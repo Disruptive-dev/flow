@@ -6,7 +6,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft, Users, Mail, Zap } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft, Users, Mail, Zap, Trash2 } from 'lucide-react';
+import { playStartSound, playSuccessSound } from '@/lib/sounds';
 import { toast } from 'sonner';
 import GuideBanner from '@/components/GuideBanner';
 
@@ -38,16 +39,15 @@ export default function JobsPage() {
 
   const handleStart = async (jobId) => {
     setStarting(true);
+    playStartSound();
     try {
       const { data } = await api.post(`/prospect-jobs/${jobId}/start`);
       
       if (data.status === 'processing') {
-        // n8n mode - start polling
         setSelectedJob(data);
         toast.success('Busqueda de prospectos iniciada. Esperando resultados...');
         startPolling(jobId);
       } else {
-        // Demo mode - animate stages
         const stagesData = data.stages || [];
         const animatedJob = { ...data, stages: stagesData.map(s => ({ ...s, status: 'pending' })), status: 'processing', raw_count: 0, cleaned_count: 0, qualified_count: 0 };
         animatedJob.stages[0].status = 'completed';
@@ -63,6 +63,7 @@ export default function JobsPage() {
           setSelectedJob({ ...animatedJob });
         }
         setJobs(prev => prev.map(j => j.id === jobId ? data : j));
+        playSuccessSound();
         toast.success(`${data.qualified_count} leads calificados!`);
       }
     } catch (err) {
@@ -70,6 +71,17 @@ export default function JobsPage() {
     } finally {
       setStarting(false);
     }
+  };
+
+  const handleDelete = async (job, e) => {
+    e?.stopPropagation();
+    if (!window.confirm(`Eliminar el trabajo "${job.category} en ${job.city}"? Se borraran tambien los leads creados por este trabajo.`)) return;
+    try {
+      await api.delete(`/prospect-jobs/${job.id}`);
+      setJobs(prev => prev.filter(j => j.id !== job.id));
+      if (selectedJob?.id === job.id) setSelectedJob(null);
+      toast.success('Trabajo eliminado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
   };
 
   const startPolling = (jobId) => {
@@ -81,6 +93,7 @@ export default function JobsPage() {
           clearInterval(interval);
           setJobs(prev => prev.map(j => j.id === jobId ? data : j));
           if (data.status === 'completed') {
+            playSuccessSound();
             toast.success(`${data.qualified_count} calificados + ${data.rejected_count} rechazados. Lista: ${data.auto_list_name || ''}`);
           }
         }
@@ -243,10 +256,15 @@ export default function JobsPage() {
                   </div>
                   <div>
                     <p className="font-medium text-zinc-900 text-sm">{job.category} - {job.city}, {job.province}</p>
-                    <p className="text-xs text-zinc-500 mt-0.5">{job.quantity} solicitados &middot; {job.qualified_count} calificados</p>
+                    <p className="text-xs text-zinc-500 mt-0.5">{job.quantity} solicitados &middot; {job.qualified_count || 0} calificados</p>
                   </div>
                 </div>
-                <Badge className={statusColors[job.status] || statusColors.pending}>{job.status}</Badge>
+                <div className="flex items-center gap-2">
+                  <Badge className={statusColors[job.status] || statusColors.pending}>{job.status}</Badge>
+                  <button onClick={(e) => handleDelete(job, e)} className="p-1.5 rounded hover:bg-red-50 text-zinc-400 hover:text-red-600 transition-colors" data-testid={`delete-job-${i}`} title="Eliminar trabajo">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </CardContent>
             </Card>
           ))}

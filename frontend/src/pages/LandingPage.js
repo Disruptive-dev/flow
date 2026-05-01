@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { COUNTRIES, flagOf } from '@/lib/countries';
+import PricingSection from '@/components/PricingSection';
 import {
   Zap, Search, Mail, Users, BarChart3, RefreshCw, Brain, Bot, WandSparkles,
   ArrowRight, CheckCircle2, Phone, MapPin, Calendar, TrendingUp, Award, Building2,
@@ -181,6 +182,7 @@ export default function LandingPage() {
             <a href="#productos" className="hover:text-zinc-900 dark:hover:text-white transition-colors">{t.nav_products}</a>
             <a href="#metricas" className="hover:text-zinc-900 dark:hover:text-white transition-colors">{t.nav_metrics}</a>
             <a href="#contacto" className="hover:text-zinc-900 dark:hover:text-white transition-colors">{t.nav_contact}</a>
+            <a href="#precios" className="hover:text-zinc-900 dark:hover:text-white transition-colors">Precios</a>
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -319,6 +321,7 @@ export default function LandingPage() {
       </section>
 
       {/* CONTACTO */}
+      <PricingSection lang={lang} />
       <section id="contacto" className="py-20 px-4 sm:px-8">
         <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-10">
           {/* INFO */}

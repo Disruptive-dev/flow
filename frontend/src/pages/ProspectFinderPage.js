@@ -132,21 +132,14 @@ export default function ProspectFinderPage() {
 
       <GuideBanner section="prospect_finder" />
 
-      {/* Two Source Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      {/* Single Source: Google Maps (B2B) */}
+      <Tabs value="b2b" className="space-y-6">
         <TabsList className="bg-zinc-100 p-1 h-auto">
           <TabsTrigger value="b2b" className="gap-2 py-2.5 px-5 data-[state=active]:bg-white" data-testid="tab-b2b">
             <Building2 className="w-4 h-4" />
             <div className="text-left">
               <p className="text-sm font-medium">B2B - Google Maps</p>
               <p className="text-[10px] text-zinc-400 font-normal">Negocios locales por ubicacion</p>
-            </div>
-          </TabsTrigger>
-          <TabsTrigger value="linkedin" className="gap-2 py-2.5 px-5 data-[state=active]:bg-white" data-testid="tab-linkedin">
-            <Linkedin className="w-4 h-4" />
-            <div className="text-left">
-              <p className="text-sm font-medium">LinkedIn</p>
-              <p className="text-[10px] text-zinc-400 font-normal">Empresas y profesionales</p>
             </div>
           </TabsTrigger>
         </TabsList>

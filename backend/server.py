@@ -101,6 +101,18 @@ class RegisterRequest(BaseModel):
     name: str
     tenant_name: Optional[str] = None
 
+_DEFAULT_MODULE_PRICES = {
+    "prospeccion": {"label": "Spectra Prospection", "price_usd": 49, "description": "Busqueda automatizada de empresas por rubro y ubicacion"},
+    "leads": {"label": "Leads Hub", "price_usd": 19, "description": "Centro unificado de leads con multiples fuentes"},
+    "crm": {"label": "Spectra CRM", "price_usd": 39, "description": "Pipeline visual, tareas, notas, productos y deals"},
+    "email_marketing": {"label": "Spectra Email Marketing", "price_usd": 29, "description": "Campanas y emails transaccionales con dominio propio"},
+    "optimia_bot": {"label": "OptimIA BOT", "price_usd": 59, "description": "Bot conversacional para WhatsApp y chat web"},
+    "finance": {"label": "Spectra Finance", "price_usd": 39, "description": "Control financiero, caja y rentabilidad"},
+    "performance": {"label": "Spectra Performance", "price_usd": 49, "description": "Meta Ads, Google Ads y SEO unificados"},
+    "fidelity": {"label": "Spectra Fidelity", "price_usd": 19, "description": "Programa de fidelizacion para clientes"},
+    "project_management": {"label": "Spectra PM", "price_usd": 29, "description": "Gestion de proyectos y tareas"},
+}
+
 class ProspectJobCreate(BaseModel):
     country: Optional[str] = "Argentina"
     province: Optional[str] = ""
@@ -110,7 +122,6 @@ class ProspectJobCreate(BaseModel):
     postal_code: Optional[str] = ""
     filters: Optional[Dict[str, Any]] = None
     source: Optional[str] = "google_maps"
-    linkedin_params: Optional[Dict[str, Any]] = None
     is_demo: Optional[bool] = False
 
 class LeadStatusUpdate(BaseModel):
@@ -229,7 +240,26 @@ async def register(response: Response, body: RegisterRequest):
 @api_router.get("/auth/me")
 async def get_me(request: Request):
     user = await get_current_user(request)
+    # Attach tenant demo flag for UI badge (all roles)
+    try:
+        t = await db.tenants.find_one({"id": user.get("tenant_id")}, {"_id": 0, "demo_enabled": 1, "name": 1})
+        if t:
+            user["tenant_demo_enabled"] = t.get("demo_enabled", True)
+            if not user.get("tenant_name"):
+                user["tenant_name"] = t.get("name", "")
+    except Exception:
+        pass
     return user
+
+@api_router.put("/tenant/demo-toggle")
+async def toggle_tenant_demo(request: Request, body: Dict[str, Any] = {}):
+    """Tenant admin can enable/disable demo badge for own tenant."""
+    user = await get_current_user(request)
+    if user["role"] not in ("super_admin", "tenant_admin"):
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    enabled = bool(body.get("enabled", False))
+    await db.tenants.update_one({"id": user["tenant_id"]}, {"$set": {"demo_enabled": enabled, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    return {"ok": True, "demo_enabled": enabled}
 
 @api_router.post("/auth/logout")
 async def logout(response: Response):
@@ -498,8 +528,7 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
         "category": body.category, "quantity": body.quantity,
         "postal_code": body.postal_code or "",
         "filters": body.filters or {}, "status": "pending",
-        "source": body.source or "google_maps",
-        "linkedin_params": body.linkedin_params or {},
+        "source": "google_maps",
         "raw_count": 0, "cleaned_count": 0, "qualified_count": 0,
         "rejected_count": 0, "approved_count": 0,
         "is_demo": bool(body.is_demo),
@@ -529,8 +558,7 @@ async def create_prospect_job(request: Request, body: ProspectJobCreate):
                     "country": body.country or "Argentina", "province": body.province or "",
                     "city": body.city or "", "category": body.category, "quantity": body.quantity,
                     "postal_code": body.postal_code or "",
-                    "source": body.source or "google_maps",
-                    "linkedin_params": body.linkedin_params or {},
+                    "source": "google_maps",
                     "callback_url": callback_url, "progress_url": progress_url,
                     "api_key": n8n_config.get("api_key", "")
                 })
@@ -641,6 +669,23 @@ async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: s
         logger.error(f"Apify LinkedIn error for job {job_id}: {e}")
         await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
 
+@api_router.delete("/prospect-jobs/{job_id}")
+async def delete_prospect_job(request: Request, job_id: str):
+    user = await get_current_user(request)
+    if user["role"] not in ("super_admin", "tenant_admin", "operator"):
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    # Non-super_admin scoped to own tenant
+    q = {"id": job_id}
+    if user["role"] != "super_admin":
+        q["tenant_id"] = user["tenant_id"]
+    job = await db.prospect_jobs.find_one(q)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job no encontrado")
+    # Cascade delete leads created by this job
+    await db.leads.delete_many({"job_id": job_id, "tenant_id": job["tenant_id"]})
+    await db.prospect_jobs.delete_one({"id": job_id})
+    return {"ok": True}
+
 @api_router.post("/prospect-jobs/{job_id}/start")
 async def start_prospect_job(request: Request, job_id: str):
     user = await get_current_user(request)
@@ -663,23 +708,6 @@ async def start_prospect_job(request: Request, job_id: str):
         await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "processing", "stages": stages, "updated_at": now}})
         updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
         return updated_job
-    # Check for Apify direct mode (LinkedIn without n8n)
-    if source == "linkedin":
-        apify_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "apify", "enabled": True}, {"_id": 0})
-        if apify_config and apify_config.get("api_key"):
-            stages = [
-                {"name": "job_created", "status": "completed", "timestamp": job["created_at"]},
-                {"name": "scraping", "status": "processing", "timestamp": now},
-                {"name": "prospects_found", "status": "pending", "timestamp": None},
-                {"name": "scoring_completed", "status": "pending", "timestamp": None},
-                {"name": "ready_for_review", "status": "pending", "timestamp": None}
-            ]
-            await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "processing", "stages": stages, "updated_at": now}})
-            # Launch Apify actor in background
-            import asyncio
-            asyncio.create_task(_run_apify_linkedin(job_id, job, apify_config["api_key"], user["tenant_id"]))
-            updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
-            return updated_job
     # Demo mode - generate simulated data
     quantity = job.get("quantity", 100)
     raw_count = random.randint(int(quantity * 0.8), int(quantity * 1.2))
@@ -1191,6 +1219,19 @@ async def update_domain(request: Request, domain_id: str, body: DomainUpdate):
         raise HTTPException(status_code=404, detail="Domain not found")
     updated = await db.domains.find_one({"id": domain_id}, {"_id": 0})
     return updated
+
+@api_router.delete("/domains/{domain_id}")
+async def delete_domain(request: Request, domain_id: str):
+    user = await get_current_user(request)
+    if user["role"] not in ("super_admin", "tenant_admin"):
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    q = {"id": domain_id}
+    if user["role"] != "super_admin":
+        q["tenant_id"] = user["tenant_id"]
+    result = await db.domains.delete_one(q)
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Domain not found")
+    return {"ok": True}
 
 @api_router.post("/domains/{domain_id}/verify")
 async def verify_domain(request: Request, domain_id: str):
@@ -2863,9 +2904,83 @@ async def update_tenant(request: Request, tenant_id: str, body: TenantUpdate):
         update["modules"] = body.modules
     if body.active is not None:
         update["active"] = body.active
+    # Optional extras from raw body (demo_enabled, discount_percent, trial_ends_at)
+    try:
+        raw_body = await request.json()
+        if "demo_enabled" in raw_body:
+            update["demo_enabled"] = bool(raw_body["demo_enabled"])
+        if "discount_percent" in raw_body:
+            update["discount_percent"] = max(0, min(100, int(raw_body["discount_percent"])))
+        if "trial_ends_at" in raw_body:
+            update["trial_ends_at"] = raw_body["trial_ends_at"]
+    except Exception:
+        pass
     await db.tenants.update_one({"id": tenant_id}, {"$set": update})
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     return tenant
+
+# ========= MODULE PRICING (super_admin configures once, used by landing + tenant pricing) =========
+@api_router.get("/admin/module-pricing")
+async def get_module_pricing(request: Request):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    doc = await db.settings.find_one({"key": "module_pricing"}, {"_id": 0}) or {"key": "module_pricing", "prices": _DEFAULT_MODULE_PRICES}
+    return doc
+
+@api_router.put("/admin/module-pricing")
+async def put_module_pricing(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    prices = body.get("prices") or {}
+    await db.settings.update_one({"key": "module_pricing"}, {"$set": {"prices": prices, "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    return {"ok": True, "prices": prices}
+
+@api_router.get("/public/pricing")
+async def public_pricing():
+    """Public endpoint for landing page pricing section."""
+    doc = await db.settings.find_one({"key": "module_pricing"}, {"_id": 0})
+    prices = (doc or {}).get("prices") or _DEFAULT_MODULE_PRICES
+    return {"modules": prices, "trial_days": 15}
+
+# ========= COUPONS =========
+@api_router.get("/admin/coupons")
+async def list_coupons(request: Request):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    return await db.coupons.find({}, {"_id": 0}).to_list(100)
+
+@api_router.post("/admin/coupons")
+async def create_coupon(request: Request, body: Dict[str, Any] = {}):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    code = (body.get("code") or "").strip().upper()
+    pct = max(0, min(100, int(body.get("discount_percent", 0))))
+    if not code:
+        raise HTTPException(status_code=400, detail="code requerido")
+    await db.coupons.update_one({"code": code}, {"$set": {"code": code, "discount_percent": pct, "active": body.get("active", True), "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
+    return {"ok": True, "code": code, "discount_percent": pct}
+
+@api_router.delete("/admin/coupons/{code}")
+async def delete_coupon(request: Request, code: str):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    await db.coupons.delete_one({"code": code.upper()})
+    return {"ok": True}
+
+@api_router.post("/public/apply-coupon")
+async def apply_coupon(body: Dict[str, Any] = {}):
+    code = (body.get("code") or "").strip().upper()
+    if not code:
+        return {"ok": False, "message": "Ingresa un codigo"}
+    c = await db.coupons.find_one({"code": code, "active": True}, {"_id": 0})
+    if not c:
+        return {"ok": False, "message": "Cupon invalido o inactivo"}
+    return {"ok": True, "discount_percent": c.get("discount_percent", 0), "code": code}
 
 @api_router.delete("/admin/tenants/{tenant_id}")
 async def delete_tenant(request: Request, tenant_id: str):
@@ -3643,6 +3758,37 @@ async def resend_events_webhook(request: Request, body: Dict[str, Any] = {}):
 
 # ==================== SEED DATA ====================
 
+async def _seed_demo_jobs_for_tenant(tenant_id: str):
+    """Seed demo jobs + leads into an existing tenant. Used for Spectra Demo."""
+    now = datetime.now(timezone.utc).isoformat()
+    jobs_data = [
+        {"province": "Tucuman", "city": "San Miguel de Tucuman", "category": "Real Estate", "status": "completed", "quantity": 200},
+        {"province": "Buenos Aires", "city": "CABA", "category": "Technology", "status": "completed", "quantity": 150},
+        {"province": "Cordoba", "city": "Cordoba Capital", "category": "Gastronomia", "status": "processing", "quantity": 100},
+    ]
+    job_ids = []
+    for jd in jobs_data:
+        job_id = str(uuid.uuid4())
+        job_ids.append(job_id)
+        raw = random.randint(int(jd["quantity"]*0.8), int(jd["quantity"]*1.2))
+        cleaned = int(raw * 0.78)
+        qualified = int(cleaned * 0.72)
+        stages = [
+            {"name": "job_created", "status": "completed", "timestamp": now},
+            {"name": "scraping", "status": "completed", "timestamp": now},
+            {"name": "prospects_found", "status": "completed", "timestamp": now},
+            {"name": "ai_cleaning", "status": "completed" if jd["status"] == "completed" else "in_progress", "timestamp": now},
+            {"name": "scoring_completed", "status": "completed" if jd["status"] == "completed" else "pending", "timestamp": now if jd["status"] == "completed" else None},
+            {"name": "ready_for_review", "status": "completed" if jd["status"] == "completed" else "pending", "timestamp": now if jd["status"] == "completed" else None},
+        ]
+        await db.prospect_jobs.insert_one({"id": job_id, "tenant_id": tenant_id, "province": jd["province"], "city": jd["city"], "category": jd["category"], "quantity": jd["quantity"], "filters": {}, "status": jd["status"], "is_demo": True, "source": "google_maps", "raw_count": raw, "cleaned_count": cleaned, "qualified_count": qualified, "rejected_count": cleaned - qualified, "approved_count": random.randint(0, qualified // 2), "stages": stages, "created_by": "Admin", "created_at": now, "updated_at": now})
+    businesses = [("Inmobiliaria del Norte SA", "Real Estate", 0), ("Casa & Hogar SRL", "Real Estate", 0), ("Propiedades Premium SA", "Real Estate", 0), ("TechNova Solutions", "Technology", 1), ("Digital Minds SRL", "Technology", 1), ("CloudArg SA", "Technology", 1), ("El Buen Sabor", "Gastronomia", 2), ("Restaurante Don Carlos", "Gastronomia", 2), ("Cafe Central", "Gastronomia", 2)]
+    statuses_pool = ["scored", "approved", "cleaned", "contacted", "replied", "interested", "sent_to_crm"]
+    for name, cat, ji in businesses:
+        score = random.randint(50, 98)
+        ql = "excellent" if score >= 80 else ("good" if score >= 60 else "average")
+        await db.leads.insert_one({"id": str(uuid.uuid4()), "tenant_id": tenant_id, "job_id": job_ids[ji], "business_name": name, "raw_category": cat.lower(), "normalized_category": cat, "province": jobs_data[ji]["province"], "city": jobs_data[ji]["city"], "website": f"www.{name.lower().replace(' ', '').replace('&','')[:12]}.com.ar", "email": f"info@{name.lower().replace(' ', '').replace('&','')[:10]}.com.ar", "phone": f"+54 9 {random.randint(11,99)} {random.randint(1000,9999)}-{random.randint(1000,9999)}", "country": "Argentina", "ai_score": score, "quality_level": ql, "recommendation": f"{'Highly recommended' if ql in ['excellent','good'] else 'Needs review'} - AI confidence {score}%", "recommended_first_line": f"Notamos que {name} tiene presencia destacada en el sector de {cat}.", "is_demo": True, "source": "google_maps", "status": random.choice(statuses_pool), "created_at": now, "updated_at": now})
+
 async def seed_data():
     admin_email = os.environ.get("ADMIN_EMAIL", "admin@spectraflow.com")
     admin_password = os.environ.get("ADMIN_PASSWORD", "Admin123!")
@@ -3719,6 +3865,16 @@ async def seed_data():
         if not verify_password(admin_password, existing_admin["password_hash"]):
             await db.users.update_one({"email": admin_email}, {"$set": {"password_hash": hash_password(admin_password)}})
         logger.info("Seed data already exists")
+        # Ensure Spectra Demo tenant has demo jobs + leads (if missing, seed them)
+        try:
+            demo_t = await db.tenants.find_one({"name": "Spectra Demo"})
+            if demo_t:
+                count_jobs = await db.prospect_jobs.count_documents({"tenant_id": demo_t["id"], "is_demo": True})
+                if count_jobs == 0:
+                    await _seed_demo_jobs_for_tenant(demo_t["id"])
+                    logger.info(f"Seeded demo jobs/leads for Spectra Demo tenant {demo_t['id']}")
+        except Exception as e:
+            logger.warning(f"Demo backfill skipped: {e}")
         os.makedirs("/app/memory", exist_ok=True)
         with open("/app/memory/test_credentials.md", "w") as f:
             f.write(f"# Test Credentials\n\n## Production Super Admin\n- Email: pablo@disruptive-sw.com\n- Password: Disruptive2026!\n- Role: super_admin\n\n## Seed Admin\n- Email: {admin_email}\n- Password: {admin_password}\n- Role: super_admin\n\n## Demo Operator\n- Email: demo@spectraflow.com\n- Password: Demo123!\n- Role: operator\n\n## Auth Endpoints\n- POST /api/auth/login\n- POST /api/auth/register\n- POST /api/auth/forgot-password\n- POST /api/auth/reset-password\n- GET /api/auth/me\n- POST /api/auth/logout\n")
@@ -3757,7 +3913,7 @@ async def seed_data():
             {"name": "scoring_completed", "status": "completed" if jd["status"] == "completed" else "pending", "timestamp": now if jd["status"] == "completed" else None},
             {"name": "ready_for_review", "status": "completed" if jd["status"] == "completed" else "pending", "timestamp": now if jd["status"] == "completed" else None}
         ]
-        await db.prospect_jobs.insert_one({"id": job_id, "tenant_id": tenant_id, "province": jd["province"], "city": jd["city"], "category": jd["category"], "quantity": jd["quantity"], "filters": {}, "status": jd["status"], "raw_count": raw, "cleaned_count": cleaned, "qualified_count": qualified, "rejected_count": cleaned - qualified, "approved_count": random.randint(0, qualified // 2), "stages": stages, "created_by": "Admin", "created_at": now, "updated_at": now})
+        await db.prospect_jobs.insert_one({"id": job_id, "tenant_id": tenant_id, "province": jd["province"], "city": jd["city"], "category": jd["category"], "quantity": jd["quantity"], "filters": {}, "status": jd["status"], "is_demo": True, "raw_count": raw, "cleaned_count": cleaned, "qualified_count": qualified, "rejected_count": cleaned - qualified, "approved_count": random.randint(0, qualified // 2), "stages": stages, "created_by": "Admin", "created_at": now, "updated_at": now})
 
     businesses = [("Inmobiliaria del Norte SA", "Real Estate", 0), ("Casa & Hogar SRL", "Real Estate", 0), ("Propiedades Premium SA", "Real Estate", 0), ("Inversiones Tucuman SAS", "Real Estate", 0), ("Gestion Inmobiliaria", "Real Estate", 0), ("TechNova Solutions", "Technology", 1), ("Digital Minds SRL", "Technology", 1), ("CloudArg SA", "Technology", 1), ("InnoSoft Patagonia", "Technology", 1), ("DataFlow Analytics", "Technology", 1), ("El Buen Sabor", "Gastronomia", 2), ("Restaurante Don Carlos", "Gastronomia", 2), ("Cafe Central", "Gastronomia", 2), ("La Parrilla del Sur", "Gastronomia", 2), ("Bistro Moderno", "Gastronomia", 2), ("Despacho Legal Rios", "Legal", 0), ("Consultoria Empresarial Plus", "Consulting", 1), ("Seguros del Litoral", "Insurance", 0), ("Clinica Dental Premium", "Health", 1), ("Transporte Ejecutivo NOA", "Logistics", 2)]
     statuses_pool = ["scored", "scored", "scored", "approved", "approved", "cleaned", "rejected", "queued_for_sequence", "contacted", "opened", "replied", "interested", "sent_to_crm"]

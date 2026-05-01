@@ -70,11 +70,21 @@ export default function TenantAdminPage() {
         price: editTenant.price,
         modules: editTenant.modules,
         active: editTenant.active,
+        demo_enabled: editTenant.demo_enabled !== false,
+        discount_percent: editTenant.discount_percent || 0,
       });
       toast.success('Tenant actualizado');
       setEditTenant(null);
       fetchTenants();
     } catch (err) { toast.error('Error actualizando'); }
+  };
+
+  // Auto-sum price from active modules using public pricing
+  const [modulePricing, setModulePricing] = useState({});
+  useEffect(() => { api.get('/public/pricing').then(r => setModulePricing(r.data.modules || {})).catch(() => {}); }, []);
+  const computedPrice = (tenant) => {
+    if (!tenant?.modules || !modulePricing) return 0;
+    return Object.entries(tenant.modules).reduce((sum, [k, on]) => on && modulePricing[k] ? sum + (modulePricing[k].price_usd || 0) : sum, 0);
   };
 
   const toggleEditModule = (mod) => {
@@ -398,6 +408,21 @@ export default function TenantAdminPage() {
                 <div>
                   <Label>Precio mensual (USD)</Label>
                   <Input type="number" value={editTenant.price || 0} onChange={e => setEditTenant(p => ({ ...p, price: parseFloat(e.target.value) || 0 }))} />
+                  <p className="text-[10px] text-zinc-500 mt-1">Sugerido (suma de módulos activos): <strong>USD ${computedPrice(editTenant)}</strong> <button type="button" onClick={() => setEditTenant(p => ({ ...p, price: computedPrice(p) }))} className="text-blue-600 hover:underline ml-1">Usar</button></p>
+                </div>
+                <div className="col-span-2 grid grid-cols-2 gap-3">
+                  <div className="flex items-center justify-between border border-zinc-200 rounded-lg p-3">
+                    <div>
+                      <Label className="text-xs">Datos demo visibles</Label>
+                      <p className="text-[10px] text-zinc-500">Badge "Demo" verde en la UI del cliente</p>
+                    </div>
+                    <Switch checked={editTenant.demo_enabled !== false} onCheckedChange={(v) => setEditTenant(p => ({ ...p, demo_enabled: v }))} data-testid="edit-demo-enabled" />
+                  </div>
+                  <div>
+                    <Label className="text-xs mb-1 block">Descuento % (trial/free manual)</Label>
+                    <Input type="number" min={0} max={100} value={editTenant.discount_percent || 0} onChange={e => setEditTenant(p => ({ ...p, discount_percent: Math.max(0, Math.min(100, parseInt(e.target.value) || 0)) }))} data-testid="edit-discount-percent" />
+                    <p className="text-[10px] text-zinc-500 mt-1">100 = FREE · 0 = sin descuento</p>
+                  </div>
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 border rounded-lg">
