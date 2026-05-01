@@ -318,7 +318,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://{{SPECTRA_HOST}}/api/webhooks/chatwoot/lead/a6027a8d-f21b-4568-915f-a68778580f19",
+        "url": "https://{{SPECTRA_HOST}}/api/webhooks/chatwoot/lead/{{SPECTRA_TENANT_ID}}",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
