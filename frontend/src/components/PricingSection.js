@@ -36,7 +36,6 @@ export default function PricingSection({ lang }) {
   const [selected, setSelected] = useState({});
   const [couponCode, setCouponCode] = useState('');
   const [coupon, setCoupon] = useState(null);
-  const [freeMode, setFreeMode] = useState(false);
 
   useEffect(() => {
     api.get('/public/pricing').then(r => {
@@ -50,7 +49,7 @@ export default function PricingSection({ lang }) {
     return Object.entries(selected).reduce((sum, [k, on]) => on && modules[k] ? sum + (modules[k].price_usd || 0) : sum, 0);
   }, [selected, modules]);
 
-  const discountPct = freeMode ? 100 : (coupon?.discount_percent || 0);
+  const discountPct = coupon?.discount_percent || 0;
   const total = Math.max(0, Math.round(subtotal * (1 - discountPct / 100)));
 
   const applyCoupon = async () => {
@@ -104,14 +103,6 @@ export default function PricingSection({ lang }) {
               <div className="rounded-lg border border-emerald-200 bg-emerald-50 dark:bg-emerald-950/40 dark:border-emerald-900 p-3 flex items-start gap-2">
                 <Gift className="w-4 h-4 text-emerald-600 dark:text-emerald-400 mt-0.5 shrink-0" />
                 <p className="text-xs text-emerald-900 dark:text-emerald-200"><strong>{t.trial}</strong> — sin tarjeta, cancelás cuando quieras.</p>
-              </div>
-
-              {/* Free toggle */}
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 text-zinc-700 dark:text-zinc-300 cursor-pointer">
-                  <Zap className="w-3.5 h-3.5 text-amber-500" /> {t.free}
-                </label>
-                <Switch checked={freeMode} onCheckedChange={setFreeMode} data-testid="pricing-free-toggle" />
               </div>
 
               {/* Coupon */}

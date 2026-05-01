@@ -693,10 +693,13 @@ async def start_prospect_job(request: Request, job_id: str):
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     now = datetime.now(timezone.utc).isoformat()
-    # Check if n8n is configured - if so, just mark as processing and wait for callback
+    # Check if tenant has demo mode enabled — if so, run simulated flow regardless of n8n
+    tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0, "demo_enabled": 1})
+    demo_enabled = bool((tenant or {}).get("demo_enabled", False))
+    # Check if n8n is configured - if so, just mark as processing and wait for callback (unless demo_enabled)
     n8n_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "n8n", "enabled": True}, {"_id": 0})
     source = job.get("source", "google_maps")
-    if n8n_config and n8n_config.get("base_url"):
+    if not demo_enabled and n8n_config and n8n_config.get("base_url"):
         stages = [
             {"name": "job_created", "status": "completed", "timestamp": job["created_at"]},
             {"name": "scraping", "status": "processing", "timestamp": now},
@@ -799,7 +802,8 @@ async def start_prospect_job(request: Request, job_id: str):
             "recommendation": random.choice(rec_texts[quality_levels[ql]]),
             "recommended_first_line": random.choice(first_lines),
             "status": random.choice(statuses_pool),
-            "is_demo": bool(job.get("is_demo", False)),
+            "is_demo": bool(job.get("is_demo", False)) or demo_enabled,
+            "source": "google_maps",
             "created_at": now, "updated_at": now
         }
         leads_to_insert.append(lead)

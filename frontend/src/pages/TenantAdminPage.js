@@ -30,6 +30,8 @@ export default function TenantAdminPage() {
   const [detailTenant, setDetailTenant] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingIntegration, setSavingIntegration] = useState('');
+  const [pricingOpen, setPricingOpen] = useState(false);
+  const [pricingDraft, setPricingDraft] = useState({});
   const [addUserOpen, setAddUserOpen] = useState(false);
   const [newUserForm, setNewUserForm] = useState({ email: '', password: '', name: '', role: 'tenant_admin' });
   const [editUser, setEditUser] = useState(null);
@@ -81,14 +83,19 @@ export default function TenantAdminPage() {
 
   // Auto-sum price from active modules using public pricing
   const [modulePricing, setModulePricing] = useState({});
-  useEffect(() => { api.get('/public/pricing').then(r => setModulePricing(r.data.modules || {})).catch(() => {}); }, []);
+  useEffect(() => { api.get('/public/pricing').then(r => { setModulePricing(r.data.modules || {}); setPricingDraft(r.data.modules || {}); }).catch(() => {}); }, []);
   const computedPrice = (tenant) => {
     if (!tenant?.modules || !modulePricing) return 0;
     return Object.entries(tenant.modules).reduce((sum, [k, on]) => on && modulePricing[k] ? sum + (modulePricing[k].price_usd || 0) : sum, 0);
   };
 
   const toggleEditModule = (mod) => {
-    setEditTenant(prev => ({ ...prev, modules: { ...prev.modules, [mod]: !prev.modules?.[mod] } }));
+    setEditTenant(prev => {
+      const newModules = { ...prev.modules, [mod]: !prev.modules?.[mod] };
+      // Auto-recalc price from active modules using modulePricing catalog
+      const autoPrice = Object.entries(newModules).reduce((sum, [k, on]) => on && modulePricing[k] ? sum + (modulePricing[k].price_usd || 0) : sum, 0);
+      return { ...prev, modules: newModules, price: autoPrice };
+    });
   };
 
   const toggleCreateModule = (mod) => {
@@ -173,6 +180,15 @@ export default function TenantAdminPage() {
     } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
   };
 
+  const savePricing = async () => {
+    try {
+      await api.put('/admin/module-pricing', { prices: pricingDraft });
+      setModulePricing(pricingDraft);
+      toast.success('Precios actualizados');
+      setPricingOpen(false);
+    } catch { toast.error('Error al guardar'); }
+  };
+
   const moduleList = [
     { key: 'prospeccion', label: 'Spectra Prospeccion', color: 'bg-blue-100 text-blue-800' },
     { key: 'leads', label: 'Leads', color: 'bg-indigo-100 text-indigo-800' },
@@ -192,9 +208,14 @@ export default function TenantAdminPage() {
           </h1>
           <p className="text-sm text-zinc-500 mt-1">{tenants.length} clientes registrados</p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2" data-testid="create-tenant-btn">
-          <Plus className="w-4 h-4" /> Nuevo Cliente
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button onClick={() => setPricingOpen(true)} variant="outline" className="gap-2" data-testid="manage-pricing-btn">
+            <DollarSign className="w-4 h-4" /> Gestionar Precios
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} className="bg-blue-600 hover:bg-blue-700 text-white gap-2" data-testid="create-tenant-btn">
+            <Plus className="w-4 h-4" /> Nuevo Cliente
+          </Button>
+        </div>
       </div>
 
       {/* Conversion Funnel */}
@@ -616,6 +637,35 @@ export default function TenantAdminPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailTenant(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pricing management */}
+      <Dialog open={pricingOpen} onOpenChange={setPricingOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><DollarSign className="w-5 h-5" /> Gestionar precios de módulos</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-zinc-500 mb-4">Estos precios se muestran en la landing pública y se usan para calcular automáticamente el precio de cada tenant según sus módulos activos.</p>
+          <div className="space-y-2">
+            {Object.entries(pricingDraft).map(([key, m]) => (
+              <div key={key} className="grid grid-cols-[1fr_auto] gap-3 items-center border border-zinc-200 rounded-lg p-3">
+                <div>
+                  <p className="font-medium text-sm text-zinc-900">{m.label}</p>
+                  <p className="text-[11px] text-zinc-500">{m.description}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm text-zinc-500">USD $</span>
+                  <Input type="number" className="w-24 h-9" value={m.price_usd} onChange={e => setPricingDraft(p => ({ ...p, [key]: { ...p[key], price_usd: parseFloat(e.target.value) || 0 } }))} data-testid={`price-input-${key}`} />
+                  <span className="text-[10px] text-zinc-400">/mes</span>
+                </div>
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPricingOpen(false)}>Cancelar</Button>
+            <Button onClick={savePricing} className="bg-blue-600 text-white hover:bg-blue-700" data-testid="save-pricing-btn">Guardar precios</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
