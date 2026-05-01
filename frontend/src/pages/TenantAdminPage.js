@@ -456,12 +456,32 @@ export default function TenantAdminPage() {
               <div>
                 <Label className="mb-2 block">Modulos habilitados</Label>
                 <div className="space-y-2">
-                  {moduleList.map(m => (
-                    <div key={m.key} className="flex items-center justify-between p-2 border rounded-lg">
-                      <Badge className={m.color}>{m.label}</Badge>
-                      <Switch checked={editTenant.modules?.[m.key] ?? true} onCheckedChange={() => toggleEditModule(m.key)} data-testid={`edit-module-${m.key}`} />
-                    </div>
-                  ))}
+                  {moduleList.map(m => {
+                    const catalog = modulePricing[m.key];
+                    const limitType = catalog?.limit_type || 'items';
+                    const limitDefault = catalog?.limit_default || 0;
+                    const isOn = editTenant.modules?.[m.key] ?? true;
+                    const currentLimit = editTenant.module_limits?.[m.key] ?? limitDefault;
+                    return (
+                      <div key={m.key} className="flex items-center gap-2 p-2 border rounded-lg">
+                        <Switch checked={isOn} onCheckedChange={() => toggleEditModule(m.key)} data-testid={`edit-module-${m.key}`} />
+                        <Badge className={`${m.color} shrink-0`}>{m.label}</Badge>
+                        {isOn && (
+                          <div className="flex items-center gap-1.5 ml-auto">
+                            <span className="text-[10px] text-zinc-500 uppercase">{limitType}</span>
+                            <Input
+                              type="number"
+                              min={0}
+                              value={currentLimit}
+                              onChange={e => setEditTenant(p => ({ ...p, module_limits: { ...(p.module_limits || {}), [m.key]: parseInt(e.target.value) || 0 } }))}
+                              className="w-24 h-8 text-xs"
+                              data-testid={`edit-limit-${m.key}`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
               <div className="bg-zinc-50 p-3 rounded-lg text-xs text-zinc-500 space-y-1">
@@ -554,19 +574,21 @@ export default function TenantAdminPage() {
                 <h3 className="text-sm font-heading font-semibold mb-1 flex items-center gap-2"><SettingsIcon className="w-4 h-4" /> Integraciones (solo Super Admin)</h3>
                 <p className="text-[11px] text-zinc-500 mb-3">Configurás las credenciales acá. El cliente verá solo el estado (activado/desactivado) sin las claves.</p>
                 <div className="space-y-3">
-                  {['n8n_bot', 'outscraper', 'dify', 'resend'].map((name) => {
+                  {['n8n_bot', 'outscraper', 'dify', 'resend', 'apify'].map((name) => {
                     const intg = (detailTenant.integrations || []).find(i => i.name === name) || { name, base_url: '', api_key: '', enabled: false, drive_url: '' };
                     const labels = {
                       n8n_bot: 'OptimIA BOT',
                       outscraper: 'Spectra Prospection',
                       dify: 'Entrenamiento Bot Optimia',
                       resend: 'Spectra Email Marketing',
+                      apify: 'Conector Scraping Alternativo',
                     };
                     const placeholders = {
                       n8n_bot: 'URL del webhook del bot',
                       outscraper: 'URL base del motor de prospección',
                       dify: 'URL base del motor de entrenamiento',
                       resend: 'URL base del servicio de email',
+                      apify: 'URL base de scraping alternativo',
                     };
                     return (
                       <div key={name} className="border border-zinc-200 rounded-lg p-3 bg-white">
@@ -650,15 +672,34 @@ export default function TenantAdminPage() {
           <p className="text-xs text-zinc-500 mb-4">Estos precios se muestran en la landing pública y se usan para calcular automáticamente el precio de cada tenant según sus módulos activos.</p>
           <div className="space-y-2">
             {Object.entries(pricingDraft).map(([key, m]) => (
-              <div key={key} className="grid grid-cols-[1fr_auto] gap-3 items-center border border-zinc-200 rounded-lg p-3">
+              <div key={key} className="grid grid-cols-[1fr_auto] gap-3 items-start border border-zinc-200 rounded-lg p-3">
                 <div>
                   <p className="font-medium text-sm text-zinc-900">{m.label}</p>
                   <p className="text-[11px] text-zinc-500">{m.description}</p>
                 </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-sm text-zinc-500">USD $</span>
-                  <Input type="number" className="w-24 h-9" value={m.price_usd} onChange={e => setPricingDraft(p => ({ ...p, [key]: { ...p[key], price_usd: parseFloat(e.target.value) || 0 } }))} data-testid={`price-input-${key}`} />
-                  <span className="text-[10px] text-zinc-400">/mes</span>
+                <div className="flex flex-col items-end gap-1.5 min-w-[240px]">
+                  <div className="flex items-center gap-1">
+                    <span className="text-sm text-zinc-500">USD $</span>
+                    <Input type="number" className="w-24 h-8" value={m.price_usd} onChange={e => setPricingDraft(p => ({ ...p, [key]: { ...p[key], price_usd: parseFloat(e.target.value) || 0 } }))} data-testid={`price-input-${key}`} />
+                    <span className="text-[10px] text-zinc-400">/mes</span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Input
+                      className="w-[110px] h-7 text-[11px]"
+                      value={m.limit_type || 'items'}
+                      onChange={e => setPricingDraft(p => ({ ...p, [key]: { ...p[key], limit_type: e.target.value } }))}
+                      placeholder="tipo"
+                      data-testid={`limit-type-${key}`}
+                    />
+                    <Input
+                      type="number"
+                      className="w-[90px] h-7 text-[11px]"
+                      value={m.limit_default || 0}
+                      onChange={e => setPricingDraft(p => ({ ...p, [key]: { ...p[key], limit_default: parseInt(e.target.value) || 0 } }))}
+                      placeholder="limite"
+                      data-testid={`limit-default-${key}`}
+                    />
+                  </div>
                 </div>
               </div>
             ))}

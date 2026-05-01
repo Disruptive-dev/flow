@@ -260,6 +260,7 @@ export default function SettingsPage() {
                   { name: 'outscraper', label: 'Spectra Prospection', desc: 'Motor oficial de prospección masiva. Te permite lanzar búsquedas de empresas por rubro, ubicación y palabras clave, y recibir los contactos listos en tu Leads Hub.' },
                   { name: 'dify', label: 'Entrenamiento Bot Optimia', desc: 'Cerebro inteligente del bot. Cargá tus materiales (FAQ, catálogo, tono de marca, audios) en tu carpeta privada y lo entrenamos con tu estilo.' },
                   { name: 'resend', label: 'Spectra Email Marketing', desc: 'Envío de campañas y emails transaccionales con tu dominio propio verificado (SPF/DKIM) para máxima entregabilidad.' },
+                  { name: 'apify', label: 'Conector Scraping Alternativo', desc: 'Motor secundario de prospección en caso de que necesites scraping de fuentes especiales o masivas.' },
                 ].map(({ name, label, desc }) => {
                   const intg = integrations.find(i => i.name === name);
                   const active = !!intg?.enabled;

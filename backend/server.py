@@ -102,15 +102,15 @@ class RegisterRequest(BaseModel):
     tenant_name: Optional[str] = None
 
 _DEFAULT_MODULE_PRICES = {
-    "prospeccion": {"label": "Spectra Prospection", "price_usd": 49, "description": "Busqueda automatizada de empresas por rubro y ubicacion"},
-    "leads": {"label": "Leads Hub", "price_usd": 19, "description": "Centro unificado de leads con multiples fuentes"},
-    "crm": {"label": "Spectra CRM", "price_usd": 39, "description": "Pipeline visual, tareas, notas, productos y deals"},
-    "email_marketing": {"label": "Spectra Email Marketing", "price_usd": 29, "description": "Campanas y emails transaccionales con dominio propio"},
-    "optimia_bot": {"label": "OptimIA BOT", "price_usd": 59, "description": "Bot conversacional para WhatsApp y chat web"},
-    "finance": {"label": "Spectra Finance", "price_usd": 39, "description": "Control financiero, caja y rentabilidad"},
-    "performance": {"label": "Spectra Performance", "price_usd": 49, "description": "Meta Ads, Google Ads y SEO unificados"},
-    "fidelity": {"label": "Spectra Fidelity", "price_usd": 19, "description": "Programa de fidelizacion para clientes"},
-    "project_management": {"label": "Spectra PM", "price_usd": 29, "description": "Gestion de proyectos y tareas"},
+    "prospeccion": {"label": "Spectra Prospection", "price_usd": 49, "description": "Busqueda automatizada de empresas por rubro y ubicacion", "limit_type": "prospects", "limit_default": 500},
+    "leads": {"label": "Leads Hub", "price_usd": 19, "description": "Centro unificado de leads con multiples fuentes", "limit_type": "contacts", "limit_default": 2000},
+    "crm": {"label": "Spectra CRM", "price_usd": 39, "description": "Pipeline visual, tareas, notas, productos y deals", "limit_type": "contacts", "limit_default": 5000},
+    "email_marketing": {"label": "Spectra Email Marketing", "price_usd": 29, "description": "Campanas y emails transaccionales con dominio propio", "limit_type": "emails", "limit_default": 10000},
+    "optimia_bot": {"label": "OptimIA BOT", "price_usd": 59, "description": "Bot conversacional para WhatsApp y chat web", "limit_type": "conversations", "limit_default": 1000},
+    "finance": {"label": "Spectra Finance", "price_usd": 39, "description": "Control financiero, caja y rentabilidad", "limit_type": "users", "limit_default": 5},
+    "performance": {"label": "Spectra Performance", "price_usd": 49, "description": "Meta Ads, Google Ads y SEO unificados", "limit_type": "ad_accounts", "limit_default": 3},
+    "fidelity": {"label": "Spectra Fidelity", "price_usd": 19, "description": "Programa de fidelizacion para clientes", "limit_type": "contacts", "limit_default": 1000},
+    "project_management": {"label": "Spectra PM", "price_usd": 29, "description": "Gestion de proyectos y tareas", "limit_type": "projects", "limit_default": 20},
 }
 
 class ProspectJobCreate(BaseModel):
@@ -2917,6 +2917,8 @@ async def update_tenant(request: Request, tenant_id: str, body: TenantUpdate):
             update["discount_percent"] = max(0, min(100, int(raw_body["discount_percent"])))
         if "trial_ends_at" in raw_body:
             update["trial_ends_at"] = raw_body["trial_ends_at"]
+        if "module_limits" in raw_body:
+            update["module_limits"] = raw_body["module_limits"] or {}
     except Exception:
         pass
     await db.tenants.update_one({"id": tenant_id}, {"$set": update})
