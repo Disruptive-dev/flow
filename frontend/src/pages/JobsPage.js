@@ -6,7 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft, Users, Mail } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, Clock, Play, ArrowLeft, Users, Mail, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import GuideBanner from '@/components/GuideBanner';
 
@@ -164,9 +164,24 @@ export default function JobsPage() {
             </div>
 
             {selectedJob.status === 'pending' && (
-              <Button onClick={() => handleStart(selectedJob.id)} disabled={starting} className="mt-6 bg-blue-600 hover:bg-blue-700 text-white" data-testid="start-job-button">
-                {starting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Play className="w-4 h-4 mr-2" />}
-                {t('start_job')}
+              <Button
+                onClick={() => handleStart(selectedJob.id)}
+                disabled={starting}
+                className={`mt-6 relative overflow-hidden text-white font-semibold tracking-wide shadow-lg shadow-blue-500/30 transition-all duration-300 ${starting ? 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 animate-pulse-lightning scale-[1.02]' : 'bg-blue-600 hover:bg-blue-700 hover:shadow-blue-500/50 hover:-translate-y-0.5'}`}
+                data-testid="start-job-button"
+              >
+                {starting ? (
+                  <>
+                    <Zap className="w-4 h-4 mr-2 animate-zap" />
+                    <span className="relative z-10">Iniciando búsqueda...</span>
+                    <span aria-hidden className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full animate-shimmer" />
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-4 h-4 mr-2" />
+                    {t('start_job')}
+                  </>
+                )}
               </Button>
             )}
             {selectedJob.status === 'processing' && (

@@ -2867,6 +2867,86 @@ async def update_tenant(request: Request, tenant_id: str, body: TenantUpdate):
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     return tenant
 
+@api_router.delete("/admin/tenants/{tenant_id}")
+async def delete_tenant(request: Request, tenant_id: str):
+    """Super admin: delete tenant + cascade all related data."""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    # Cascade delete all tenant-scoped collections
+    for coll in ("users", "leads", "crm_contacts", "crm_deals", "crm_tasks", "crm_notes", "crm_products", "campaigns", "templates", "prospect_jobs", "integration_configs", "audit_logs", "crm_sync_logs", "domains", "forms", "lists", "segments", "email_events"):
+        try:
+            await db[coll].delete_many({"tenant_id": tenant_id})
+        except Exception:
+            pass
+    await db.tenants.delete_one({"id": tenant_id})
+    return {"ok": True, "message": "Tenant eliminado con toda su data"}
+
+@api_router.post("/admin/tenants/{tenant_id}/users")
+async def admin_add_tenant_user(request: Request, tenant_id: str, body: Dict[str, Any] = {}):
+    """Super admin: create additional user inside a specific tenant (multi-admin)."""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    email = (body.get("email") or "").lower().strip()
+    password = body.get("password") or ""
+    name = (body.get("name") or "").strip()
+    role = body.get("role") or "tenant_admin"
+    if not email or not password or not name:
+        raise HTTPException(status_code=400, detail="email, password y name son obligatorios")
+    if role not in ("tenant_admin", "operator", "viewer"):
+        raise HTTPException(status_code=400, detail="rol invalido")
+    if await db.users.find_one({"email": email}):
+        raise HTTPException(status_code=400, detail="Email ya existe")
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {"email": email, "password_hash": hash_password(password), "name": name, "role": role, "tenant_id": tenant_id, "created_at": now}
+    res = await db.users.insert_one(doc)
+    return {"id": str(res.inserted_id), "email": email, "name": name, "role": role}
+
+@api_router.put("/admin/users/{user_id}")
+async def admin_update_user(request: Request, user_id: str, body: Dict[str, Any] = {}):
+    """Super admin: update any user including email."""
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    try:
+        target = await db.users.find_one({"_id": ObjectId(user_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalido")
+    if not target:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado")
+    update = {"updated_at": datetime.now(timezone.utc).isoformat()}
+    if body.get("email"):
+        new_email = body["email"].lower().strip()
+        if new_email != target.get("email"):
+            if await db.users.find_one({"email": new_email, "_id": {"$ne": ObjectId(user_id)}}):
+                raise HTTPException(status_code=400, detail="Email ya existe")
+            update["email"] = new_email
+    if body.get("name"):
+        update["name"] = body["name"].strip()
+    if body.get("role") in ("super_admin", "tenant_admin", "operator", "viewer"):
+        update["role"] = body["role"]
+    if body.get("password"):
+        if len(body["password"]) < 6:
+            raise HTTPException(status_code=400, detail="Password minimo 6 chars")
+        update["password_hash"] = hash_password(body["password"])
+    await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": update})
+    updated = await db.users.find_one({"_id": ObjectId(user_id)}, {"password_hash": 0})
+    return {"id": str(updated["_id"]), "email": updated["email"], "name": updated["name"], "role": updated["role"]}
+
+@api_router.delete("/admin/users/{user_id}")
+async def admin_delete_user(request: Request, user_id: str):
+    user = await get_current_user(request)
+    if user["role"] != "super_admin":
+        raise HTTPException(status_code=403, detail="Solo super_admin")
+    if str(user["_id"]) == user_id:
+        raise HTTPException(status_code=400, detail="No puedes eliminarte a ti mismo")
+    try:
+        await db.users.delete_one({"_id": ObjectId(user_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="ID invalido")
+    return {"ok": True}
+
 @api_router.get("/admin/tenants/{tenant_id}")
 async def get_tenant_detail(request: Request, tenant_id: str):
     user = await get_current_user(request)
@@ -2875,7 +2955,11 @@ async def get_tenant_detail(request: Request, tenant_id: str):
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     if not tenant:
         raise HTTPException(status_code=404, detail="Tenant no encontrado")
-    users = await db.users.find({"tenant_id": tenant_id}, {"_id": 0, "password_hash": 0}).to_list(50)
+    users = await db.users.aggregate([
+        {"$match": {"tenant_id": tenant_id}},
+        {"$addFields": {"id": {"$toString": "$_id"}}},
+        {"$project": {"_id": 0, "password_hash": 0}},
+    ]).to_list(50)
     lead_count = await db.leads.count_documents({"tenant_id": tenant_id})
     contact_count = await db.crm_contacts.count_documents({"tenant_id": tenant_id})
     deal_count = await db.crm_deals.count_documents({"tenant_id": tenant_id})

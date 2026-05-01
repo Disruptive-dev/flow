@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ShieldCheck, Plus, Users, Target, Mail, Building2, Pencil, Loader2, DollarSign, TrendingUp, Eye, Copy, Save, Settings as SettingsIcon } from 'lucide-react';
+import { ShieldCheck, Plus, Users, Target, Mail, Building2, Pencil, Loader2, DollarSign, TrendingUp, Eye, Copy, Save, Settings as SettingsIcon, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 const planColors = {
@@ -30,6 +30,9 @@ export default function TenantAdminPage() {
   const [detailTenant, setDetailTenant] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [savingIntegration, setSavingIntegration] = useState('');
+  const [addUserOpen, setAddUserOpen] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({ email: '', password: '', name: '', role: 'tenant_admin' });
+  const [editUser, setEditUser] = useState(null);
 
   const fetchTenants = async () => {
     try {
@@ -115,6 +118,49 @@ export default function TenantAdminPage() {
       else toast.error(`✗ ${name}: ${data.message || 'Sin respuesta'}`);
     } catch (err) { toast.error(err.response?.data?.detail || 'Error probando conexion'); }
     setSavingIntegration('');
+  };
+
+  const deleteTenantFull = async (tenant) => {
+    const confirmName = window.prompt(`Para confirmar el borrado COMPLETO del tenant "${tenant.name}" y TODA su data (usuarios, leads, contactos, deals, campañas...), escribe el nombre exacto del tenant:`);
+    if (confirmName !== tenant.name) { if (confirmName !== null) toast.error('Nombre no coincide, cancelado'); return; }
+    try {
+      await api.delete(`/admin/tenants/${tenant.id}`);
+      setTenants(prev => prev.filter(t => t.id !== tenant.id));
+      if (detailTenant?.id === tenant.id) setDetailTenant(null);
+      toast.success('Tenant eliminado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error al eliminar'); }
+  };
+
+  const addTenantUser = async () => {
+    if (!detailTenant || !newUserForm.email || !newUserForm.password || !newUserForm.name) return toast.error('Completa todos los campos');
+    try {
+      const { data } = await api.post(`/admin/tenants/${detailTenant.id}/users`, newUserForm);
+      setDetailTenant(prev => ({ ...prev, users: [...(prev.users || []), data] }));
+      setAddUserOpen(false);
+      setNewUserForm({ email: '', password: '', name: '', role: 'tenant_admin' });
+      toast.success('Usuario agregado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
+  };
+
+  const saveEditTenantUser = async () => {
+    if (!editUser?.id) return;
+    try {
+      const payload = { email: editUser.email, name: editUser.name, role: editUser.role };
+      if (editUser.password) payload.password = editUser.password;
+      const { data } = await api.put(`/admin/users/${editUser.id}`, payload);
+      setDetailTenant(prev => ({ ...prev, users: (prev.users || []).map(u => u.id === editUser.id ? { ...u, ...data } : u) }));
+      setEditUser(null);
+      toast.success('Usuario actualizado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
+  };
+
+  const deleteTenantUser = async (u) => {
+    if (!window.confirm(`¿Eliminar a ${u.name}?`)) return;
+    try {
+      await api.delete(`/admin/users/${u.id}`);
+      setDetailTenant(prev => ({ ...prev, users: (prev.users || []).filter(x => x.id !== u.id) }));
+      toast.success('Usuario eliminado');
+    } catch (err) { toast.error(err.response?.data?.detail || 'Error'); }
   };
 
   const moduleList = [
@@ -251,6 +297,9 @@ export default function TenantAdminPage() {
                       </Button>
                       <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setEditTenant({ ...t })} data-testid={`edit-tenant-${i}`} title="Editar plan/módulos">
                         <Pencil className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-red-600 hover:bg-red-50" onClick={() => deleteTenantFull(t)} data-testid={`delete-tenant-${i}`} title="Eliminar tenant y toda su data">
+                        <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
                   </TableCell>
@@ -413,24 +462,22 @@ export default function TenantAdminPage() {
                 </div>
               </div>
 
-              {/* Users */}
+              {/* Users management (super_admin can add/edit/delete) */}
               <div>
-                <h3 className="text-sm font-heading font-semibold mb-2 flex items-center gap-2"><Users className="w-4 h-4" /> Usuarios del cliente ({detailTenant.users?.length || 0})</h3>
-                <div className="border border-zinc-200 rounded-lg overflow-hidden">
-                  {/* Quick access banner: lead super_admin to integrations modal */}
-              <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 mb-4 text-xs text-blue-900 flex items-start gap-2">
-                <SettingsIcon className="w-4 h-4 mt-0.5 shrink-0" />
-                <div>
-                  <p className="font-semibold mb-0.5">¿Cómo cargar las credenciales de cada cliente?</p>
-                  <p>Hacé click en el ícono <Eye className="w-3 h-3 inline mb-0.5" /> <strong>Configurar / Ver detalle</strong> de la fila del tenant. En el modal vas a encontrar la sección <strong>Integraciones (solo Super Admin)</strong> donde cargás Base URL y API Key. El cliente final NO ve esos valores, solo el estado activado/desactivado.</p>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-heading font-semibold flex items-center gap-2"><Users className="w-4 h-4" /> Usuarios del cliente ({detailTenant.users?.length || 0})</h3>
+                  <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={() => setAddUserOpen(true)} data-testid="add-tenant-user-btn">
+                    <Plus className="w-3.5 h-3.5" /> Agregar usuario
+                  </Button>
                 </div>
-              </div>
-              <Table>
+                <div className="border border-zinc-200 rounded-lg overflow-hidden">
+                  <Table>
                     <TableHeader>
                       <TableRow className="bg-zinc-50 hover:bg-zinc-50">
                         <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase">Nombre</TableHead>
                         <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase">Email</TableHead>
                         <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase">Rol</TableHead>
+                        <TableHead className="text-[11px] font-semibold text-zinc-500 uppercase text-right">Acciones</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -441,11 +488,15 @@ export default function TenantAdminPage() {
                             <TableCell className="text-sm font-medium">{u.name}</TableCell>
                             <TableCell className="text-sm text-zinc-600">{u.email}</TableCell>
                             <TableCell><Badge variant="secondary" className="text-[11px]">{roleLabel}</Badge></TableCell>
+                            <TableCell className="text-right">
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditUser({ ...u })} data-testid={`edit-tenant-user-${u.id}`}><Pencil className="w-3.5 h-3.5" /></Button>
+                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-red-600 hover:bg-red-50" onClick={() => deleteTenantUser(u)} data-testid={`delete-tenant-user-${u.id}`}><Trash2 className="w-3.5 h-3.5" /></Button>
+                            </TableCell>
                           </TableRow>
                         );
                       })}
                       {(!detailTenant.users || detailTenant.users.length === 0) && (
-                        <TableRow><TableCell colSpan={3} className="text-center py-4 text-xs text-zinc-400">Sin usuarios</TableCell></TableRow>
+                        <TableRow><TableCell colSpan={4} className="text-center py-4 text-xs text-zinc-400">Sin usuarios</TableCell></TableRow>
                       )}
                     </TableBody>
                   </Table>
@@ -540,6 +591,63 @@ export default function TenantAdminPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDetailTenant(null)}>Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add tenant user */}
+      <Dialog open={addUserOpen} onOpenChange={setAddUserOpen}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Agregar usuario al tenant</DialogTitle></DialogHeader>
+          <div className="space-y-3 mt-2">
+            <div><Label className="text-xs mb-1 block">Nombre</Label><Input value={newUserForm.name} onChange={e => setNewUserForm(p => ({ ...p, name: e.target.value }))} data-testid="new-user-name" /></div>
+            <div><Label className="text-xs mb-1 block">Email</Label><Input type="email" value={newUserForm.email} onChange={e => setNewUserForm(p => ({ ...p, email: e.target.value }))} data-testid="new-user-email" /></div>
+            <div><Label className="text-xs mb-1 block">Contraseña</Label><Input type="password" value={newUserForm.password} onChange={e => setNewUserForm(p => ({ ...p, password: e.target.value }))} data-testid="new-user-pass" /></div>
+            <div>
+              <Label className="text-xs mb-1 block">Rol</Label>
+              <Select value={newUserForm.role} onValueChange={v => setNewUserForm(p => ({ ...p, role: v }))}>
+                <SelectTrigger data-testid="new-user-role"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tenant_admin">Administrador</SelectItem>
+                  <SelectItem value="operator">Operador</SelectItem>
+                  <SelectItem value="viewer">Visor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAddUserOpen(false)}>Cancelar</Button>
+            <Button onClick={addTenantUser} className="bg-blue-600 text-white hover:bg-blue-700" data-testid="confirm-add-user">Agregar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit tenant user */}
+      <Dialog open={!!editUser} onOpenChange={(o) => !o && setEditUser(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar usuario</DialogTitle></DialogHeader>
+          {editUser && (
+            <div className="space-y-3 mt-2">
+              <div><Label className="text-xs mb-1 block">Nombre</Label><Input value={editUser.name || ''} onChange={e => setEditUser(u => ({ ...u, name: e.target.value }))} data-testid="edit-user-name" /></div>
+              <div><Label className="text-xs mb-1 block">Email</Label><Input type="email" value={editUser.email || ''} onChange={e => setEditUser(u => ({ ...u, email: e.target.value }))} data-testid="edit-user-email" /></div>
+              <div><Label className="text-xs mb-1 block">Nueva contraseña <span className="text-zinc-400">(opcional)</span></Label><Input type="password" placeholder="Dejar vacío para no cambiar" value={editUser.password || ''} onChange={e => setEditUser(u => ({ ...u, password: e.target.value }))} data-testid="edit-user-pass" /></div>
+              <div>
+                <Label className="text-xs mb-1 block">Rol</Label>
+                <Select value={editUser.role} onValueChange={v => setEditUser(u => ({ ...u, role: v }))}>
+                  <SelectTrigger data-testid="edit-user-role"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="super_admin">Super Administrador</SelectItem>
+                    <SelectItem value="tenant_admin">Administrador</SelectItem>
+                    <SelectItem value="operator">Operador</SelectItem>
+                    <SelectItem value="viewer">Visor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditUser(null)}>Cancelar</Button>
+            <Button onClick={saveEditTenantUser} className="bg-blue-600 text-white hover:bg-blue-700" data-testid="confirm-edit-user">Guardar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

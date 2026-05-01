@@ -335,10 +335,12 @@ export default function LeadsPage() {
             ))}
           </select>
           <Input value={cityFilter} onChange={e => { setCityFilter(e.target.value); setPage(1); }} placeholder="Ciudad..." className="w-[140px] h-9" data-testid="leads-city-filter" />
-          <div className="flex items-center gap-1.5">
-            <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} className="w-[130px] h-9 text-xs" data-testid="leads-date-from" />
-            <span className="text-zinc-400 text-xs">a</span>
-            <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} className="w-[130px] h-9 text-xs" data-testid="leads-date-to" />
+          <div className="flex items-center gap-2 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-md px-2 h-9">
+            <label className="text-[10px] uppercase tracking-wide text-zinc-500 font-semibold">Desde</label>
+            <Input type="date" value={dateFrom} onChange={e => { setDateFrom(e.target.value); setPage(1); }} className="w-[125px] h-7 border-0 px-1 text-xs bg-transparent focus-visible:ring-0" data-testid="leads-date-from" />
+            <span className="w-px h-4 bg-zinc-300" />
+            <label className="text-[10px] uppercase tracking-wide text-zinc-500 font-semibold">Hasta</label>
+            <Input type="date" value={dateTo} onChange={e => { setDateTo(e.target.value); setPage(1); }} className="w-[125px] h-7 border-0 px-1 text-xs bg-transparent focus-visible:ring-0" data-testid="leads-date-to" />
           </div>
           {(sourceFilter || categoryFilter || cityFilter || countryFilter || dateFrom || dateTo || statusFilter || jobFilter) && (
             <Button variant="ghost" size="sm" className="text-zinc-400 h-9" onClick={() => { setSourceFilter(''); setCategoryFilter(''); setCityFilter(''); setCountryFilter(''); setDateFrom(''); setDateTo(''); setStatusFilter(''); setJobFilter(''); setPage(1); }}>

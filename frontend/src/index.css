@@ -106,6 +106,26 @@
   animation: slideIn 0.3s ease-out forwards;
 }
 
+@keyframes zap {
+  0%, 100% { transform: rotate(-8deg) scale(1); filter: drop-shadow(0 0 0 rgba(250, 204, 21, 0)); }
+  25% { transform: rotate(6deg) scale(1.15); filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.9)); }
+  50% { transform: rotate(-4deg) scale(1.25); filter: drop-shadow(0 0 10px rgba(251, 191, 36, 1)); }
+  75% { transform: rotate(8deg) scale(1.1); filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.9)); }
+}
+.animate-zap { animation: zap 0.6s ease-in-out infinite; color: #fde047; }
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}
+.animate-shimmer { animation: shimmer 1.4s ease-in-out infinite; }
+
+@keyframes pulseLightning {
+  0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.4), 0 0 40px rgba(99, 102, 241, 0.2); }
+  50% { box-shadow: 0 0 30px rgba(168, 85, 247, 0.6), 0 0 60px rgba(59, 130, 246, 0.4); }
+}
+.animate-pulse-lightning { animation: pulseLightning 1.2s ease-in-out infinite; }
+
 
 #emergent-badge,
 a#emergent-badge,
