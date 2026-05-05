@@ -1002,21 +1002,17 @@ async def update_lead_fields(request: Request, lead_id: str, body: Dict[str, Any
         raise HTTPException(status_code=404, detail="Lead not found")
     return {"message": "Lead actualizado"}
 
-@api_router.post("/leads/{lead_id}/ai-summary")
-async def generate_lead_ai_summary(request: Request, lead_id: str):
-    """Genera (o regenera) un resumen IA para el lead.
-    - Si hay conversación (WhatsApp/web), la resume y califica.
-    - Guarda campos: ai_summary, ai_score, ai_recommendation_short, ai_next_step.
-    """
-    user = await get_current_user(request)
-    lead = await db.leads.find_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+async def _generate_ai_summary_for_lead(lead_id: str, tenant_id: str):
+    """Helper: genera resumen IA para un lead (reutilizable por endpoint y por auto-trigger background).
+    No requiere request/user. Solo tenant_id para filtrar."""
+    lead = await db.leads.find_one({"id": lead_id, "tenant_id": tenant_id}, {"_id": 0})
     if not lead:
-        raise HTTPException(status_code=404, detail="Lead no encontrado")
-    raw_text = (lead.get("recommendation") or "") + "\n" + (lead.get("notes") or "")
-    raw_text = raw_text.strip()
+        return None
+    raw_text = ((lead.get("recommendation") or "") + "\n" + (lead.get("notes") or "")).strip()
     if len(raw_text) < 10:
         raw_text = f"Lead de {lead.get('business_name') or 'sin nombre'} ({lead.get('city','')}, canal {lead.get('channel') or lead.get('source') or 'desconocido'}). Sin conversación registrada."
     channel = (lead.get("channel") or lead.get("source") or "web").lower()
+    data = {}
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
         system = (
@@ -1049,7 +1045,6 @@ async def generate_lead_ai_summary(request: Request, lead_id: str):
         data = _json.loads(m.group(0)) if m else {}
     except Exception as e:
         logger.warning(f"ai-summary LLM failed for {lead_id}: {e}")
-        data = {}
     now = datetime.now(timezone.utc).isoformat()
     update = {
         "ai_summary": data.get("summary") or f"Lead de {lead.get('business_name','')} vía {channel}.",
@@ -1061,8 +1056,38 @@ async def generate_lead_ai_summary(request: Request, lead_id: str):
         "ai_summary_generated_at": now,
         "updated_at": now,
     }
-    await db.leads.update_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"$set": update})
-    return {"message": "Resumen IA generado", "data": update}
+    await db.leads.update_one({"id": lead_id, "tenant_id": tenant_id}, {"$set": update})
+    return update
+
+
+async def _maybe_trigger_auto_summary(lead_id: str, tenant_id: str):
+    """Dispara resumen IA automático en background si:
+    - El lead aún NO tiene ai_summary
+    - Tiene ≥3 mensajes del bot (cuenta líneas [BOT YYYY-MM-DD] en recommendation)
+    Corre como fire-and-forget para no bloquear la respuesta al webhook."""
+    try:
+        lead = await db.leads.find_one({"id": lead_id, "tenant_id": tenant_id}, {"_id": 0, "ai_summary": 1, "recommendation": 1})
+        if not lead or lead.get("ai_summary"):
+            return
+        import re as _re
+        bot_lines = _re.findall(r"\[(?:BOT|bot)\s+\d{4}-\d{2}-\d{2}\]", lead.get("recommendation") or "")
+        if len(bot_lines) < 3:
+            return
+        logger.info(f"Auto ai-summary triggered for lead {lead_id} ({len(bot_lines)} bot messages)")
+        await _generate_ai_summary_for_lead(lead_id, tenant_id)
+    except Exception as e:
+        logger.warning(f"auto-summary background failed for {lead_id}: {e}")
+
+
+@api_router.post("/leads/{lead_id}/ai-summary")
+async def generate_lead_ai_summary(request: Request, lead_id: str):
+    """Genera (o regenera) un resumen IA para el lead manualmente desde la UI."""
+    user = await get_current_user(request)
+    lead = await db.leads.find_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"_id": 0, "id": 1})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead no encontrado")
+    update = await _generate_ai_summary_for_lead(lead_id, user["tenant_id"])
+    return {"message": "Resumen IA generado", "data": update or {}}
 
 
 async def bulk_lead_action(request: Request, body: BulkActionRequest):
@@ -3858,6 +3883,8 @@ async def chatwoot_lead_webhook(request: Request, tenant_token: str = "", body: 
             tags.append("bot")
         update_fields["tags"] = tags
         await db.leads.update_one({"id": existing["id"]}, {"$set": update_fields})
+        # Fire-and-forget: auto-generar resumen IA si llegó al 3er mensaje y aún no tiene resumen
+        asyncio.create_task(_maybe_trigger_auto_summary(existing["id"], tenant_id))
         return {"message": "Lead actualizado desde Bot", "lead_id": existing["id"], "action": "updated"}
     else:
         lead = {
@@ -3870,7 +3897,7 @@ async def chatwoot_lead_webhook(request: Request, tenant_token: str = "", body: 
             "website": body.get("website", ""),
             "email": email, "phone": phone,
             "ai_score": 0, "quality_level": "unscored",
-            "recommendation": body.get("message", body.get("notes", "")),
+            "recommendation": (f"[BOT {now[:10]}] {body['message']}" if body.get("message") else body.get("notes", "")),
             "recommended_first_line": "",
             "source": "bot", "tags": ["bot"],
             "channel": channel,
