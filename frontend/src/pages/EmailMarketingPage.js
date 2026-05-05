@@ -10,12 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, Clock, CheckCircle2, X, FileText, Pencil, Trash2, Rocket, Eye, Filter, Target } from 'lucide-react';
+import { Plus, Mail, Users, Zap, BarChart3, Loader2, Play, Send, Clock, CheckCircle2, X, FileText, Pencil, Trash2, Rocket, Eye, Filter, Target, TrendingUp, Calendar } from 'lucide-react';
 import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
 
 export default function EmailMarketingPage() {
-  const [tab, setTab] = useState('plantillas');
+  const [tab, setTab] = useState('dashboard');
   const [templates, setTemplates] = useState([]);
   const [lists, setLists] = useState([]);
   const [segments, setSegments] = useState([]);
@@ -35,6 +35,14 @@ export default function EmailMarketingPage() {
   const [leadSourceFilter, setLeadSourceFilter] = useState('');
   const [leadStatusFilter, setLeadStatusFilter] = useState('');
   const [pickedLeads, setPickedLeads] = useState([]);
+  // Dashboard data
+  const [dashboard, setDashboard] = useState(null);
+  // Test send dialog
+  const [testSendOpen, setTestSendOpen] = useState(null); // campaign object
+  const [testEmail, setTestEmail] = useState('');
+  const [testSending, setTestSending] = useState(false);
+  // Seed templates
+  const [seedingTemplates, setSeedingTemplates] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -42,10 +50,45 @@ export default function EmailMarketingPage() {
       api.get('/email-marketing/lists').catch(() => ({ data: [] })),
       api.get('/email-marketing/segments').catch(() => ({ data: [] })),
       api.get('/email-marketing/campaigns').catch(() => ({ data: [] })),
-    ]).then(([t, l, s, c]) => {
-      setTemplates(t.data); setLists(l.data); setSegments(s.data); setCampaigns(c.data);
+      api.get('/email-marketing/dashboard').catch(() => ({ data: null })),
+    ]).then(([t, l, s, c, d]) => {
+      setTemplates(t.data); setLists(l.data); setSegments(s.data); setCampaigns(c.data); setDashboard(d.data);
     }).finally(() => setLoading(false));
   }, []);
+
+  const reloadDashboard = async () => {
+    try { const { data } = await api.get('/email-marketing/dashboard'); setDashboard(data); } catch {}
+  };
+
+  const openTestSend = (campaign) => {
+    setTestSendOpen(campaign);
+    setTestEmail(''); // se preselecciona con el email del usuario en el placeholder
+  };
+
+  const sendTestEmail = async () => {
+    if (!testSendOpen) return;
+    setTestSending(true);
+    try {
+      const { data } = await api.post(`/email-marketing/campaigns/${testSendOpen.id}/test-send`, testEmail ? { to_email: testEmail } : {});
+      toast.success(data.message || 'Email de prueba enviado');
+      setTestSendOpen(null);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'No se pudo enviar el email de prueba');
+    } finally { setTestSending(false); }
+  };
+
+  const seedEventTemplates = async () => {
+    setSeedingTemplates(true);
+    try {
+      const { data } = await api.post('/email-marketing/templates/seed-events');
+      toast.success(data.message || 'Plantillas creadas');
+      // Reload templates
+      const { data: t } = await api.get('/email-marketing/templates');
+      setTemplates(t);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Error al cargar plantillas');
+    } finally { setSeedingTemplates(false); }
+  };
 
   const createCampaign = async () => {
     if (!newCampaignName.trim()) return;
@@ -185,19 +228,31 @@ export default function EmailMarketingPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="bg-zinc-100">
+          <TabsTrigger value="dashboard" className="gap-1.5" data-testid="tab-dashboard"><TrendingUp className="w-4 h-4" /> Dashboard</TabsTrigger>
           <TabsTrigger value="plantillas" className="gap-1.5"><FileText className="w-4 h-4" /> Plantillas</TabsTrigger>
           <TabsTrigger value="listas" className="gap-1.5"><Users className="w-4 h-4" /> Listas</TabsTrigger>
           <TabsTrigger value="segmentos" className="gap-1.5"><Filter className="w-4 h-4" /> Segmentos</TabsTrigger>
           <TabsTrigger value="campanas" className="gap-1.5"><Mail className="w-4 h-4" /> Campanas</TabsTrigger>
         </TabsList>
 
+        {/* DASHBOARD TAB */}
+        <TabsContent value="dashboard" className="space-y-4">
+          <DashboardView dashboard={dashboard} onRefresh={reloadDashboard} />
+        </TabsContent>
+
         {/* PLANTILLAS TAB */}
         <TabsContent value="plantillas" className="space-y-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <p className="text-sm text-zinc-500">Crea plantillas de email para tus campanas</p>
-            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => window.location.href = '/templates'} data-testid="go-templates">
-              <Plus className="w-4 h-4 mr-1" /> Ir a Plantillas
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={seedEventTemplates} disabled={seedingTemplates} className="gap-1 border-purple-300 text-purple-700 hover:bg-purple-50" data-testid="seed-event-templates">
+                {seedingTemplates ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calendar className="w-4 h-4" />}
+                Cargar plantillas Eventos
+              </Button>
+              <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-white" onClick={() => window.location.href = '/templates'} data-testid="go-templates">
+                <Plus className="w-4 h-4 mr-1" /> Ir a Plantillas
+              </Button>
+            </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {templates.slice(0, 6).map((t, i) => (
@@ -316,6 +371,9 @@ export default function EmailMarketingPage() {
                       <TableCell className="text-xs text-zinc-400">{c.sent_at?.slice(0, 10) || c.created_at?.slice(0, 10) || '-'}</TableCell>
                       <TableCell>
                         <div className="flex gap-1">
+                          <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-blue-600 hover:bg-blue-50" title="Enviar email de prueba" onClick={() => openTestSend(c)} data-testid={`test-send-${i}`}>
+                            <Eye className="w-3 h-3" />
+                          </Button>
                           {c.status === 'borrador' && (
                             <>
                               <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditCampaign(c)}><Pencil className="w-3 h-3" /></Button>
@@ -471,6 +529,189 @@ export default function EmailMarketingPage() {
           </div>
         </DialogContent>
       </Dialog>
+      {/* Test Send Dialog */}
+      <Dialog open={!!testSendOpen} onOpenChange={(o) => !o && setTestSendOpen(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Send className="w-4 h-4 text-blue-600" /> Enviar email de prueba</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-zinc-600">Se enviará la campaña <strong>{testSendOpen?.name}</strong> con datos de ejemplo a tu casilla para que veas cómo le llega al cliente.</p>
+            <div>
+              <Label className="text-xs">Email destinatario</Label>
+              <Input
+                value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                placeholder="Dejar vacío para enviar al email del usuario logueado"
+                type="email"
+                data-testid="test-send-email-input"
+              />
+              <p className="text-[11px] text-zinc-400 mt-1">Si se deja vacío, se envía al email con el que iniciaste sesión.</p>
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+              <p className="text-xs text-amber-800">El asunto se prefija con <code className="bg-amber-100 px-1 rounded">[PRUEBA]</code> para que lo identifiques en tu bandeja.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestSendOpen(null)}>Cancelar</Button>
+            <Button onClick={sendTestEmail} disabled={testSending} className="bg-blue-600 hover:bg-blue-700 text-white" data-testid="test-send-submit">
+              {testSending ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Send className="w-4 h-4 mr-1" />}
+              Enviar prueba
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function DashboardView({ dashboard, onRefresh }) {
+  if (!dashboard) {
+    return (
+      <div className="text-center py-12">
+        <Loader2 className="w-6 h-6 animate-spin text-blue-600 mx-auto mb-2" />
+        <p className="text-sm text-zinc-400">Cargando dashboard...</p>
+      </div>
+    );
+  }
+  const { kpis, campaigns_performance = [], time_series_30d = [], top_by_open_rate = [] } = dashboard;
+  const maxDaily = Math.max(1, ...time_series_30d.map(d => d.sent || 0));
+
+  return (
+    <div className="space-y-6" data-testid="email-marketing-dashboard">
+      {/* KPI Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Campañas', value: kpis.total_campaigns, color: 'from-indigo-500 to-purple-600' },
+          { label: 'Enviados totales', value: kpis.total_sent.toLocaleString('es'), color: 'from-blue-500 to-cyan-500' },
+          { label: 'Tasa apertura', value: `${kpis.open_rate}%`, color: 'from-emerald-500 to-teal-500' },
+          { label: 'Tasa click', value: `${kpis.click_rate}%`, color: 'from-amber-500 to-orange-500' },
+        ].map(k => (
+          <Card key={k.label} className={`border-0 bg-gradient-to-br ${k.color} text-white rounded-xl overflow-hidden`}>
+            <CardContent className="p-5">
+              <p className="text-xs font-medium opacity-90 uppercase tracking-wider">{k.label}</p>
+              <p className="text-3xl font-heading font-semibold mt-1">{k.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Secondary KPIs */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: 'Aperturas', value: kpis.total_opens.toLocaleString('es'), color: 'text-emerald-600' },
+          { label: 'Clicks', value: kpis.total_clicks.toLocaleString('es'), color: 'text-blue-600' },
+          { label: 'Click-to-open', value: `${kpis.click_to_open_rate}%`, color: 'text-indigo-600' },
+          { label: 'Bounce rate', value: `${kpis.bounce_rate}%`, color: 'text-red-600' },
+        ].map(k => (
+          <Card key={k.label} className="border-zinc-200 rounded-xl">
+            <CardContent className="p-4">
+              <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{k.label}</p>
+              <p className={`text-2xl font-heading font-semibold ${k.color} mt-0.5`}>{k.value}</p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Time series bars - últimos 30 días */}
+      <Card className="border-zinc-200 rounded-xl">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-800">Actividad últimos 30 días</h3>
+              <p className="text-xs text-zinc-500">Enviados por día</p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={onRefresh} className="h-7 text-xs">Actualizar</Button>
+          </div>
+          <div className="flex items-end gap-[2px] h-32">
+            {time_series_30d.map((d, i) => {
+              const h = d.sent > 0 ? Math.max(2, (d.sent / maxDaily) * 100) : 2;
+              return (
+                <div key={i} className="flex-1 flex flex-col items-center justify-end group relative">
+                  <div
+                    className={`w-full rounded-t transition-all ${d.sent > 0 ? 'bg-gradient-to-t from-blue-600 to-indigo-400 hover:from-indigo-600' : 'bg-zinc-100'}`}
+                    style={{ height: `${h}%` }}
+                  />
+                  {d.sent > 0 && (
+                    <div className="absolute bottom-full mb-1 hidden group-hover:block bg-zinc-900 text-white text-[10px] px-2 py-1 rounded whitespace-nowrap z-10">
+                      {d.date}: {d.sent} enviados · {d.opens} aperturas
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-between text-[10px] text-zinc-400 mt-2">
+            <span>{time_series_30d[0]?.date}</span>
+            <span>Hoy</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Top campañas */}
+      {top_by_open_rate.length > 0 && (
+        <Card className="border-zinc-200 rounded-xl">
+          <CardContent className="p-5">
+            <h3 className="text-sm font-semibold text-zinc-800 mb-3">Top 5 campañas por tasa de apertura</h3>
+            <div className="space-y-2">
+              {top_by_open_rate.map((c, i) => (
+                <div key={c.id} className="flex items-center gap-3">
+                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-white text-xs font-bold flex items-center justify-center">{i + 1}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-zinc-900 truncate">{c.name}</p>
+                    <div className="w-full bg-zinc-100 rounded-full h-1.5 mt-1">
+                      <div className="bg-gradient-to-r from-emerald-500 to-teal-500 h-1.5 rounded-full" style={{ width: `${Math.min(c.open_rate, 100)}%` }} />
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className="text-sm font-semibold text-emerald-600">{c.open_rate}%</p>
+                    <p className="text-[10px] text-zinc-400">{c.sent} enviados</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Performance por campaña */}
+      <Card className="border-zinc-200 rounded-xl overflow-hidden">
+        <div className="p-4 border-b border-zinc-100">
+          <h3 className="text-sm font-semibold text-zinc-800">Performance por campaña</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-zinc-50">
+                <TableHead className="text-xs">Campaña</TableHead>
+                <TableHead className="text-xs text-right">Enviados</TableHead>
+                <TableHead className="text-xs text-right">Aperturas</TableHead>
+                <TableHead className="text-xs text-right">Clicks</TableHead>
+                <TableHead className="text-xs text-right">Apertura %</TableHead>
+                <TableHead className="text-xs text-right">Click %</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {campaigns_performance.slice(0, 20).map((c) => (
+                <TableRow key={c.id}>
+                  <TableCell className="text-sm font-medium">
+                    {c.name}
+                    {c.is_demo && <Badge className="ml-2 bg-purple-50 text-purple-700 text-[10px]">demo</Badge>}
+                  </TableCell>
+                  <TableCell className="text-right text-sm">{c.sent}</TableCell>
+                  <TableCell className="text-right text-sm text-emerald-600">{c.opens}</TableCell>
+                  <TableCell className="text-right text-sm text-blue-600">{c.clicks}</TableCell>
+                  <TableCell className="text-right text-sm font-semibold">{c.open_rate}%</TableCell>
+                  <TableCell className="text-right text-sm">{c.click_rate}%</TableCell>
+                </TableRow>
+              ))}
+              {!campaigns_performance.length && (
+                <TableRow><TableCell colSpan={6} className="text-center py-6 text-zinc-400 text-sm">Aún no hay campañas enviadas.</TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
     </div>
   );
 }

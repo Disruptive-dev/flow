@@ -713,6 +713,166 @@ async def _run_apify_linkedin(job_id: str, job: dict, api_key: str, tenant_id: s
         logger.error(f"Apify LinkedIn error for job {job_id}: {e}")
         await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "failed", "updated_at": datetime.now(timezone.utc).isoformat()}})
 
+async def _run_outscraper_maps(job_id: str, job: dict, api_key: str, tenant_id: str):
+    """Background task: call Outscraper Google Maps API, store leads, mark job completed/failed."""
+    import asyncio
+    import httpx
+    try:
+        quantity = max(5, min(500, int(job.get("quantity", 50))))
+        category = job.get("category", "")
+        city = job.get("city", "")
+        province = job.get("province", "")
+        country = job.get("country", "Argentina")
+        query = ", ".join([p for p in [category, city, province, country] if p])
+        now_ts = datetime.now(timezone.utc).isoformat()
+        async with httpx.AsyncClient(timeout=120) as client:
+            # Start async scraping job on Outscraper
+            start_resp = await client.get(
+                "https://api.outscraper.com/maps/search-v3",
+                params={"query": query, "limit": quantity, "language": "es", "region": "AR", "async": "true"},
+                headers={"X-API-KEY": api_key},
+            )
+            if start_resp.status_code >= 400:
+                logger.error(f"Outscraper start failed {start_resp.status_code}: {start_resp.text[:200]}")
+                await db.prospect_jobs.update_one(
+                    {"id": job_id},
+                    {"$set": {"status": "failed", "error_message": f"Outscraper error {start_resp.status_code}", "updated_at": now_ts}},
+                )
+                return
+            start_data = start_resp.json()
+            results_location = start_data.get("results_location", "")
+            if not results_location:
+                logger.error(f"Outscraper no results_location: {start_data}")
+                await db.prospect_jobs.update_one(
+                    {"id": job_id},
+                    {"$set": {"status": "failed", "error_message": "Outscraper no devolvió results_location", "updated_at": now_ts}},
+                )
+                return
+            await db.prospect_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"stages.1.status": "processing", "updated_at": now_ts}},
+            )
+            # Poll for results (max ~4 min)
+            poll_data = None
+            for _ in range(48):
+                await asyncio.sleep(5)
+                poll = await client.get(results_location, headers={"X-API-KEY": api_key})
+                if poll.status_code == 200:
+                    pd = poll.json()
+                    status = pd.get("status", "")
+                    if status in ("Success", "SUCCESS", "success"):
+                        poll_data = pd
+                        break
+                    if status in ("Failed", "Error", "FAILED"):
+                        await db.prospect_jobs.update_one(
+                            {"id": job_id},
+                            {"$set": {"status": "failed", "error_message": f"Outscraper status {status}", "updated_at": datetime.now(timezone.utc).isoformat()}},
+                        )
+                        return
+            if not poll_data:
+                await db.prospect_jobs.update_one(
+                    {"id": job_id},
+                    {"$set": {"status": "failed", "error_message": "Outscraper timeout (4 min)", "updated_at": datetime.now(timezone.utc).isoformat()}},
+                )
+                return
+            # Outscraper returns data as list of lists (one per query)
+            all_items = []
+            data_field = poll_data.get("data", [])
+            if isinstance(data_field, list):
+                for entry in data_field:
+                    if isinstance(entry, list):
+                        all_items.extend(entry)
+                    elif isinstance(entry, dict):
+                        all_items.append(entry)
+            now = datetime.now(timezone.utc).isoformat()
+            raw_count = len(all_items)
+            inserted = 0
+            rejected = 0
+            for item in all_items[:quantity]:
+                bname = (item.get("name") or "").strip()
+                if not bname or len(bname) < 2:
+                    rejected += 1
+                    continue
+                # Dedup by business_name + phone
+                phone = item.get("phone") or ""
+                existing = await db.leads.find_one({"tenant_id": tenant_id, "$or": [{"business_name": {"$regex": f"^{re.escape(bname)}$", "$options": "i"}}, {"phone": phone} if phone else {"_impossible": True}]})
+                if existing:
+                    rejected += 1
+                    continue
+                # Heuristic score: more data = higher score
+                score = 30
+                if item.get("site"): score += 20
+                if item.get("phone"): score += 15
+                if item.get("email_1"): score += 20
+                rating = item.get("rating")
+                if isinstance(rating, (int, float)) and rating >= 4.0:
+                    score += 10
+                if item.get("reviews", 0) and item["reviews"] > 50:
+                    score += 5
+                score = min(100, score)
+                ql = "excellent" if score >= 80 else "good" if score >= 60 else "average" if score >= 40 else "poor"
+                lead = {
+                    "id": str(uuid.uuid4()), "tenant_id": tenant_id, "job_id": job_id,
+                    "business_name": bname,
+                    "raw_category": item.get("category", category),
+                    "normalized_category": item.get("category", category) or category,
+                    "province": province, "city": item.get("city") or city,
+                    "country": country,
+                    "website": item.get("site", ""),
+                    "email": item.get("email_1", "") or "",
+                    "phone": phone,
+                    "address": item.get("full_address", ""),
+                    "rating": rating, "reviews_count": item.get("reviews", 0),
+                    "ai_score": score, "quality_level": ql,
+                    "recommendation": f"{'Altamente recomendado' if ql == 'excellent' else 'Buen prospecto' if ql == 'good' else 'Requiere validacion'} - datos {'completos' if score >= 65 else 'parciales'} ({score}% confianza)",
+                    "recommended_first_line": f"Notamos que {bname} tiene presencia destacada en {category} en {city}.",
+                    "source": "google_maps", "status": "scored",
+                    "is_demo": False,
+                    "created_at": now, "updated_at": now,
+                }
+                await db.leads.insert_one(lead)
+                inserted += 1
+            stages = [
+                {"name": "job_created", "status": "completed", "timestamp": job.get("created_at")},
+                {"name": "scraping", "status": "completed", "timestamp": now},
+                {"name": "prospects_found", "status": "completed", "timestamp": now},
+                {"name": "ai_cleaning", "status": "completed", "timestamp": now},
+                {"name": "scoring_completed", "status": "completed", "timestamp": now},
+                {"name": "ready_for_review", "status": "completed", "timestamp": now},
+            ]
+            await db.prospect_jobs.update_one(
+                {"id": job_id},
+                {"$set": {
+                    "status": "completed", "raw_count": raw_count, "cleaned_count": inserted,
+                    "qualified_count": inserted, "rejected_count": rejected, "approved_count": 0,
+                    "stages": stages, "updated_at": now,
+                }},
+            )
+            logger.info(f"Outscraper job {job_id}: {inserted} leads insertados de {raw_count} raw")
+    except Exception as e:
+        logger.error(f"Outscraper error for job {job_id}: {e}")
+        await db.prospect_jobs.update_one(
+            {"id": job_id},
+            {"$set": {"status": "failed", "error_message": str(e)[:200], "updated_at": datetime.now(timezone.utc).isoformat()}},
+        )
+
+
+async def _watchdog_stuck_job(job_id: str, tenant_id: str, timeout_seconds: int = 90):
+    """Marca un job como 'failed' si queda en 'processing' tras el timeout (sin callback de n8n)."""
+    import asyncio
+    await asyncio.sleep(timeout_seconds)
+    try:
+        j = await db.prospect_jobs.find_one({"id": job_id, "tenant_id": tenant_id}, {"_id": 0, "status": 1})
+        if j and j.get("status") == "processing":
+            await db.prospect_jobs.update_one(
+                {"id": job_id},
+                {"$set": {"status": "failed", "error_message": "Timeout esperando respuesta del scraper (90s). Verificá la configuración de n8n/Outscraper.", "updated_at": datetime.now(timezone.utc).isoformat()}},
+            )
+            logger.warning(f"Job {job_id} marked as failed by watchdog (timeout {timeout_seconds}s)")
+    except Exception as e:
+        logger.warning(f"watchdog error: {e}")
+
+
 @api_router.delete("/prospect-jobs/{job_id}")
 async def delete_prospect_job(request: Request, job_id: str):
     user = await get_current_user(request)
@@ -732,27 +892,49 @@ async def delete_prospect_job(request: Request, job_id: str):
 
 @api_router.post("/prospect-jobs/{job_id}/start")
 async def start_prospect_job(request: Request, job_id: str):
+    import asyncio as _asyncio
     user = await get_current_user(request)
     job = await db.prospect_jobs.find_one({"id": job_id, "tenant_id": user["tenant_id"]})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     now = datetime.now(timezone.utc).isoformat()
-    # Check if tenant has demo mode enabled — if so, run simulated flow regardless of n8n
+    # Check if tenant has demo mode enabled — if so, run simulated flow regardless of integrations
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0, "demo_enabled": 1})
     demo_enabled = bool((tenant or {}).get("demo_enabled", False))
-    # Check if n8n is configured - if so, just mark as processing and wait for callback (unless demo_enabled)
+    # Production path: check Outscraper first (direct API, reliable), fallback to n8n
+    outscraper_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "outscraper", "enabled": True}, {"_id": 0})
     n8n_config = await db.integration_configs.find_one({"tenant_id": user["tenant_id"], "name": "n8n", "enabled": True}, {"_id": 0})
     source = job.get("source", "google_maps")
-    if not demo_enabled and n8n_config and n8n_config.get("base_url"):
+
+    if not demo_enabled and outscraper_config and outscraper_config.get("api_key"):
+        # PATH A: Outscraper direct (preferred in production)
         stages = [
             {"name": "job_created", "status": "completed", "timestamp": job["created_at"]},
             {"name": "scraping", "status": "processing", "timestamp": now},
             {"name": "prospects_found", "status": "pending", "timestamp": None},
             {"name": "ai_cleaning", "status": "pending", "timestamp": None},
             {"name": "scoring_completed", "status": "pending", "timestamp": None},
-            {"name": "ready_for_review", "status": "pending", "timestamp": None}
+            {"name": "ready_for_review", "status": "pending", "timestamp": None},
+        ]
+        await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "processing", "stages": stages, "source": "google_maps", "updated_at": now}})
+        _asyncio.create_task(_run_outscraper_maps(job_id, dict(job), outscraper_config["api_key"], user["tenant_id"]))
+        _asyncio.create_task(_watchdog_stuck_job(job_id, user["tenant_id"], timeout_seconds=300))
+        updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
+        return updated_job
+
+    if not demo_enabled and n8n_config and n8n_config.get("base_url"):
+        # PATH B: n8n callback path (legacy)
+        stages = [
+            {"name": "job_created", "status": "completed", "timestamp": job["created_at"]},
+            {"name": "scraping", "status": "processing", "timestamp": now},
+            {"name": "prospects_found", "status": "pending", "timestamp": None},
+            {"name": "ai_cleaning", "status": "pending", "timestamp": None},
+            {"name": "scoring_completed", "status": "pending", "timestamp": None},
+            {"name": "ready_for_review", "status": "pending", "timestamp": None},
         ]
         await db.prospect_jobs.update_one({"id": job_id}, {"$set": {"status": "processing", "stages": stages, "updated_at": now}})
+        # Watchdog: si n8n no responde en 90s, marca failed (evita quedar dando vueltas para siempre)
+        _asyncio.create_task(_watchdog_stuck_job(job_id, user["tenant_id"], timeout_seconds=90))
         updated_job = await db.prospect_jobs.find_one({"id": job_id}, {"_id": 0})
         return updated_job
     # Demo mode - generate simulated data
@@ -2357,6 +2539,220 @@ async def delete_email_campaign(request: Request, campaign_id: str):
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Campana no encontrada")
     return {"message": "Campana eliminada"}
+
+@api_router.post("/email-marketing/campaigns/{campaign_id}/test-send")
+async def test_send_campaign(request: Request, campaign_id: str, body: Dict[str, Any] = {}):
+    """Envía un email de prueba a una dirección específica (típicamente tu propia cuenta) para verificar Resend.
+    Body: {"to_email": "yo@ejemplo.com"} (opcional, default = email del usuario logueado)
+    """
+    user = await get_current_user(request)
+    campaign = await db.email_campaigns.find_one({"id": campaign_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Campaña no encontrada")
+    to_email = (body or {}).get("to_email") or user.get("email", "")
+    if not to_email:
+        raise HTTPException(status_code=400, detail="Falta to_email")
+    template = None
+    if campaign.get("template_id"):
+        template = await db.templates.find_one({"id": campaign["template_id"]}, {"_id": 0})
+    verified_domain = await db.domains.find_one({"tenant_id": user["tenant_id"], "status": {"$in": ["verified", "warmup_recommended", "ready_to_send"]}}, {"_id": 0})
+    from_email = verified_domain.get("sender_email", "onboarding@resend.dev") if verified_domain else "onboarding@resend.dev"
+    from_name = verified_domain.get("sender_name", "Spectra Flow") if verified_domain else "Spectra Flow"
+    subject = campaign.get("subject") or (template.get("subject") if template else "[PRUEBA] Campaña Spectra Flow")
+    html_body = (template.get("html_body") if template else None) or "<h2>Email de prueba</h2><p>Tu campaña {campaign_name} está lista para enviarse.</p><p>Esto es una prueba.</p>"
+    # Sample variables
+    replacements = {
+        "{business_name}": "Empresa de Prueba",
+        "{city}": user.get("city", "Buenos Aires"),
+        "{normalized_category}": "Eventos",
+        "{recommended_first_line}": "Nos enteramos de su próximo evento y queremos colaborar.",
+        "{sender_name}": from_name,
+        "{campaign_name}": campaign.get("name", ""),
+    }
+    for k, v in replacements.items():
+        subject = subject.replace(k, v)
+        html_body = html_body.replace(k, v)
+    subject = f"[PRUEBA] {subject}"
+    if not resend.api_key:
+        raise HTTPException(status_code=400, detail="Resend no está configurado. Configurá la API key en Integraciones.")
+    try:
+        params = {"from": f"{from_name} <{from_email}>", "to": [to_email], "subject": subject, "html": html_body}
+        result = await asyncio.to_thread(resend.Emails.send, params)
+        logger.info(f"Test email enviado a {to_email} para campaña {campaign_id}: {result}")
+        return {"message": f"Email de prueba enviado a {to_email}", "from": f"{from_name} <{from_email}>", "subject": subject}
+    except Exception as e:
+        logger.error(f"Test send error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error al enviar: {str(e)[:200]}")
+
+
+@api_router.get("/email-marketing/dashboard")
+async def email_marketing_dashboard(request: Request):
+    """Dashboard de performance: KPIs globales + performance por campaña + serie temporal últimos 30 días."""
+    user = await get_current_user(request)
+    tid = user["tenant_id"]
+    # KPIs globales
+    campaigns = await db.email_campaigns.find({"tenant_id": tid}, {"_id": 0}).to_list(1000)
+    total_campaigns = len(campaigns)
+    total_sent = sum(c.get("sent_count", 0) for c in campaigns)
+    total_opens = sum(c.get("open_count", 0) for c in campaigns)
+    total_clicks = sum(c.get("click_count", 0) for c in campaigns)
+    total_bounces = sum(c.get("bounce_count", 0) for c in campaigns)
+    total_unsubs = sum(c.get("unsub_count", 0) for c in campaigns)
+    open_rate = round((total_opens / total_sent * 100), 2) if total_sent else 0
+    click_rate = round((total_clicks / total_sent * 100), 2) if total_sent else 0
+    ctor = round((total_clicks / total_opens * 100), 2) if total_opens else 0  # click-to-open rate
+    bounce_rate = round((total_bounces / total_sent * 100), 2) if total_sent else 0
+
+    # Per-campaign performance
+    per_campaign = []
+    for c in campaigns:
+        sent = c.get("sent_count", 0) or 0
+        opens = c.get("open_count", 0) or 0
+        clicks = c.get("click_count", 0) or 0
+        per_campaign.append({
+            "id": c.get("id"),
+            "name": c.get("name", "Sin nombre"),
+            "status": c.get("status", "draft"),
+            "sent": sent,
+            "opens": opens,
+            "clicks": clicks,
+            "open_rate": round((opens / sent * 100), 2) if sent else 0,
+            "click_rate": round((clicks / sent * 100), 2) if sent else 0,
+            "sent_at": c.get("sent_at"),
+            "is_demo": bool(c.get("is_demo", False)),
+        })
+    # Sort by sent desc
+    per_campaign.sort(key=lambda x: (x["sent"] or 0), reverse=True)
+
+    # Time series: last 30 days — group by sent_at day
+    from datetime import timedelta
+    today = datetime.now(timezone.utc).date()
+    daily = {}
+    for i in range(30):
+        d = (today - timedelta(days=29 - i)).isoformat()
+        daily[d] = {"date": d, "sent": 0, "opens": 0, "clicks": 0, "campaigns": 0}
+    for c in campaigns:
+        sa = c.get("sent_at", "")
+        if not sa:
+            continue
+        d = sa[:10]
+        if d in daily:
+            daily[d]["sent"] += c.get("sent_count", 0) or 0
+            daily[d]["opens"] += c.get("open_count", 0) or 0
+            daily[d]["clicks"] += c.get("click_count", 0) or 0
+            daily[d]["campaigns"] += 1
+    series = list(daily.values())
+
+    # Top performing campaigns
+    top_by_open_rate = sorted([c for c in per_campaign if c["sent"] >= 10], key=lambda x: x["open_rate"], reverse=True)[:5]
+
+    return {
+        "kpis": {
+            "total_campaigns": total_campaigns,
+            "total_sent": total_sent,
+            "total_opens": total_opens,
+            "total_clicks": total_clicks,
+            "total_bounces": total_bounces,
+            "total_unsubs": total_unsubs,
+            "open_rate": open_rate,
+            "click_rate": click_rate,
+            "click_to_open_rate": ctor,
+            "bounce_rate": bounce_rate,
+        },
+        "campaigns_performance": per_campaign,
+        "top_by_open_rate": top_by_open_rate,
+        "time_series_30d": series,
+    }
+
+
+@api_router.post("/email-marketing/templates/seed-events")
+async def seed_event_industry_templates(request: Request):
+    """Siembra 3 plantillas de email específicas para industria de EVENTOS (demo rápido)."""
+    user = await get_current_user(request)
+    if user["role"] not in ("super_admin", "tenant_admin", "operator"):
+        raise HTTPException(status_code=403, detail="Sin permisos")
+    tid = user["tenant_id"]
+    now = datetime.now(timezone.utc).isoformat()
+    event_templates = [
+        {
+            "name": "Eventos — Primer contacto (Casamientos & Corporativos)",
+            "subject": "Propuesta para {business_name} — Ideas para tu próximo evento",
+            "html_body": """<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a;line-height:1.6">
+<h2 style="color:#6D28D9;margin-bottom:8px">Hola, equipo de {business_name}</h2>
+<p>{recommended_first_line}</p>
+<p>Trabajamos con organizadores de eventos en <strong>{city}</strong> y creemos que podríamos aportar soluciones concretas para su próxima producción:</p>
+<ul style="padding-left:18px">
+  <li>🎭 Curaduría de proveedores (catering, sonido, decoración) con descuentos pre-negociados</li>
+  <li>📊 Plataforma de RSVP automática con tracking en tiempo real</li>
+  <li>📱 App del evento white-label para tus invitados</li>
+</ul>
+<p>¿Tenés 15 minutos esta semana para mostrarte un caso real que trabajamos?</p>
+<p style="margin-top:24px"><a href="#" style="background:#6D28D9;color:#fff;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Agendar llamada de 15 min</a></p>
+<p style="margin-top:32px;color:#666;font-size:13px">Saludos,<br/><strong>{sender_name}</strong></p>
+</div>""",
+            "variables": ["business_name", "city", "recommended_first_line", "sender_name"],
+            "category": "eventos",
+            "industry": "events",
+        },
+        {
+            "name": "Eventos — Follow-up post-feria",
+            "subject": "Gracias por visitarnos — Oferta exclusiva para {business_name}",
+            "html_body": """<div style="font-family:Inter,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a;line-height:1.6">
+<div style="background:linear-gradient(135deg,#8B5CF6,#EC4899);padding:32px 24px;border-radius:12px;color:#fff;text-align:center;margin-bottom:20px">
+  <h2 style="margin:0;font-size:24px">¡Fue un gusto conocerte!</h2>
+</div>
+<p>Hola, <strong>{business_name}</strong>,</p>
+<p>Me encantó nuestra charla sobre la producción de tus próximos eventos. Como prometí, te dejo 3 accesos exclusivos:</p>
+<ol style="padding-left:18px">
+  <li><strong>Demo personalizada</strong> de la plataforma (agenda al toque)</li>
+  <li><strong>-20% en el primer evento</strong> contratado antes de fin de mes</li>
+  <li><strong>Caso de éxito</strong> de una productora parecida a la tuya — te lo puedo mandar en PDF</li>
+</ol>
+<p style="text-align:center;margin-top:28px">
+  <a href="#" style="background:#EC4899;color:#fff;padding:14px 28px;border-radius:8px;text-decoration:none;font-weight:600;display:inline-block">Quiero la demo</a>
+</p>
+<p style="margin-top:24px;color:#666;font-size:13px">Saludos,<br/><strong>{sender_name}</strong></p>
+</div>""",
+            "variables": ["business_name", "sender_name"],
+            "category": "eventos",
+            "industry": "events",
+        },
+        {
+            "name": "Eventos — Invitación a evento propio",
+            "subject": "{business_name}, estás invitado al Event Summit 2026",
+            "html_body": """<div style="font-family:Inter,Arial,sans-serif;max-width:580px;margin:0 auto;color:#1a1a1a;line-height:1.6">
+<div style="text-align:center;padding:40px 20px;background:#0F172A;color:#fff;border-radius:12px;margin-bottom:24px">
+  <p style="color:#A78BFA;font-size:13px;letter-spacing:2px;margin:0 0 8px">EVENT SUMMIT 2026</p>
+  <h1 style="margin:0;font-size:32px">El futuro de los eventos</h1>
+  <p style="margin:12px 0 0;color:#CBD5E1">12-13 de marzo · {city}</p>
+</div>
+<p>Hola, equipo de <strong>{business_name}</strong>,</p>
+<p>Te reservamos una entrada VIP para <strong>Event Summit 2026</strong>, donde las mejores productoras de Latinoamérica comparten sus secretos.</p>
+<ul style="padding-left:18px">
+  <li>🎤 15 speakers internacionales</li>
+  <li>🥂 Networking con +500 productores</li>
+  <li>🛠️ Workshops prácticos sobre tecnología de eventos</li>
+</ul>
+<p style="text-align:center;margin:28px 0">
+  <a href="#" style="background:#A78BFA;color:#0F172A;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;display:inline-block">Confirmar asistencia</a>
+</p>
+<p style="color:#666;font-size:13px">Cupos limitados. {sender_name}</p>
+</div>""",
+            "variables": ["business_name", "city", "sender_name"],
+            "category": "eventos",
+            "industry": "events",
+        },
+    ]
+    inserted = 0
+    for t in event_templates:
+        existing = await db.templates.find_one({"tenant_id": tid, "name": t["name"]})
+        if existing:
+            continue
+        doc = {"id": str(uuid.uuid4()), "tenant_id": tid, "created_by": user.get("name", ""), "created_at": now, "updated_at": now, **t}
+        await db.templates.insert_one(doc)
+        inserted += 1
+    return {"message": f"{inserted} plantillas de eventos creadas", "inserted": inserted}
+
 
 @api_router.post("/email-marketing/campaigns/{campaign_id}/simulate")
 async def simulate_email_campaign(request: Request, campaign_id: str):
