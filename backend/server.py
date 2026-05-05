@@ -360,38 +360,82 @@ async def public_landing_contact(body: Dict[str, Any] = {}):
 
 @api_router.post("/admin/reset-demo-data")
 async def reset_demo_data(request: Request):
-    """Borra SOLO datos marcados como is_demo=true del tenant actual.
+    """Borra TODOS los datos marcados como is_demo=true del tenant actual.
+    Itera sobre todas las colecciones del tenant y elimina documentos demo.
     Accesible para tenant_admin y super_admin."""
     user = await get_current_user(request)
     if user["role"] not in ("super_admin", "tenant_admin"):
         raise HTTPException(status_code=403, detail="Solo administradores")
     tid = user["tenant_id"]
     counts = {}
-    # 1) Borrar jobs demo y sus leads asociados
+
+    # 1) Recolectar IDs de jobs demo para borrado en cascada de leads huérfanos
     demo_jobs = await db.prospect_jobs.find({"tenant_id": tid, "is_demo": True}, {"id": 1, "_id": 0}).to_list(10000)
     demo_job_ids = [j["id"] for j in demo_jobs]
-    # 2) Borrar leads que sean is_demo=true O que pertenezcan a un job demo
-    lead_filter = {"tenant_id": tid, "$or": [{"is_demo": True}, {"job_id": {"$in": demo_job_ids}}]} if demo_job_ids else {"tenant_id": tid, "is_demo": True}
-    r = await db.leads.delete_many(lead_filter)
-    counts["leads"] = r.deleted_count
-    # 3) Borrar campañas demo
+
+    # 2) Recolectar IDs de campañas demo para cascada de envíos/opens/clicks
     demo_campaigns = await db.campaigns.find({"tenant_id": tid, "is_demo": True}, {"id": 1, "_id": 0}).to_list(10000)
     demo_campaign_ids = [c["id"] for c in demo_campaigns]
-    r = await db.campaigns.delete_many({"tenant_id": tid, "is_demo": True})
-    counts["campaigns"] = r.deleted_count
-    # 4) Borrar jobs demo
-    r = await db.prospect_jobs.delete_many({"tenant_id": tid, "is_demo": True})
-    counts["prospect_jobs"] = r.deleted_count
-    # 5) Borrar CRM (contactos/deals/tasks/notes) que sean is_demo=true
-    for col in ["crm_contacts", "crm_deals", "crm_tasks", "crm_notes", "crm_deal_products"]:
-        r = await db[col].delete_many({"tenant_id": tid, "is_demo": True})
-        counts[col] = r.deleted_count
-    # 6) Borrar email marketing demo
-    for col in ["email_campaigns", "email_lists", "email_segments"]:
-        r = await db[col].delete_many({"tenant_id": tid, "is_demo": True})
-        counts[col] = r.deleted_count
+    demo_email_campaigns = await db.email_campaigns.find({"tenant_id": tid, "is_demo": True}, {"id": 1, "_id": 0}).to_list(10000)
+    demo_email_campaign_ids = [c["id"] for c in demo_email_campaigns]
+
+    # 3) Recolectar IDs de contactos CRM demo para cascada de deals/notes/tasks
+    demo_contacts = await db.crm_contacts.find({"tenant_id": tid, "is_demo": True}, {"id": 1, "_id": 0}).to_list(10000)
+    demo_contact_ids = [c["id"] for c in demo_contacts]
+
+    # 4) Leads: is_demo=true O que pertenezcan a un job demo
+    lead_filter = {"tenant_id": tid}
+    if demo_job_ids:
+        lead_filter = {"tenant_id": tid, "$or": [{"is_demo": True}, {"job_id": {"$in": demo_job_ids}}]}
+    else:
+        lead_filter["is_demo"] = True
+    r = await db.leads.delete_many(lead_filter)
+    counts["leads"] = r.deleted_count
+
+    # 5) Iterar sobre TODAS las colecciones del tenant y borrar is_demo=true
+    # Esto captura cualquier colección futura sin tener que hardcodearla
+    all_collections = await db.list_collection_names()
+    # Colecciones a saltar (globales, configuraciones críticas)
+    skip_collections = {"users", "tenants", "audit_log", "password_reset_tokens", "integration_configs",
+                        "module_prices", "coupons", "system_prompts", "landing_contacts"}
+    for col_name in all_collections:
+        if col_name in skip_collections or col_name.startswith("system."):
+            continue
+        if col_name in ("leads",):  # ya borrada arriba
+            continue
+        try:
+            # Verificar que la colección tenga tenant_id (evitar borrar globales)
+            sample = await db[col_name].find_one({"tenant_id": tid}, {"_id": 0, "is_demo": 1})
+            if sample is None:
+                continue
+            r = await db[col_name].delete_many({"tenant_id": tid, "is_demo": True})
+            if r.deleted_count > 0:
+                counts[col_name] = r.deleted_count
+        except Exception as _e:
+            logger.warning(f"Reset demo skip {col_name}: {_e}")
+
+    # 6) Cascada adicional: docs que referencian entidades demo borradas
+    if demo_campaign_ids or demo_email_campaign_ids:
+        all_camp_ids = demo_campaign_ids + demo_email_campaign_ids
+        for col in ("email_sends", "email_opens", "email_clicks", "email_events"):
+            try:
+                r = await db[col].delete_many({"tenant_id": tid, "campaign_id": {"$in": all_camp_ids}})
+                if r.deleted_count > 0:
+                    counts[f"{col}_cascade"] = counts.get(f"{col}_cascade", 0) + r.deleted_count
+            except Exception:
+                pass
+    if demo_contact_ids:
+        for col in ("crm_deals", "crm_notes", "crm_tasks", "crm_activities", "crm_deal_products"):
+            try:
+                r = await db[col].delete_many({"tenant_id": tid, "contact_id": {"$in": demo_contact_ids}})
+                if r.deleted_count > 0:
+                    counts[f"{col}_cascade"] = counts.get(f"{col}_cascade", 0) + r.deleted_count
+            except Exception:
+                pass
+
     total = sum(counts.values())
-    return {"message": f"Datos demo eliminados ({total} registros)", "deleted": counts}
+    logger.info(f"Reset demo tenant {tid}: {total} docs deleted across {len(counts)} collections")
+    return {"message": f"Datos demo eliminados ({total} registros en {len(counts)} colecciones)", "deleted": counts}
 
 @api_router.put("/auth/profile")
 async def update_profile(request: Request, body: Dict[str, Any] = {}):
@@ -958,7 +1002,69 @@ async def update_lead_fields(request: Request, lead_id: str, body: Dict[str, Any
         raise HTTPException(status_code=404, detail="Lead not found")
     return {"message": "Lead actualizado"}
 
-@api_router.post("/leads/bulk-action")
+@api_router.post("/leads/{lead_id}/ai-summary")
+async def generate_lead_ai_summary(request: Request, lead_id: str):
+    """Genera (o regenera) un resumen IA para el lead.
+    - Si hay conversación (WhatsApp/web), la resume y califica.
+    - Guarda campos: ai_summary, ai_score, ai_recommendation_short, ai_next_step.
+    """
+    user = await get_current_user(request)
+    lead = await db.leads.find_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"_id": 0})
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead no encontrado")
+    raw_text = (lead.get("recommendation") or "") + "\n" + (lead.get("notes") or "")
+    raw_text = raw_text.strip()
+    if len(raw_text) < 10:
+        raw_text = f"Lead de {lead.get('business_name') or 'sin nombre'} ({lead.get('city','')}, canal {lead.get('channel') or lead.get('source') or 'desconocido'}). Sin conversación registrada."
+    channel = (lead.get("channel") or lead.get("source") or "web").lower()
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        system = (
+            "Eres un analista senior de leads B2B. Recibes el historial crudo de un lead "
+            "(conversación WhatsApp, mensajes web, notas del bot, etc.). "
+            "Devuelve SOLO JSON válido con las claves: "
+            "`summary` (resumen claro y útil en 2-4 oraciones, en español neutro), "
+            "`score` (entero 0-100 calidad del lead), "
+            "`quality_level` (excellent|good|average|poor), "
+            "`recommendation` (una oración accionable para el comercial), "
+            "`next_step` (siguiente acción concreta sugerida, 1 oración), "
+            "`key_points` (array de 2-5 bullets muy cortos con datos útiles)."
+        )
+        chat = LlmChat(
+            api_key=os.environ.get("EMERGENT_LLM_KEY", ""),
+            session_id=f"lead-summary-{lead_id}",
+            system_message=system,
+        )
+        prompt = (
+            f"Canal: {channel}\n"
+            f"Negocio: {lead.get('business_name','')}\n"
+            f"Ubicación: {lead.get('city','')}, {lead.get('province','')}\n"
+            f"Teléfono: {lead.get('phone','')}\n"
+            f"Email: {lead.get('email','')}\n"
+            f"Historial crudo:\n{raw_text[:4000]}"
+        )
+        resp = await chat.send_message(UserMessage(text=prompt))
+        import re as _re, json as _json
+        m = _re.search(r"\{.*\}", resp, _re.DOTALL)
+        data = _json.loads(m.group(0)) if m else {}
+    except Exception as e:
+        logger.warning(f"ai-summary LLM failed for {lead_id}: {e}")
+        data = {}
+    now = datetime.now(timezone.utc).isoformat()
+    update = {
+        "ai_summary": data.get("summary") or f"Lead de {lead.get('business_name','')} vía {channel}.",
+        "ai_score": int(data.get("score") or lead.get("ai_score") or 50),
+        "quality_level": data.get("quality_level") or lead.get("quality_level") or "average",
+        "ai_recommendation_short": data.get("recommendation") or "Contactar y calificar necesidad.",
+        "ai_next_step": data.get("next_step") or "Enviar primer mensaje personalizado.",
+        "ai_key_points": data.get("key_points") or [],
+        "ai_summary_generated_at": now,
+        "updated_at": now,
+    }
+    await db.leads.update_one({"id": lead_id, "tenant_id": user["tenant_id"]}, {"$set": update})
+    return {"message": "Resumen IA generado", "data": update}
+
+
 async def bulk_lead_action(request: Request, body: BulkActionRequest):
     user = await get_current_user(request)
     now = datetime.now(timezone.utc).isoformat()
@@ -1595,15 +1701,35 @@ async def get_crm_stats(request: Request, period: Optional[str] = None):
             contact_filter["created_at"] = {"$gte": cutoff}
     total_contacts = await db.crm_contacts.count_documents(contact_filter)
     total_deals = await db.crm_deals.count_documents(deal_filter)
-    stages = ["nuevo", "contactado", "propuesta", "negociacion", "ganado", "perdido"]
+    stages = ["nuevo", "contactado", "propuesta", "negociacion", "ganado", "perdido", "ganada", "perdida", "won", "lost"]
     stage_counts = {}
     for s in stages:
         stage_counts[s] = await db.crm_deals.count_documents({**deal_filter, "stage": s})
-    pipeline = [{"$match": {**deal_filter, "stage": "ganado"}}, {"$group": {"_id": None, "total": {"$sum": "$value"}}}]
-    won_value = await db.crm_deals.aggregate(pipeline).to_list(1)
-    lost_pipeline = [{"$match": {**deal_filter, "stage": "perdido"}}, {"$group": {"_id": None, "total": {"$sum": "$value"}}}]
-    lost_value = await db.crm_deals.aggregate(lost_pipeline).to_list(1)
-    return {"total_contacts": total_contacts, "total_deals": total_deals, "stage_counts": stage_counts, "won_value": won_value[0]["total"] if won_value else 0, "lost_value": lost_value[0]["total"] if lost_value else 0}
+    # Accept both masculino ("ganado"/"perdido") and femenino ("ganada"/"perdida") stage values
+    won_stages = ["ganado", "ganada", "won"]
+    lost_stages = ["perdido", "perdida", "lost"]
+    pipeline = [{"$match": {**deal_filter, "stage": {"$in": won_stages}}}, {"$group": {"_id": None, "total": {"$sum": "$value"}, "count": {"$sum": 1}}}]
+    won_agg = await db.crm_deals.aggregate(pipeline).to_list(1)
+    lost_pipeline = [{"$match": {**deal_filter, "stage": {"$in": lost_stages}}}, {"$group": {"_id": None, "total": {"$sum": "$value"}, "count": {"$sum": 1}}}]
+    lost_agg = await db.crm_deals.aggregate(lost_pipeline).to_list(1)
+    # Normalize stage_counts so both variants sum together into canonical "ganado"/"perdido" keys
+    normalized_counts = {
+        "nuevo": stage_counts.get("nuevo", 0),
+        "contactado": stage_counts.get("contactado", 0),
+        "propuesta": stage_counts.get("propuesta", 0),
+        "negociacion": stage_counts.get("negociacion", 0),
+        "ganado": (stage_counts.get("ganado", 0) or 0) + (stage_counts.get("ganada", 0) or 0) + (stage_counts.get("won", 0) or 0),
+        "perdido": (stage_counts.get("perdido", 0) or 0) + (stage_counts.get("perdida", 0) or 0) + (stage_counts.get("lost", 0) or 0),
+    }
+    return {
+        "total_contacts": total_contacts,
+        "total_deals": total_deals,
+        "stage_counts": normalized_counts,
+        "won_value": won_agg[0]["total"] if won_agg else 0,
+        "won_count": won_agg[0]["count"] if won_agg else 0,
+        "lost_value": lost_agg[0]["total"] if lost_agg else 0,
+        "lost_count": lost_agg[0]["count"] if lost_agg else 0,
+    }
 
 # ==================== ANALYTICS ====================
 
@@ -2513,8 +2639,8 @@ async def ai_flow_bot(request: Request, body: Dict[str, Any] = {}):
     # CRM
     ctx["crm_contacts"] = await db.crm_contacts.count_documents({"tenant_id": tid})
     ctx["deals_total"] = await db.crm_deals.count_documents({"tenant_id": tid})
-    ctx["deals_ganados"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": "ganado"})
-    ctx["deals_perdidos"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": "perdido"})
+    ctx["deals_ganados"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": {"$in": ["ganado", "ganada", "won"]}})
+    ctx["deals_perdidos"] = await db.crm_deals.count_documents({"tenant_id": tid, "stage": {"$in": ["perdido", "perdida", "lost"]}})
     # Campaigns
     ctx["campaigns"] = await db.campaigns.count_documents({"tenant_id": tid})
     em_pipeline = [{"$match": {"tenant_id": tid}}, {"$group": {"_id": None, "sent": {"$sum": "$sent_count"}, "opens": {"$sum": "$open_count"}, "clicks": {"$sum": "$click_count"}, "replies": {"$sum": "$reply_count"}}}]

@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
 import { Progress } from '@/components/ui/progress';
-import { Search, MoreHorizontal, CheckCircle2, XCircle, Send, ExternalLink, Loader2, ChevronLeft, ChevronRight, Download, Upload, Globe, Mail, Phone, Star, TrendingUp, TrendingDown, Plus, ChevronDown, ChevronUp, Pencil, Calendar, Filter, X } from 'lucide-react';
+import { Search, MoreHorizontal, CheckCircle2, XCircle, Send, ExternalLink, Loader2, ChevronLeft, ChevronRight, Download, Upload, Globe, Mail, Phone, Star, TrendingUp, TrendingDown, Plus, ChevronDown, ChevronUp, Pencil, Calendar, Filter, X, MessageCircle, Sparkles, Lightbulb, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 import FlowBotButton from '@/components/FlowBotButton';
 import GuideBanner from '@/components/GuideBanner';
@@ -43,6 +43,177 @@ const leadStatusColors = {
 
 const qualityLabels = { excellent: "Excelente", good: "Bueno", average: "Promedio", poor: "Bajo" };
 const qualityColors = { excellent: "text-emerald-600", good: "text-blue-600", average: "text-amber-600", poor: "text-red-600" };
+
+// Parser: detecta si el campo `recommendation` es un log del bot (líneas repetidas "[BOT YYYY-MM-DD]")
+// y devuelve { isBotLog, interactions, firstDate, lastDate, cleanedLines }
+function parseBotLog(text) {
+  if (!text || typeof text !== 'string') return { isBotLog: false, interactions: 0, firstDate: null, lastDate: null, cleanedLines: [] };
+  const lines = text.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const botRegex = /\[(?:BOT|bot)\s+(\d{4}-\d{2}-\d{2})\]/;
+  const botLines = lines.filter(l => botRegex.test(l));
+  if (botLines.length < 2 && lines.length < 3) return { isBotLog: false, interactions: 0, firstDate: null, lastDate: null, cleanedLines: lines };
+  // Extraer fechas
+  const dates = botLines.map(l => (l.match(botRegex) || [])[1]).filter(Boolean).sort();
+  // Deduplicar por (texto sin fecha)
+  const seen = new Set();
+  const cleaned = [];
+  for (const l of lines) {
+    const key = l.replace(/\s*\[(?:BOT|bot)\s+\d{4}-\d{2}-\d{2}\]\s*/g, '').trim();
+    if (!key) continue;
+    if (!seen.has(key)) { seen.add(key); cleaned.push(key); }
+  }
+  return {
+    isBotLog: botLines.length >= 2,
+    interactions: botLines.length || lines.length,
+    firstDate: dates[0] || null,
+    lastDate: dates[dates.length - 1] || null,
+    cleanedLines: cleaned.slice(0, 20),
+  };
+}
+
+function LeadAIBlock({ lead, onUpdate }) {
+  const [generating, setGenerating] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const parsed = parseBotLog(lead.recommendation || '');
+  const channel = (lead.channel || lead.source || 'web').toLowerCase();
+  const isWhatsApp = channel === 'whatsapp' || parsed.isBotLog;
+  const score = lead.ai_score ?? 0;
+  const quality = lead.quality_level || 'average';
+  const scoreColor = score >= 80 ? 'text-emerald-600 bg-emerald-50 border-emerald-200'
+                    : score >= 60 ? 'text-blue-600 bg-blue-50 border-blue-200'
+                    : score >= 40 ? 'text-amber-600 bg-amber-50 border-amber-200'
+                    : 'text-red-600 bg-red-50 border-red-200';
+
+  const summary = lead.ai_summary;
+  const shortRec = lead.ai_recommendation_short || (parsed.isBotLog ? null : lead.recommendation);
+  const nextStep = lead.ai_next_step;
+  const keyPoints = Array.isArray(lead.ai_key_points) ? lead.ai_key_points : [];
+
+  const generate = async () => {
+    setGenerating(true);
+    try {
+      const { data } = await api.post(`/leads/${lead.id}/ai-summary`);
+      onUpdate(data.data || {});
+      toast.success('Resumen IA generado');
+    } catch (e) {
+      toast.error('No se pudo generar el resumen');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3" data-testid="lead-ai-block">
+      {/* Header: Score + Canal */}
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          {isWhatsApp ? (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium border border-emerald-200">
+              <MessageCircle className="w-3.5 h-3.5" /> WhatsApp
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium border border-blue-200">
+              <Globe className="w-3.5 h-3.5" /> {channel === 'web' ? 'Web' : channel}
+            </span>
+          )}
+          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${scoreColor}`} data-testid="lead-ai-score-badge">
+            <Star className="w-3.5 h-3.5" /> {score}/100 · {qualityLabels[quality] || quality}
+          </span>
+        </div>
+        <Button size="sm" variant="outline" onClick={generate} disabled={generating} className="h-7 text-xs gap-1" data-testid="lead-ai-generate-btn">
+          {generating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+          {summary ? 'Regenerar IA' : 'Generar resumen IA'}
+        </Button>
+      </div>
+
+      {/* Resumen IA */}
+      {summary ? (
+        <div className="rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50 to-purple-50 p-3 dark:from-indigo-950/40 dark:to-purple-950/40 dark:border-indigo-900">
+          <div className="flex items-center gap-1.5 mb-1.5">
+            <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
+            <p className="text-[10px] font-semibold text-indigo-700 dark:text-indigo-300 uppercase tracking-wider">Resumen IA</p>
+          </div>
+          <p className="text-sm text-zinc-800 dark:text-zinc-200 leading-relaxed" data-testid="lead-ai-summary">{summary}</p>
+          {keyPoints.length > 0 && (
+            <ul className="mt-2 space-y-1">
+              {keyPoints.map((kp, i) => (
+                <li key={i} className="flex items-start gap-1.5 text-xs text-zinc-700 dark:text-zinc-300">
+                  <span className="text-indigo-500 mt-0.5">•</span><span>{kp}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : parsed.isBotLog ? (
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 dark:border-emerald-900 p-3">
+          <p className="text-sm text-zinc-700 dark:text-zinc-300">
+            <strong>{parsed.interactions}</strong> interacciones registradas por el bot
+            {parsed.firstDate && parsed.lastDate && parsed.firstDate !== parsed.lastDate && (
+              <> entre <strong>{parsed.firstDate}</strong> y <strong>{parsed.lastDate}</strong></>
+            )}
+            {parsed.firstDate && parsed.lastDate && parsed.firstDate === parsed.lastDate && (
+              <> el <strong>{parsed.firstDate}</strong></>
+            )}.
+          </p>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-1">Generá un resumen IA para ver análisis, score y próximos pasos.</p>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-zinc-300 dark:border-zinc-700 p-3 text-center">
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">Sin resumen IA aún. Hacé click en "Generar resumen IA".</p>
+        </div>
+      )}
+
+      {/* Recomendación corta + próximo paso */}
+      {(shortRec || nextStep) && (
+        <div className="grid grid-cols-1 gap-2">
+          {shortRec && !parsed.isBotLog && (
+            <div className="rounded-md border border-zinc-200 dark:border-zinc-800 p-2.5 bg-white dark:bg-zinc-900">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Lightbulb className="w-3.5 h-3.5 text-amber-600" />
+                <p className="text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wider">Recomendación</p>
+              </div>
+              <p className="text-sm text-zinc-700 dark:text-zinc-200">{shortRec}</p>
+            </div>
+          )}
+          {nextStep && (
+            <div className="rounded-md border border-blue-200 dark:border-blue-900 p-2.5 bg-blue-50/50 dark:bg-blue-950/20">
+              <div className="flex items-center gap-1.5 mb-1">
+                <ArrowRight className="w-3.5 h-3.5 text-blue-600" />
+                <p className="text-[10px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider">Próximo paso</p>
+              </div>
+              <p className="text-sm text-zinc-800 dark:text-zinc-200">{nextStep}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Conversación / historial crudo (colapsable) */}
+      {parsed.cleanedLines.length > 0 && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="w-full flex items-center justify-between text-xs font-medium text-zinc-500 hover:text-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 py-1.5"
+            data-testid="lead-conversation-toggle"
+          >
+            <span>{isWhatsApp ? 'Ver conversación' : 'Ver historial'} ({parsed.cleanedLines.length})</span>
+            {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {expanded && (
+            <div className="max-h-48 overflow-y-auto rounded-md border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2 space-y-1">
+              {parsed.cleanedLines.map((line, i) => (
+                <div key={i} className="text-xs text-zinc-700 dark:text-zinc-300 leading-relaxed border-l-2 border-emerald-300 dark:border-emerald-700 pl-2 py-0.5">
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 const sourceConfig = {
   google_maps: { label: "B2B Google Maps", color: "bg-blue-50 text-blue-700" },
@@ -512,20 +683,19 @@ export default function LeadsPage() {
                 ))}
               </div>
               <Separator />
-              <div>
-                <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1">Recomendacion IA</p>
-                <p className="text-sm text-zinc-700">{detailLead.recommendation}</p>
-              </div>
+              {/* ========== BLOQUE IA: Resumen + Conversación ========== */}
+              <LeadAIBlock lead={detailLead} onUpdate={(patch) => setDetailLead(p => ({ ...p, ...patch }))} />
+              <Separator />
               <div>
                 <p className="text-xs font-medium text-zinc-400 uppercase tracking-wider mb-1">Primera linea sugerida</p>
-                <p className="text-sm text-zinc-700 italic">{detailLead.recommended_first_line}</p>
+                <p className="text-sm text-zinc-700 italic">{detailLead.recommended_first_line || '—'}</p>
               </div>
               {/* Editable Notes & Channel */}
               <div className="space-y-3">
                 <div>
                   <Label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Canal de origen</Label>
                   <Select value={detailLead.channel || 'web'} onValueChange={async v => { try { await api.put(`/leads/${detailLead.id}/fields`, { channel: v }); setDetailLead(p => ({...p, channel: v})); toast.success('Canal actualizado'); } catch { toast.error('Error'); } }}>
-                    <SelectTrigger className="h-9 mt-1"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-9 mt-1" data-testid="lead-channel-select"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="web">Web</SelectItem>
                       <SelectItem value="whatsapp">WhatsApp</SelectItem>
@@ -538,8 +708,14 @@ export default function LeadsPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Notas</Label>
-                  <textarea className="w-full mt-1 border border-zinc-200 rounded-lg p-2 text-sm text-zinc-700 resize-none h-20 focus:outline-none focus:ring-2 focus:ring-blue-500/20" defaultValue={detailLead.recommendation || ''} onBlur={async e => { try { await api.put(`/leads/${detailLead.id}/fields`, { recommendation: e.target.value }); toast.success('Notas guardadas'); } catch { toast.error('Error'); } }} placeholder="Agregar notas..." />
+                  <Label className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Notas del vendedor</Label>
+                  <textarea
+                    data-testid="lead-notes-textarea"
+                    className="w-full mt-1 border border-zinc-200 rounded-lg p-2 text-sm text-zinc-700 resize-none h-20 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    defaultValue={detailLead.notes || ''}
+                    onBlur={async e => { try { await api.put(`/leads/${detailLead.id}/fields`, { notes: e.target.value }); setDetailLead(p => ({ ...p, notes: e.target.value })); toast.success('Notas guardadas'); } catch { toast.error('Error'); } }}
+                    placeholder="Agregar notas internas del vendedor..."
+                  />
                 </div>
               </div>
               <Separator />
